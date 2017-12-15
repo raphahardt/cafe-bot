@@ -279,4 +279,4 @@ function onMessage(message) {
 }
 
 // conecta o bot
-client.login(config.token);
+client.login(process.env.DISCORD_TOKEN || config.token);
