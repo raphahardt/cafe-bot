@@ -34,7 +34,8 @@ const CafeBot = require('./CafeBot');
 CafeBot.registerDiscordEvents(client, [
     require('./CafeBot/AntiJequiti'),
     require('./CafeBot/Perolas'),
-    require('./CafeBot/AmigoSecreto')
+    require('./CafeBot/AmigoSecreto'),
+    require('./CafeBot/MeFala')
 ]);
 
 // conecta o bot
