@@ -3,8 +3,6 @@
 const Discord = require("discord.js");
 const client = new Discord.Client();
 
-// TODO: deletar esse config? teoricamente está sendo usado env pro token agora
-const config = require("./config.json");
 const packageCfg = require("./package.json");
 
 /**
@@ -28,4 +26,4 @@ CafeBot.registerDiscordEvents(client, [
 ]);
 
 // conecta o bot
-client.login(process.env.DISCORD_TOKEN || config.token);
+client.login(process.env.DISCORD_TOKEN);
