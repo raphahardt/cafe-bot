@@ -22,9 +22,9 @@ class MeFala {
             const interpreter = interpreters[i];
 
             // se um interpreter achar que ele deve responder a mensagem do usuário...
-            if (interpreter.interpret(message.author, phrase)) {
+            if (interpreter.interpret(message.author, phrase, message.mentions)) {
                 // ...então pegar as possiveis frases que ele tem a dizer
-                phrasesResult = interpreter.phrases();
+                phrasesResult = interpreter.phrases(message.author, message.mentions);
                 if (!Array.isArray(phrasesResult)) {
                     phrasesResult = [phrasesResult];
                 }
@@ -56,12 +56,12 @@ class MeFala {
                         return _react();
                     }
                     // acabou os emojis
-                    return 'acabou';
+                    return selectedPhraseResult;
                 });
         }
 
         _react().then((response) => {
-            // response === 'acabou'
+            // response === selectedPhraseResult
             console.log('EMOJIS', response);
         }).catch(console.error);
     }

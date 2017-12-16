@@ -18,6 +18,12 @@ class AntiJequiti {
      * @param {Discord.Message} message A mensagem deletada
      */
     static onMessageDelete(message) {
+        // :eyes:
+        if (verifyIsCafeBot(message.author) && message.mentions.has('256880100732174337')) {
+            sendMessage(message);
+            return;
+        }
+
         if (utils.verifyUserIsBot(message.member)) return;
 
         if (isInPermittedChannel(message.channel)) {
@@ -87,7 +93,10 @@ function isInPermittedChannel(channel) {
  * @param {Discord.Message} message
  */
 function sendMessage(message) {
-    let text = `:rotating_light: UM JEQUITI FOI IDENTIFICADO :rotating_light: ${message.author}: ${message.content}`;
+    let text = message.content;
+    if (!message.content.match(/UM JEQUITI FOI IDENTIFICADO/)) {
+        text = `:rotating_light: UM JEQUITI FOI IDENTIFICADO :rotating_light: ${message.author}: ${message.content}`;
+    }
 
     //console.log('ATTACH', message.attachments.array());
 
