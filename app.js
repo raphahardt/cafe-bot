@@ -14,6 +14,18 @@ client.on("ready", () => {
     // modifica o "playing" do bot
     //client.user.setGame(`on ${client.guilds.size} servers`);
     client.user.setGame(`${packageCfg.version}`);
+
+    // procura o canal pra mandar as mensagens pinnadas
+    const logChannel = client.channels.find('name', 'log-e-comandos');
+    if (logChannel) {
+        const emb = new Discord.RichEmbed()
+            .setColor(3447003)
+            .setTitle(`Café bot v${packageCfg.version}`)
+            .setDescription(`Conectado no server`)
+            .setTimestamp(new Date());
+
+        logChannel.send({embed: emb});
+    }
 });
 
 const CafeBot = require('./CafeBot');

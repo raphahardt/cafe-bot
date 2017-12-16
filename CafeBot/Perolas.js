@@ -1,9 +1,12 @@
 
-const EMOJIS = require("../emojis.json");
+const emojis = require("../emojis.json");
+const utils = require("../utils");
 const Discord = require("discord.js");
 
 // array com os possíveis nomes do canal principal, que vai ser lido os pins
-const mainChannelName = ['mesa-shop', 'mesa-do-cafe'];
+const mainChannelNames = ['mesa-shop', 'mesa-do-cafe'];
+// array com os canais que tem q ser ignorados
+const perolaIgnoredChannelsNames = ['mesa-do-nsfw', 'mural'];
 
 // nome do channel que vai receber as mensagens pérola
 const perolaChannelName = 'mesa-da-vergonha';
@@ -11,7 +14,7 @@ const perolaChannelName = 'mesa-da-vergonha';
 // quantos reactions precisa ter pra ser uma pérola
 const perolaCountThreshold = 5;
 // quais emojis são escolhidos pra valer como um reaction válido
-const perolaValidEmojis = [EMOJIS.WILTED_FLOWER];
+const perolaValidEmojis = [emojis.WILTED_FLOWER];
 
 /**
  * Quando uma mensagem receber mais do que 5 reactions de um certo emoji, essa
@@ -29,19 +32,20 @@ class Perolas {
      * @param {Discord.User} user O usuário que fez essa reaction (pode ser membro do server ou não)
      */
     static onReactionAdd(messageReaction, user) {
-        console.log('REACTION', messageReaction.emoji.toString(), messageReaction.count);
+        console.log('REACTION', perolaValidEmojis.includes(messageReaction.emoji.name), messageReaction.count);
+
+        // ignora canais "especiais"
+        if (perolaIgnoredChannelsNames.includes(messageReaction.message.channel.name)) return;
 
         // procura o canal pra mandar as mensagens pinnadas
         const perolasChannel = messageReaction.message.guild.channels.find('name', perolaChannelName);
-
-        // se não achou, ignora
         if (!perolasChannel) return;
 
         // ignora os reactions na propria mesa perola, pra nao entrar em loop infinito
         if (perolasChannel === messageReaction.message.channel) return;
 
         // ignora mensagens de bot também
-        if (messageReaction.message.author.bot) return;
+        if (utils.verifyUserIsBot(messageReaction.message.member)) return;
 
         if (perolaValidEmojis.includes(messageReaction.emoji.name) && messageReaction.count >= perolaCountThreshold) {
             sendPerolaMessage(messageReaction.message, perolasChannel);
@@ -56,9 +60,8 @@ class Perolas {
      * @param {Array} args Parametros do comando
      */
     static pinsCommand(message, args) {
-        const mainChannel = message.guild.channels.find('name', args[0] || mainChannelName[0]);
+        const mainChannel = message.guild.channels.find('name', args[0] || mainChannelNames[0]);
         const perolasChannel = message.guild.channels.find('name', perolaChannelName);
-
         if (!mainChannel || !perolasChannel) return;
 
         // pega todas as mensagens pinnadas

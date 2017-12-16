@@ -19,7 +19,7 @@ module.exports = {
     verifyUserIsBot: member => {
         // mudei pra essa verificação, pq verificar pela role abre brecha pra alguém
         // se colocar como bot e ser ignorado pelo cafe-bot.
-        return member.user.bot;
+        return (!member || member.user.bot);
         // a verificação antiga ->
         //return member.roles.some(r => ["bot"].includes(r.name));
     }
