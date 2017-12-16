@@ -20,7 +20,6 @@ const perolaValidEmojis = [EMOJIS.WILTED_FLOWER];
  *
  */
 class Perolas {
-
     constructor() {}
 
     /**

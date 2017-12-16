@@ -23,7 +23,8 @@ const CafeBot = require('./CafeBot');
 // registra os eventos de cada um dos 'módulos' do bot
 CafeBot.registerDiscordEvents(client, [
     require('./CafeBot/AntiJequiti'),
-    require('./CafeBot/Perolas')
+    require('./CafeBot/Perolas'),
+    require('./CafeBot/AmigoSecreto')
 ]);
 
 // conecta o bot

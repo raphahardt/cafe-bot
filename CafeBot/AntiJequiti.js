@@ -10,7 +10,6 @@ const permittedJequitiChannels = ['mesa-do-nsfw', 'log-e-comandos'];
  * uma mensagem no canal revelando qual era a mensagem editada/deletada.
  */
 class AntiJequiti {
-
     constructor() {}
 
     /**

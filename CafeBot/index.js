@@ -40,7 +40,10 @@ module.exports = {
                 for (let lstCommand in lstCommands) {
                     if (!lstCommands.hasOwnProperty(lstCommand)) continue;
 
-                    if (command === lstCommand) {
+                    console.log('comando registrado ' + lstCommand);
+
+                    if (command === lstCommand.toLowerCase()) {
+                        console.log('invocando ' + command, args);
                         // chama o comando do listener registrado
                         lstCommands[lstCommand].call(discordClient, message, args);
                     }
@@ -55,6 +58,8 @@ module.exports = {
 
             for (let event in events) {
                 if (!events.hasOwnProperty(event)) continue;
+
+                console.log('evento registrado ' + event);
 
                 // registra um evento no client do discord
                 discordClient.on(event, events[event]);
