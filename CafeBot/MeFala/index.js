@@ -36,7 +36,9 @@ class MeFala {
         // se nenhum interpreter retornar nenhuma frase, então o comando nem continua
         if (!phrasesResult.length) return;
 
-        // pega uma das frases aleatoriamente
+        // misturo antes...
+        phrasesResult = utils.shuffle(phrasesResult);
+        // ...e pego aleatoriamente uma das frases aleatoriamente
         let idx = parseInt((Math.random() * (phrasesResult.length * 2000)) / 2000);
         idx = Math.min(phrasesResult.length - 1, idx);
         //console.log('IDX', idx);

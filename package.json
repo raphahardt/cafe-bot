@@ -1,6 +1,6 @@
 {
   "name": "cafe-bot",
-  "version": "0.0.17",
+  "version": "0.0.19",
   "description": "",
   "main": "app.js",
   "dependencies": {
