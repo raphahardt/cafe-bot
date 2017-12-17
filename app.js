@@ -39,4 +39,5 @@ CafeBot.registerDiscordEvents(client, [
 ]);
 
 // conecta o bot
+//client.login(require('./config.json').token);
 client.login(process.env.DISCORD_TOKEN);

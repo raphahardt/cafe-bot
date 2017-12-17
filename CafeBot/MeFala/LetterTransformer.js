@@ -39,7 +39,7 @@ class LetterTransformer {
 
             if (phraseLetter === '$') {
                 transformed.push(biggerWords.shift());
-            } else if (phraseLetter === "\s" || phraseLetter === ' ') {
+            } else if (phraseLetter === ' ') {
                 // TODO: como fazer com espaço?
             } else if (phraseLetter.length) {
                 console.log('letter', phraseLetter);

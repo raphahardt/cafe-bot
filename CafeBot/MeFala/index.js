@@ -15,7 +15,7 @@ class MeFala {
             return;
         }
 
-        let phrase = args.join("\s") || '';
+        let phrase = args.join(" ") || '';
         console.log('PERGUNTA', phrase);
         let phrasesResult = [];
         for (let i = 0; i < interpreters.length; i++) {
