@@ -20,7 +20,7 @@ client.on("ready", () => {
     if (logChannel) {
         const emb = new Discord.RichEmbed()
             .setColor(3447003)
-            .setTitle(`Café bot v${packageCfg.version}`)
+            .setTitle(`Café bot v${packageCfg.version} [testes]`)
             .setDescription(`Conectado no server`)
             .setTimestamp(new Date());
 
@@ -40,4 +40,5 @@ CafeBot.registerDiscordEvents(client, [
 ]);
 
 // conecta o bot
-client.login(process.env.DISCORD_TOKEN);
+client.login(require('./config.json').token);
+//client.login(process.env.DISCORD_TOKEN);
