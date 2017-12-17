@@ -114,7 +114,6 @@ function isUser(messageMentions) {
     if (!messageMentions.users.array().length) {
         return false;
     }
-    return messageMentions.users.first().id === '208028185584074763';
     return messageMentions.users.first().id === '256880100732174337'
         || messageMentions.users.first().id === '164083196999237633';
 }
