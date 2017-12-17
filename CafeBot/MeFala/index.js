@@ -28,7 +28,7 @@ class MeFala {
                 if (!Array.isArray(phrasesResult)) {
                     phrasesResult = [phrasesResult];
                 }
-                console.log('INTERPRETER RESULT', phrasesResult);
+                //console.log('INTERPRETER RESULT', phrasesResult);
                 break;
             }
         }
@@ -39,13 +39,13 @@ class MeFala {
         // pega uma das frases aleatoriamente
         let idx = parseInt((Math.random() * (phrasesResult.length * 2000)) / 2000);
         idx = Math.min(phrasesResult.length - 1, idx);
-        console.log('IDX', idx);
+        //console.log('IDX', idx);
         const selectedPhraseResult = phrasesResult[ idx ];
-        console.log('PHRASE SELECTED', selectedPhraseResult);
+        //console.log('PHRASE SELECTED', selectedPhraseResult);
 
         // usa o transformer pra transformar essa frase em emojis
         let emojis = Transformer.transform(selectedPhraseResult);
-        console.log('EMOJIS', emojis);
+        //console.log('EMOJIS', emojis);
 
         // dá um reactor pra cada letra de emoji
         function _react() {
@@ -62,7 +62,7 @@ class MeFala {
 
         _react().then((response) => {
             // response === selectedPhraseResult
-            console.log('EMOJIS', response);
+            //console.log('EMOJIS', response);
         }).catch(console.error);
     }
 

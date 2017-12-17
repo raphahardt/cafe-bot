@@ -7,7 +7,7 @@ module.exports = class TudoBemInterpreter {
     constructor() {}
 
     static interpret(user, questionPhrase, mentions) {
-        return questionPhrase.match(/(oi|(td|tudo) b[oe]m)/i);
+        return questionPhrase.match(/(\boi\b|(td|tudo) b[oe]m)/i);
     }
 
     static get priority() { return 0 };
@@ -17,8 +17,10 @@ module.exports = class TudoBemInterpreter {
             return ['oi poli', 'ae poliana'];
         } else if (user.username === 'Be') {
             return ['oi be', 'oi lindo'];
+        } else if (user.username === 'Rihawf') {
+            return ['oi rih', 'oi beta testr'];
         } else if (user.username === 'Leticia') {
-                return ['oi ratinha', 'oi lety'];
+            return ['oi ratinha', 'oi lety'];
         } else if (user.username === 'Lucas' || user.username === 'Daniagatha' || user.username === 'CrocDeluxe') {
             return ['hello world', 'ola humano'];
         }
@@ -29,7 +31,6 @@ module.exports = class TudoBemInterpreter {
             'de boas',
             'morta e vc',
             'to joia',
-            'td tranqs',
             'topzera'
         ];
     }

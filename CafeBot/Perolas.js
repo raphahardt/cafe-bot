@@ -47,7 +47,12 @@ class Perolas {
         // ignora mensagens de bot também
         if (utils.verifyUserIsBot(messageReaction.message.member)) return;
 
-        if (perolaValidEmojis.includes(messageReaction.emoji.name) && messageReaction.count >= perolaCountThreshold) {
+        let reactCount = messageReaction.count;
+        if (messageReaction.message.reactions.users.has(user.id)) {
+            // se tiver o react da propria pessoa que postou, contar -1
+            reactCount -= 1;
+        }
+        if (perolaValidEmojis.includes(messageReaction.emoji.name) && reactCount >= perolaCountThreshold) {
             sendPerolaMessage(messageReaction.message, perolasChannel);
         }
     }

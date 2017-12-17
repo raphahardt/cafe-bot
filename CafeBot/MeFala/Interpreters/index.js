@@ -1,6 +1,11 @@
 
 let _interpretersList = [
     require('./LeveiUmTiroInterpreter'),
+    require('./MegaSenaInterpreter'),
+    require('./BaileFunkInterpreter'),
+    require('./SignoInterpreter'),
+    require('./MelhorDoQueInterpreter'),
+    require('./AfrontaInterpreter'),
     require('./TudoBemInterpreter'),
     require('./ComoVaiSerAlgoInterpreter'),
     require('./OmaeMouShinderuInterpreter'),

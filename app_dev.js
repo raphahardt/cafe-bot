@@ -24,7 +24,7 @@ client.on("ready", () => {
             .setDescription(`Conectado no server`)
             .setTimestamp(new Date());
 
-        //logChannel.send({embed: emb});
+        logChannel.send({embed: emb});
     }
 });
 
