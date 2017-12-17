@@ -17,6 +17,8 @@ module.exports = class TudoBemInterpreter {
             return ['oi poli', 'ae poliana'];
         } else if (user.username === 'Be') {
             return ['oi be', 'oi lindo'];
+        } else if (user.username === 'Leticia') {
+                return ['oi ratinha', 'oi lety'];
         } else if (user.username === 'Lucas' || user.username === 'Daniagatha' || user.username === 'CrocDeluxe') {
             return ['hello world', 'ola humano'];
         }

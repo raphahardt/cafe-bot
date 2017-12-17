@@ -25,6 +25,7 @@ class LetterTransformer {
             if (phrase.match(regexL)) {
                 // adiciona o emoji num array temporario
                 let emoji = _letters.words[l].shift();
+                // TODO: tratar quando acabar o "estoque" de emojis
                 biggerWords.push(emoji);
 
                 // troco a "palavra" encontrada pelo caracter $, q eu vou

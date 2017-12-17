@@ -1,6 +1,7 @@
 # cafe bot ignores
 config.json
-amigos.txt
+*.txt
+*.db
 v*.*.*.zip
 
 # Logs

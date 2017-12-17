@@ -14,7 +14,7 @@ module.exports = class ComoVaiSerAlgoInterpreter {
 
     static phrases(user, mentions) {
         if (user.username === 'Leticia' || mentions.members.exists('username', 'Leticia')) {
-            return ['pra lety sempre ruim', 'otimo lety', 'tenta de novo'];
+            return ['sera ruim lety', 'otimo lety', 'tenta de novo'];
         }
         return [
             'vai ser ruim',

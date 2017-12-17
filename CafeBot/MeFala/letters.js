@@ -86,6 +86,10 @@ module.exports = {
         'facepalm': ['🤦'],
         'nao sei': ['🤷'],
         'sei la': ['🤷'],
-        'gato': ['😺']
+        'gato': ['😺'],
+        'ratto': ['🐀'],
+        'ratta': ['🐀'],
+        'ratinha': ['🐀'],
+        'ruim': ['👎']
     }
 };

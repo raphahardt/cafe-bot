@@ -24,7 +24,7 @@ client.on("ready", () => {
             .setDescription(`Conectado no server`)
             .setTimestamp(new Date());
 
-        logChannel.send({embed: emb});
+        //logChannel.send({embed: emb});
     }
 });
 
@@ -32,12 +32,13 @@ const CafeBot = require('./CafeBot');
 
 // registra os eventos de cada um dos 'módulos' do bot
 CafeBot.registerDiscordEvents(client, [
-    require('./CafeBot/AntiJequiti'),
-    require('./CafeBot/Perolas'),
-    require('./CafeBot/AmigoSecreto'),
-    require('./CafeBot/MeFala')
+    require('./CafeBot/Counter'),
+    require('./CafeBot/AntiJequiti')//,
+    // require('./CafeBot/Perolas'),
+    // require('./CafeBot/AmigoSecreto'),
+    // require('./CafeBot/MeFala')
 ]);
 
 // conecta o bot
-//client.login(require('./config.json').token);
-client.login(process.env.DISCORD_TOKEN);
+client.login(require('./config.json').token);
+//client.login(process.env.DISCORD_TOKEN);
