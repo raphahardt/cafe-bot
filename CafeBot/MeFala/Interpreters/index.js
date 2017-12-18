@@ -4,6 +4,8 @@ let _interpretersList = [
     require('./MegaSenaInterpreter'),
     require('./BaileFunkInterpreter'),
     require('./SignoInterpreter'),
+    require('./CorInterpreter'),
+    require('./ComerInterpreter'),
     require('./MelhorDoQueInterpreter'),
     require('./AfrontaInterpreter'),
     require('./TudoBemInterpreter'),

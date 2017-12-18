@@ -91,6 +91,10 @@ module.exports = {
         'ratta': ['🐀'],
         'ratinha': ['🐀'],
         'ruim': ['👎'],
-        'world': ['🌐']
+        'world': ['🌐'],
+        'file': [''],
+        'madeira': [''],
+        'sushi': [''],
+        'vinho': [''],
     }
 };

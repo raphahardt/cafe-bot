@@ -18,7 +18,7 @@ module.exports = class TudoBemInterpreter {
         } else if (user.username === 'Be') {
             return ['oi be', 'oi lindo'];
         } else if (user.username === 'Rihawf') {
-            return ['oi rih', 'oi beta testr'];
+            return ['oi rih', 'oi tester'];
         } else if (user.username === 'Leticia') {
             return ['oi ratinha', 'oi lety'];
         } else if (user.username === 'Lucas' || user.username === 'Daniagatha' || user.username === 'CrocDeluxe') {
