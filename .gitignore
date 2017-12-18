@@ -3,6 +3,8 @@ config.json
 *.txt
 *.db
 v*.*.*.zip
+*.sh
+*.bat
 
 # Logs
 logs

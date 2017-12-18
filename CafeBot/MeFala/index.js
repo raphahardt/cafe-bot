@@ -9,6 +9,8 @@ const Transformer = require('./LetterTransformer');
 class MeFala {
     constructor() {}
 
+    static get name() { return 'mefala' }
+
     static mainCommand(message, args) {
         if (args.length === 0) {
             message.channel.send('Faça alguma pergunta.');

@@ -12,6 +12,8 @@ const permittedJequitiChannels = ['mesa-do-nsfw', 'testes'];
 class AntiJequiti {
     constructor() {}
 
+    static get name() { return 'antijequiti' }
+
     /**
      * Invocado ao deletar uma mensagem
      *

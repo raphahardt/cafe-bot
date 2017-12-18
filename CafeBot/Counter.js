@@ -4,6 +4,8 @@ let insideCount = {};
 class Counter {
     constructor () {}
 
+    static get name() { return 'counter' }
+
     static countCommand(message, args) {
         if (!insideCount[message.author.id]) {
             insideCount[message.author.id] = 0;

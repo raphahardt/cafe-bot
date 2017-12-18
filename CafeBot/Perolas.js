@@ -25,6 +25,8 @@ const perolaValidEmojis = [emojis.WILTED_FLOWER];
 class Perolas {
     constructor() {}
 
+    static get name() { return 'perolas' }
+
     /**
      * Invocado toda vez que alguém dá um reaction em alguma mensagem.
      *

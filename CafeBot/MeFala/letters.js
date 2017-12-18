@@ -90,6 +90,7 @@ module.exports = {
         'ratto': ['🐀'],
         'ratta': ['🐀'],
         'ratinha': ['🐀'],
-        'ruim': ['👎']
+        'ruim': ['👎'],
+        'world': ['🌐']
     }
 };

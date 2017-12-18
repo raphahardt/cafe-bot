@@ -6,9 +6,10 @@ module.exports = {
      * Registra os eventos e comandos de um listener.
      *
      * @param {Discord.Client} discordClient
+     * @param {ModuleActivator} modules
      * @param {Array} listeners
      */
-    registerDiscordEvents: function (discordClient, listeners) {
+    registerDiscordEvents: (discordClient, modules, listeners) => {
 
         discordClient.on('message', message => {
             if (utils.verifyUserIsBot(message.member)) return;
@@ -37,6 +38,12 @@ module.exports = {
                 const listener = listeners[i];
                 const lstCommands = listener.commands ? listener.commands() : {};
 
+                // hook pra ver se o modulo tá desativado ou não
+                if (modules.isDisabled(listener.name)) {
+                    console.log(`tentou registrar o comando do modulo ${listener.name}, mas ele tá desativado`);
+                    continue;
+                }
+
                 for (let lstCommand in lstCommands) {
                     if (!lstCommands.hasOwnProperty(lstCommand)) continue;
 
@@ -45,7 +52,7 @@ module.exports = {
                     if (command === lstCommand.toLowerCase()) {
                         console.log('invocando ' + command, args);
                         // chama o comando do listener registrado
-                        lstCommands[lstCommand].call(discordClient, message, args);
+                        lstCommands[lstCommand].call(listener, message, args);
                     }
                 }
             }
@@ -62,7 +69,17 @@ module.exports = {
                 console.log('evento registrado ' + event);
 
                 // registra um evento no client do discord
-                discordClient.on(event, events[event]);
+                // antigo código: discordClient.on(event, events[event]);
+                discordClient.on(event, () => {
+                    // hook pra ver se o modulo tá desativado ou não
+                    if (modules.isDisabled(listener.name)) {
+                        console.log(`tentou executar o modulo ${listener.name}, mas ele tá desativado`);
+                        return;
+                    }
+
+                    // executa o evento de fato
+                    events[event].apply(listener, arguments);
+                });
             }
         }
     }

@@ -29,10 +29,14 @@ client.on("ready", () => {
 });
 
 const CafeBot = require('./CafeBot');
+const ModuleActivator = require('./CafeBot/ModuleActivator');
+const activator = new ModuleActivator();
 
 // registra os eventos de cada um dos 'módulos' do bot
-CafeBot.registerDiscordEvents(client, [
+CafeBot.registerDiscordEvents(client, activator, [
+    activator, // o próprio activator também possui comandos, então ele é um modulo também
     require('./CafeBot/Counter'),
+    require('./CafeBot/Ping'),
     require('./CafeBot/AntiJequiti'),
     require('./CafeBot/Perolas'),
     require('./CafeBot/AmigoSecreto'),

@@ -12,6 +12,8 @@ const amigosDatabase = './amigos.txt';
 class AmigoSecreto {
     constructor () {}
 
+    static get name() { return 'amigosecreto' }
+
     /**
      *
      * @param {Discord.Message} message
