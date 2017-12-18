@@ -3,7 +3,7 @@ const utils = require('../utils');
 const Discord = require("discord.js");
 
 // nomes dos canais que o bot vai verificar os jequitis
-const permittedJequitiChannels = ['mesa-do-nsfw', 'testes'];
+const permittedJequitiChannels = ['mesa-do-nsfw', 'log-e-comandos', 'testes'];
 
 /**
  * Verifica as mensagens quando elas são editadas ou deletadas, e caso seja, posta
@@ -21,7 +21,7 @@ class AntiJequiti {
      */
     static onMessageDelete(message) {
         // :eyes:
-        if (verifyIsCafeBot(message.author) && isUser(message.mentions)) {
+        if (message.author && verifyIsCafeBot(message.author) && isUser(message.mentions)) {
             warnUser(message.mentions.members.first(), message.channel);
             return;
         }

@@ -24,14 +24,24 @@ module.exports = {
         //return member.roles.some(r => ["bot"].includes(r.name));
     },
 
-    shuffle: array => {
+    /**
+     * Embaralha um array
+     *
+     * visto em:
+     * https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
+     *
+     * @param {Array} array
+     * @param {boolean} seed Um seed para viciar o embaralhamento
+     * @return {Array}
+     */
+    shuffle: (array, seed) => {
         let currentIndex = array.length, temporaryValue, randomIndex;
 
         // While there remain elements to shuffle...
         while (0 !== currentIndex) {
 
-            // Pick a remaining element...
-            randomIndex = Math.floor(Math.random() * currentIndex);
+            const random = seed === undefined ? Math.random() : this.seededRandom(seed);
+            randomIndex = Math.floor(random * currentIndex);
             currentIndex -= 1;
 
             // And swap it with the current element.
@@ -41,5 +51,21 @@ module.exports = {
         }
 
         return array;
+    },
+
+    /**
+     * Math.random(), só que viciado.
+     *
+     * solução dada em:
+     * https://stackoverflow.com/questions/521295/seeding-the-random-number-generator-in-javascript
+     * Eu só modifiquei a função pra ela aceitar um seed via argumento em vez de gerar um número
+     * fixo a cada call.
+     *
+     * @param {number} seed
+     * @return {number}
+     */
+    seededRandom: seed => {
+        const x = Math.sin(seed) * 10000;
+        return x - Math.floor(x);
     }
 };

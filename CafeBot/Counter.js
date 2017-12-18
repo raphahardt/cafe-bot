@@ -13,7 +13,7 @@ class Counter {
 
         insideCount[message.author.id]++;
 
-        message.channel.send(insideCount[message.author.id] + '.');
+        message.channel.send(insideCount[message.author.id]);
     }
 
     static commands() {
