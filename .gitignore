@@ -5,6 +5,7 @@ config.json
 v*.*.*.zip
 *.sh
 *.bat
+app_dev.js
 
 # Logs
 logs

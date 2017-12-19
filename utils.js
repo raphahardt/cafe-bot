@@ -1,5 +1,5 @@
 
-module.exports = {
+const utils = {
 
     /**
      * O prefixo dos comandos do bot.
@@ -40,7 +40,7 @@ module.exports = {
         // While there remain elements to shuffle...
         while (0 !== currentIndex) {
 
-            const random = seed === undefined ? Math.random() : this.seededRandom(seed);
+            const random = seed === undefined ? Math.random() : utils.seededRandom(seed++);
             randomIndex = Math.floor(random * currentIndex);
             currentIndex -= 1;
 
@@ -69,3 +69,5 @@ module.exports = {
         return x - Math.floor(x);
     }
 };
+
+module.exports = utils;
