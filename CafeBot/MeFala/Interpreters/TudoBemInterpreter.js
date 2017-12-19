@@ -12,7 +12,7 @@ module.exports = class TudoBemInterpreter {
 
     static get priority() { return 0 };
 
-    static phrases(user, mentions) {
+    static phrases(user, questionPhrase, mentions) {
         if (user.username === 'Polly') {
             return ['oi poli', 'ae poliana'];
         } else if (user.username === 'Be') {

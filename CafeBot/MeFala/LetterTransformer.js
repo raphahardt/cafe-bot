@@ -5,9 +5,17 @@ class LetterTransformer {
     constructor() {}
 
     /**
+     * Pega uma frase escrita com alfabeto comum e transforma
+     * em emojis correspondentes.
+     * Caso haja letras repetidas na frase, o algoritmo vai tentar
+     * achar um emoji não-repetido correspondente. Porém, caso não
+     * haja um emoji diferente pra cada letra repetida, essa
+     * cadeia "quebra" e a frase vai ficar incompleta.
+     * TODO: pensar numa forma de não fazer quebrar essa cadeia
+     * TODO: talvez fazer ele trocar de frase caso isso aconteça, e mandar um log dizendo que aquela frase há problema
      *
-     * @param {string} phrase
-     * @returns {Array}
+     * @param {string} phrase A frase a ser transformada
+     * @returns {Array} Array com os emojis para cada letra
      */
     static transform(phrase) {
         let transformed = [];

@@ -12,7 +12,7 @@ module.exports = class SignoInterpreter {
 
     static get priority() { return 10 };
 
-    static phrases(user, mentions) {
+    static phrases(user, questionPhrase, mentions) {
         return [
             'aquario',
             'sagitario',

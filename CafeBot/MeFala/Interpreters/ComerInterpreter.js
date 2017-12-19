@@ -14,7 +14,7 @@ module.exports = class ComerInterpreter {
 
     static get priority() { return 16 };
 
-    static phrases(user, mentions) {
+    static phrases(user, questionPhrase, mentions) {
         return [
             'comida'
         ];

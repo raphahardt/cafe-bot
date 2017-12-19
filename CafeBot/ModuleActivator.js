@@ -27,8 +27,8 @@ class ModuleActivator {
 
     modCommand(message, args) {
         if (message.author.id.toString() !== '208028185584074763'
-            || message.author.id.toString() !== '164083196999237633'
-            || message.author.id.toString() !== '132137996995526656') return;
+            && message.author.id.toString() !== '164083196999237633'
+            && message.author.id.toString() !== '132137996995526656') return;
 
         args.forEach(arg => {
             const moduleName = arg.toLowerCase();

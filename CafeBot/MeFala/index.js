@@ -26,11 +26,10 @@ class MeFala {
             // se um interpreter achar que ele deve responder a mensagem do usuário...
             if (interpreter.interpret(message.author, phrase, message.mentions)) {
                 // ...então pegar as possiveis frases que ele tem a dizer
-                phrasesResult = interpreter.phrases(message.author, message.mentions);
+                phrasesResult = interpreter.phrases(message.author, phrase, message.mentions);
                 if (!Array.isArray(phrasesResult)) {
                     phrasesResult = [phrasesResult];
                 }
-                //console.log('INTERPRETER RESULT', phrasesResult);
                 break;
             }
         }
@@ -43,20 +42,20 @@ class MeFala {
         // ...e pego aleatoriamente uma das frases aleatoriamente
         let idx = parseInt((Math.random() * (phrasesResult.length * 2000)) / 2000);
         idx = Math.min(phrasesResult.length - 1, idx);
-        //console.log('IDX', idx);
+
+        // frase que foi selecionada
         const selectedPhraseResult = phrasesResult[ idx ];
-        //console.log('PHRASE SELECTED', selectedPhraseResult);
 
         // usa o transformer pra transformar essa frase em emojis
         let emojis = Transformer.transform(selectedPhraseResult);
-        //console.log('EMOJIS', emojis);
 
-        // dá um reactor pra cada letra de emoji
+        // dá um reaction pra cada letra de emoji (função recursiva)
         function _react() {
             const emojiToReact = emojis.shift();
             return message.react(emojiToReact)
                 .then(() => {
                     if (emojis.length) {
+                        // continua enquanto tiver emoji pra mandar
                         return _react();
                     }
                     // acabou os emojis
@@ -64,10 +63,15 @@ class MeFala {
                 });
         }
 
-        _react().then((response) => {
-            // response === selectedPhraseResult
-            //console.log('EMOJIS', response);
-        }).catch(console.error);
+        // (inicio a recursividade aqui)
+        // _react().then((selectedPhrase) => {
+        //     // se chegou aqui, é pq todos os emojis foram enviados.
+        //     // aqui eu sou respondido com a frase selecionada.
+        //     // posso fazer alguma coisa ela aqui.
+        //     // (mas a princípio, o código não vai fazer nada, mas
+        //     // deixei aberto pra possibilidades)
+        //     console.log('REACT ENVIOU FRASE', selectedPhrase);
+        // }).catch(console.error);
     }
 
     static commands() {

@@ -12,7 +12,7 @@ module.exports = class BaileFunkInterpreter {
 
     static get priority() { return 0 };
 
-    static phrases(user, mentions) {
+    static phrases(user, questionPhrase, mentions) {
         if (user.username === 'Nemie' || mentions.members.exists('username', 'Nemie')) {
             return ['so vai nemi', 'senta nemi'];
         }

@@ -12,7 +12,7 @@ module.exports = class OmaeMouShinderuInterpreter {
 
     static get priority() { return 0 };
 
-    static phrases(user, mentions) {
+    static phrases(user, questionPhrase, mentions) {
         return ['nani?'];
     }
 };

@@ -12,7 +12,7 @@ module.exports = class CorInterpreter {
 
     static get priority() { return 16 };
 
-    static phrases(user, mentions) {
+    static phrases(user, questionPhrase, mentions) {
         return [
             'azul',
             'rosa',

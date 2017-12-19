@@ -12,7 +12,7 @@ module.exports = class AfrontaInterpreter {
 
     static get priority() { return 0 };
 
-    static phrases(user, mentions) {
+    static phrases(user, questionPhrase, mentions) {
         return [
             'q afronta',
             'pisa mais',

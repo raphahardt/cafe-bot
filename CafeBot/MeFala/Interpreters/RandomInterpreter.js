@@ -15,7 +15,7 @@ module.exports = class RandomInterpreter {
 
     static get priority() { return -512 };
 
-    static phrases(user, mentions) {
+    static phrases(user, questionPhrase, mentions) {
         return [
             'nao',
             'sim',

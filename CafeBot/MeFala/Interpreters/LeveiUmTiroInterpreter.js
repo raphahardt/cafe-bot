@@ -13,7 +13,7 @@ module.exports = class LeveiUmTiroInterpreter {
 
     static get priority() { return 0 };
 
-    static phrases(user, mentions) {
+    static phrases(user, questionPhrase, mentions) {
         return ['levei um tiro aki'];
     }
 };

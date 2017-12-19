@@ -31,7 +31,7 @@ const utils = {
      * https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
      *
      * @param {Array} array
-     * @param {boolean} seed Um seed para viciar o embaralhamento
+     * @param {number} seed Um seed para viciar o embaralhamento
      * @return {Array}
      */
     shuffle: (array, seed) => {
@@ -67,7 +67,32 @@ const utils = {
     seededRandom: seed => {
         const x = Math.sin(seed) * 10000;
         return x - Math.floor(x);
+    },
+
+    /**
+     * Função pra pegar todos os matchs de uma string.
+     *
+     * solução dada em:
+     * http://cwestblog.com/2013/02/26/javascript-string-prototype-matchall/
+     * Eu só modifiquei pra ser usado num contexto do utils.js, em vez de hookar
+     * o próprio objeto String como o post sugere.
+     *
+     * @param string
+     * @param regexp
+     * @return {*}
+     */
+    matchAll: (string, regexp) => {
+        let matches = [];
+        string.replace(regexp, function() {
+            let arr = ([]).slice.call(arguments, 0);
+            let extras = arr.splice(-2);
+            arr.index = extras[0];
+            arr.input = extras[1];
+            matches.push(arr);
+        });
+        return matches.length ? matches : null;
     }
+
 };
 
 module.exports = utils;
