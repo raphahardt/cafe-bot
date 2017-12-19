@@ -64,14 +64,14 @@ class MeFala {
         }
 
         // (inicio a recursividade aqui)
-        // _react().then((selectedPhrase) => {
-        //     // se chegou aqui, é pq todos os emojis foram enviados.
-        //     // aqui eu sou respondido com a frase selecionada.
-        //     // posso fazer alguma coisa ela aqui.
-        //     // (mas a princípio, o código não vai fazer nada, mas
-        //     // deixei aberto pra possibilidades)
-        //     console.log('REACT ENVIOU FRASE', selectedPhrase);
-        // }).catch(console.error);
+        _react().then((selectedPhrase) => {
+            // se chegou aqui, é pq todos os emojis foram enviados.
+            // aqui eu sou respondido com a frase selecionada.
+            // posso fazer alguma coisa ela aqui.
+            // (mas a princípio, o código não vai fazer nada, mas
+            // deixei aberto pra possibilidades)
+            console.log('REACT ENVIOU FRASE', selectedPhrase);
+        }).catch(console.error);
     }
 
     static commands() {
