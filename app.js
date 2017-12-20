@@ -11,6 +11,13 @@ const packageCfg = require("./package.json");
 client.on("ready", () => {
     console.log(`Bot cafe-bot v${packageCfg.version} [${client.users.size} membros] [${client.channels.size} canais] [${client.guilds.size} server]`);
 
+    // sai de todas as guilds q não seja o café com pão
+    client.guilds.array().forEach((guild) => {
+        if (guild.id !== '213797930937745409') {
+            guild.leave();
+        }
+    });
+
     // modifica o "playing" do bot
     //client.user.setGame(`on ${client.guilds.size} servers`);
     client.user.setGame(`${packageCfg.version}`);
@@ -40,7 +47,8 @@ CafeBot.registerDiscordEvents(client, activator, [
     //require('./CafeBot/AntiJequiti'), // rip *2017 ✝️2017
     require('./CafeBot/Perolas'),
     require('./CafeBot/AmigoSecreto'),
-    require('./CafeBot/MeFala')
+    require('./CafeBot/MeFala'),
+    require('./CafeBot/Audio'), // ainda não tá pronto
 ]);
 
 // conecta o bot

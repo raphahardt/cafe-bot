@@ -11,6 +11,12 @@ module.exports = {
      */
     registerDiscordEvents: (discordClient, modules, listeners) => {
 
+        // registrando os modulos no moduleActivator
+        for (let i = 0; i < listeners.length; i++) {
+            const listener = listeners[i];
+            modules.modulesInstalled[listener.name] = listener;
+        }
+
         discordClient.on('message', message => {
             if (utils.verifyUserIsBot(message.member)) return;
 

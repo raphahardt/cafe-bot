@@ -135,7 +135,7 @@ function warnUser(member, channel) {
         member.removeRoles(['242281124892508170', '316568273296687104']);
         channel.send(new Buffer('VMOhLCBhZ29yYSB2b2PDqiBqw6EgYWJ1c291IGRhIG1pbmhhIHBhY2nDqm5jaWEuIFJvbGVzIHJldGlyYWRvcy4uLiBlIG7Do28gdmFpIHZvbHRhciBtYWlzLg==', 'base64').toString('utf8'));
 
-        setTimeout(function () {
+        channel.client.setTimeout(function () {
             channel.send(new Buffer('QnJpbmtzIDopIE1BUyBQRUxBIE1PUiBERSBERVVTIFBBUkEgREUgRkFaRVIgSVNTTy4=', 'base64').toString('utf8'), { reply: member });
             member.addRoles(['242281124892508170', '316568273296687104']);
         }, 300000);
@@ -158,7 +158,7 @@ function warnUser(member, channel) {
         channel.send(new Buffer('RXUgYXZpc2VpLg==', 'base64').toString('utf8'), { reply: member });
         member.removeRoles(['242281124892508170', '316568273296687104']);
 
-        setTimeout(function () {
+        channel.client.setTimeout(function () {
             channel.send(new Buffer('QXNzdXN0b3UgbsOpPyBQb2lzIGVudMOjbyBwYXJlLg==', 'base64').toString('utf8'), { reply: member });
             member.addRoles(['242281124892508170', '316568273296687104']);
         }, 35000);

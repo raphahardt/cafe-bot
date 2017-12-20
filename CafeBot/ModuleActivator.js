@@ -12,6 +12,7 @@
 class ModuleActivator {
     constructor () {
         this.blacklistModules = [];
+        this.modulesInstalled = {};
     }
 
     // esse módulo é o unico q não tem nome e não pode ser desativado
@@ -32,13 +33,16 @@ class ModuleActivator {
 
         args.forEach(arg => {
             const moduleName = arg.toLowerCase();
+            const module = this.modulesInstalled[moduleName];
             if (this.isDisabled(moduleName)) {
                 // ativa
                 this.blacklistModules.splice(this.blacklistModules.indexOf(moduleName), 1);
+                if (module.onEnable) module.onEnable();
                 message.channel.send(`Módulo **${moduleName}** ativado.`);
             } else {
                 // desativa
                 this.blacklistModules.push(moduleName);
+                if (module.onDisable) module.onDisable();
                 message.channel.send(`Módulo **${moduleName}** desativado.`);
             }
         })
