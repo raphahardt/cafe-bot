@@ -37,7 +37,7 @@ CafeBot.registerDiscordEvents(client, activator, [
     activator, // o próprio activator também possui comandos, então ele é um modulo também
     require('./CafeBot/Counter'),
     require('./CafeBot/Ping'),
-    require('./CafeBot/AntiJequiti'),
+    //require('./CafeBot/AntiJequiti'), // rip *2017 ✝️2017
     require('./CafeBot/Perolas'),
     require('./CafeBot/AmigoSecreto'),
     require('./CafeBot/MeFala')

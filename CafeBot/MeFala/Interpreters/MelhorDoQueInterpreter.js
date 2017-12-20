@@ -9,18 +9,19 @@ module.exports = class MelhorDoQueInterpreter {
     constructor() {}
 
     static interpret(user, questionPhrase, mentions) {
-        return questionPhrase.match(/\w\s+(?:é|eh)\s+(?:melhor|pior|menos pior)\s+(?:qu?e?\s+)?\w/i);
+        return questionPhrase.match(/\w\s+(?:é|eh)\s+(?:mais(\s.+?)?|melhor|pior|menos pior)\s+(?:qu?e?\s+)?\w/i);
     }
 
     static get priority() { return 0 };
 
     static phrases(user, questionPhrase, mentions) {
-        const positivesResponses = ['pouco', 'sim', 'muito', 'demais', 'bastante'];
-        const negativeResponses = ['nem pouco', 'nao', 'nah', 'nope', 'sai daqui'];
+        const positivesResponses = ['1 pouco', 'sim', 'muito', 'demais', 'bastante'];
+        const negativeResponses = ['nem 1 pouco', 'nao', 'nah', 'nope', 'sai daqui'];
 
-        let comparisonOperator = questionPhrase.match(/(melhor|pior|menos pior)/i)[1];
+        let comparisonOperator = questionPhrase.match(/(mais|melhor|pior|menos pior)/i)[1];
         switch (comparisonOperator) {
             case 'melhor':
+            case 'mais':
             case 'menos pior': comparisonOperator = '>'; break;
             case 'pior': comparisonOperator = '<'; break;
         }
@@ -45,7 +46,7 @@ module.exports = class MelhorDoQueInterpreter {
             mentions.members.array().forEach(member => {
                 thingsToCompare.push(parseInt(member.id.toString()));
             });
-        } else if (_matchedComparisons = utils.matchAll(questionPhrase, /(\w+)\s+(?:é|eh)\s+(?:melhor|pior|menos pior)\s+(?:qu?e?\s+)?(\w+)/gi)) {
+        } else if (_matchedComparisons = utils.matchAll(questionPhrase, /([\w\s]+)\s+(?:é|eh)\s+(?:melhor|pior|menos pior)\s+(?:qu?e?\s+)?([\w\s]+)/gi)) {
 
             console.log('ARRAY COMPARISONS', [_matchedComparisons[0][1], _matchedComparisons[0][2]]);
 

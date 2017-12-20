@@ -70,7 +70,7 @@ module.exports = {
 
                 // registra um evento no client do discord
                 // antigo código: discordClient.on(event, events[event]);
-                discordClient.on(event, function() {
+                discordClient.on(event, (...args) => {
                     // hook pra ver se o modulo tá desativado ou não
                     if (modules.isDisabled(listener.name)) {
                         console.log(`tentou executar o modulo ${listener.name}, mas ele tá desativado`);
@@ -78,7 +78,7 @@ module.exports = {
                     }
 
                     // executa o evento de fato
-                    events[event].apply(listener, arguments);
+                    events[event].apply(listener, args);
                 });
             }
         }
