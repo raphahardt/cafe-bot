@@ -15,6 +15,6 @@ module.exports = class PalavraInterpreter {
     static get priority() { return 5 };
 
     static phrases(user, questionPhrase, mentions) {
-        return [questionPhrase.toString()];
+        return [questionPhrase.toString().toLowerCase()];
     }
 };

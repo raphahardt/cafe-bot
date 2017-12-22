@@ -49,6 +49,19 @@ class MeFala {
         // usa o transformer pra transformar essa frase em emojis
         let emojis = Transformer.transform(selectedPhraseResult);
 
+        if (!emojis) {
+            // não teve estoque de emoji suficiente, então
+            // pega uma frase do RandomInterpreter mesmo
+            const randomInterpreter = interpreters[interpreters.length-1];
+            emojis = Transformer.transform(utils.shuffle(randomInterpreter.interpret(message.author, phrase, message.mentions))[0]);
+
+            if (!emojis) {
+                // se por algum motivo, ainda não vir emojis
+                message.reply('...');
+                return;
+            }
+        }
+
         // dá um reaction pra cada letra de emoji (função recursiva)
         function _react() {
             const emojiToReact = emojis.shift();

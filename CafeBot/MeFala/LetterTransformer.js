@@ -33,7 +33,13 @@ class LetterTransformer {
             if (phrase.match(regexL)) {
                 // adiciona o emoji num array temporario
                 let emoji = _letters.words[l].shift();
-                // TODO: tratar quando acabar o "estoque" de emojis
+
+                if (!emoji) {
+                    // se acabou o estoque de emojis, retornar null
+                    console.log('frase que não tinha emoji:', phrase);
+                    return null;
+                }
+
                 biggerWords.push(emoji);
 
                 // troco a "palavra" encontrada pelo caracter $, q eu vou
@@ -53,6 +59,13 @@ class LetterTransformer {
             } else if (phraseLetter.length) {
                 console.log('letter', phraseLetter);
                 let emoji = _letters.single[phraseLetter].shift();
+
+                if (!emoji) {
+                    // se acabou o estoque de emojis, retornar null
+                    console.log('frase que não tinha emoji:', phrase);
+                    return null;
+                }
+
                 transformed.push(emoji);
             }
         }
