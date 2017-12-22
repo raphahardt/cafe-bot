@@ -9,7 +9,7 @@ module.exports = class PalavraInterpreter {
     constructor() {}
 
     static interpret(user, questionPhrase, mentions) {
-        return questionPhrase.match(/^[\w\s]{1,3}$/g) && questionPhrase.length <= 25;
+        return questionPhrase.match(/^(\w+\s?){1,3}$/gi) && questionPhrase.length <= 25;
     }
 
     static get priority() { return 5 };
