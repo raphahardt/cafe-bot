@@ -52,7 +52,7 @@ class Perolas {
         let reactCount = messageReaction.count;
         messageReaction.fetchUsers()
             .then(users => {
-                if (users && users.has(user.id)) {
+                if (users && users.has(messageReaction.message.author.id)) {
                     reactCount--;
                 }
 

@@ -9,7 +9,8 @@ module.exports = class MelhorDoQueInterpreter {
     constructor() {}
 
     static interpret(user, questionPhrase, mentions) {
-        return questionPhrase.match(/\w\s+(?:é|eh)\s+(?:mais(\s.+?)?|melhor|pior|menos pior)\s+(?:qu?e?\s+)?\w/i);
+        return questionPhrase.match(/\w\s+(?:é|eh)\s+(?:mais(\s.+?)?|melhor|pior|menos pior)\s+(?:qu?e?\s+)?\w/i)
+            || questionPhrase.match(/o q(?:ue)? (?:é|eh) (melhor|pior|menos pior)[,:. ]*(\w\s)+ ou (\w\s)+/i);
     }
 
     static get priority() { return 0 };
@@ -48,7 +49,14 @@ module.exports = class MelhorDoQueInterpreter {
             });
         } else if (_matchedComparisons = utils.matchAll(questionPhrase, /([\w\s]+)\s+(?:é|eh)\s+(?:melhor|pior|menos pior)\s+(?:qu?e?\s+)?([\w\s]+)/gi)) {
 
-            console.log('ARRAY COMPARISONS', [_matchedComparisons[0][1], _matchedComparisons[0][2]]);
+            console.log('ARRAY COMPARISONS TYPE 1', [_matchedComparisons[0][1], _matchedComparisons[0][2]]);
+
+            // compara só as duas coisas encontradas
+            thingsToCompare = [ _chars(_matchedComparisons[0][1]), _chars(_matchedComparisons[0][2]) ];
+
+        } else if (_matchedComparisons = utils.matchAll(questionPhrase, /o q(?:ue)? (?:é|eh) (?:melhor|pior|menos pior)[,:. ]*([\w\s]+) ou ([\w\s]+)/gi)) {
+
+            console.log('ARRAY COMPARISONS TYPE 2', [_matchedComparisons[0][1], _matchedComparisons[0][2]]);
 
             // compara só as duas coisas encontradas
             thingsToCompare = [ _chars(_matchedComparisons[0][1]), _chars(_matchedComparisons[0][2]) ];
