@@ -52,8 +52,7 @@ class MeFala {
         if (!emojis) {
             // não teve estoque de emoji suficiente, então
             // pega uma frase do RandomInterpreter mesmo
-            const randomInterpreter = interpreters[interpreters.length-1];
-            emojis = Transformer.transform(utils.shuffle(randomInterpreter.interpret(message.author, phrase, message.mentions))[0]);
+            emojis = Transformer.transform(utils.shuffle(['nao', 'sim', 'nem fodendo', 'obvio', 'nao sei', 'ata'])[0]);
 
             if (!emojis) {
                 // se por algum motivo, ainda não vir emojis
