@@ -13,6 +13,12 @@ const perolaChannelName = 'mesa-da-vergonha';
 
 // quantos reactions precisa ter pra ser uma pérola
 const perolaCountThreshold = 5;
+const perolaRankings = [
+    {color: 9006414, count: 10},
+    {color: 14408667, count: 15},
+    {color: 14867071, count: 20},
+    {color: 11069183, count: 30},
+];
 // quais emojis são escolhidos pra valer como um reaction válido
 const perolaValidEmojis = [emojis.WILTED_FLOWER];
 
@@ -57,7 +63,7 @@ class Perolas {
                 }
 
                 if (perolaValidEmojis.includes(messageReaction.emoji.name) && reactCount >= perolaCountThreshold) {
-                    sendPerolaMessage(messageReaction.message, perolasChannel);
+                    sendPerolaMessage(messageReaction.message, perolasChannel, reactCount);
                 }
             })
             .catch(console.error);
@@ -105,9 +111,11 @@ class Perolas {
  *
  * @param {Discord.Message} originalMessage
  * @param {Discord.TextChannel} perolasChannel
+ * @param {number} reactCount
  */
-function sendPerolaMessage(originalMessage, perolasChannel) {
-    if (!perolaMessageAlreadyExists(originalMessage, perolasChannel)) {
+function sendPerolaMessage(originalMessage, perolasChannel, reactCount) {
+    const msgPosted = perolaMessageAlreadyExists(originalMessage, perolasChannel);
+    if (!msgPosted) {
         const originalUser = originalMessage.author;
 
         const emb = new Discord.RichEmbed()
@@ -121,6 +129,21 @@ function sendPerolaMessage(originalMessage, perolasChannel) {
         }
 
         perolasChannel.send({embed: emb});
+    } else {
+        let changeRank = false;
+        for (let pos = 0; pos < perolaRankings.length; pos++) {
+            if (reactCount >= perolaRankings[pos].count) {
+                const emb = msgPosted.embeds[0];
+
+                emb.setColor(perolaRankings[pos].color);
+                changeRank = true;
+            }
+        }
+
+        if (changeRank) {
+            // pra atualizar o embed
+            msgPosted.edit();
+        }
     }
 }
 
@@ -131,26 +154,27 @@ function sendPerolaMessage(originalMessage, perolasChannel) {
  * @param {Discord.TextChannel} perolaChannel
  */
 function perolaMessageAlreadyExists(message, perolaChannel) {
-    let found = false;
-    perolaChannel.messages.array().forEach(msg => {
-        msg.embeds.forEach(embed => {
+    const arr = perolaChannel.messages.array();
+    for (let i = 0; i < arr.length; i++) {
+        const msg = arr[i];
+        for (let j = 0; j < msg.embeds.length; j++) {
+            const embed = msg.embeds[j];
+
             // se a mensagem tiver o mesmo texto
             if (embed.description === message.content.toString()) {
-                found = true;
-                return true;
+                return msg;
             }
 
             if (embed.image && message.attachments.array().length) {
                 // se a mensagem tiver a mesma imagem URL
                 if (embed.image.url === message.attachments.first().url) {
-                    found = true;
-                    return true;
+                    return msg;
                 }
             }
-        })
-    });
+        }
+    }
 
-    return found;
+    return false;
 }
 
 module.exports = Perolas;
