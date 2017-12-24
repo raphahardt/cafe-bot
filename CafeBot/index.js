@@ -46,14 +46,14 @@ module.exports = {
 
                 // hook pra ver se o modulo tá desativado ou não
                 if (modules.isDisabled(listener.name)) {
-                    console.log(`tentou registrar o comando do modulo ${listener.name}, mas ele tá desativado`);
+                    //console.log(`tentou registrar o comando do modulo ${listener.name}, mas ele tá desativado`);
                     continue;
                 }
 
                 for (let lstCommand in lstCommands) {
                     if (!lstCommands.hasOwnProperty(lstCommand)) continue;
 
-                    console.log('comando registrado ' + lstCommand);
+                    //console.log('comando registrado ' + lstCommand);
 
                     if (command === lstCommand.toLowerCase()) {
                         console.log('invocando ' + command, args);

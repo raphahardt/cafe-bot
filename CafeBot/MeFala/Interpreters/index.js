@@ -12,6 +12,7 @@ let _interpretersList = [
     require('./ComoVaiSerAlgoInterpreter'),
     require('./OmaeMouShinderuInterpreter'),
     require('./PassarosInterpreter'),
+    require('./PorcoOtarioInterpreter'),
     require('./PalavraInterpreter'),
     require('./FelinosInterpreter'),
     require('./UiCaIuInterpreter'),

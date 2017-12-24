@@ -50,7 +50,7 @@ module.exports = class MelhorDoQueInterpreter {
             });
         } else if (_matchedComparisons = utils.matchAll(questionPhrase, /(?:[ao] )?(\w+\s?) (?:é|eh) (?:melhor|pior|menos pior) (?:qu?e? )?(?:[ao] )?(\w+\s?)/gi)) {
 
-            console.log('ARRAY COMPARISONS TYPE 1', [_matchedComparisons[0][1], _matchedComparisons[0][2]]);
+            //console.log('ARRAY COMPARISONS TYPE 1', [_matchedComparisons[0][1], _matchedComparisons[0][2]]);
 
             // compara só as duas coisas encontradas
             thingsToCompare = [ _chars(_matchedComparisons[0][1]), _chars(_matchedComparisons[0][2]) ];

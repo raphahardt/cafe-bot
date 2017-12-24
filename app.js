@@ -18,6 +18,9 @@ client.on("ready", () => {
         }
     });
 
+    // easter egg
+    //client.channels.find('name', 'mesa-shop').fetchMessage('394125088896581653').then(msg => msg.react('💒')).catch(console.error);
+
     // modifica o "playing" do bot
     //client.user.setGame(`on ${client.guilds.size} servers`);
     client.user.setGame(`${packageCfg.version}`);

@@ -40,7 +40,7 @@ class Perolas {
      * @param {Discord.User} user O usuário que fez essa reaction (pode ser membro do server ou não)
      */
     static onReactionAdd(messageReaction, user) {
-        console.log('REACTION', perolaValidEmojis.includes(messageReaction.emoji.name), messageReaction.count);
+        //console.log('REACTION', perolaValidEmojis.includes(messageReaction.emoji.name), messageReaction.count);
 
         // ignora canais "especiais"
         if (perolaIgnoredChannelsNames.includes(messageReaction.message.channel.name)) return;

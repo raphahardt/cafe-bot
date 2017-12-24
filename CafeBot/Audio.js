@@ -150,7 +150,7 @@ class Audio {
 }
 
 function progressBar(seek, totalSeek, downloaded, totalDownload) {
-    console.log('SEEK', seek, totalSeek);
+    //console.log('SEEK', seek, totalSeek);
     const stringLen = 30;
     const numDownloaded = parseInt((downloaded / Math.max(1,totalDownload)) * stringLen);
     const posSeek = totalSeek ? parseInt((seek / totalSeek) * stringLen) : 0;

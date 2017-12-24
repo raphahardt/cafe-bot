@@ -34,7 +34,7 @@ class LetterTransformer {
                 // adiciona o emoji num array temporario
                 let emoji = _letters.words[l].shift();
 
-                if (!emoji) {
+                if (typeof emoji !== 'string') {
                     // se acabou o estoque de emojis, retornar null
                     console.log('frase que não tinha emoji:', phrase);
                     return null;
@@ -57,10 +57,10 @@ class LetterTransformer {
             } else if (phraseLetter === ' ') {
                 // TODO: como fazer com espaço?
             } else if (phraseLetter.length) {
-                console.log('letter', phraseLetter);
+                //console.log('letter', phraseLetter);
                 let emoji = _letters.single[phraseLetter].shift();
 
-                if (!emoji) {
+                if (typeof emoji !== 'string') {
                     // se acabou o estoque de emojis, retornar null
                     console.log('frase que não tinha emoji:', phrase);
                     return null;

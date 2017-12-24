@@ -32,7 +32,7 @@ class AntiJequiti {
             if (verifyIsCafeBot(message.author)) {
                 return;
             }
-            console.log('DELETE MENSAGEM', message.content, message.embeds.length);
+            //console.log('DELETE MENSAGEM', message.content, message.embeds.length);
             sendMessage(message);
         }
     }
@@ -51,7 +51,7 @@ class AntiJequiti {
             if (verifyIsCafeBot(message.author)) {
                 return;
             }
-            console.log('UPDATE MENSAGEM', message.content, message.embeds.length);
+            //console.log('UPDATE MENSAGEM', message.content, message.embeds.length);
             if (message.content.toString() !== newMessage.content.toString()) {
                 sendMessage(message);
             }
