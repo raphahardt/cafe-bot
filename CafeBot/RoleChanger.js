@@ -36,7 +36,7 @@ class RoleChanger {
         const myRoleList = member.roles.array().filter(role => role.name.indexOf('joga-') === 0).map(role => role.name.replace(/^joga-/, '')).sort().join(', ');
 
         // filtra os args e só deixa sem repetição (o filter ta fazendo isso)
-        args = args.map(role => role.name.replace(/^joga-/, '')).filter((v, i, a) => a.indexOf(v) === i);
+        args = args.map(role => role.replace(/^joga-/, '')).filter((v, i, a) => a.indexOf(v) === i);
 
         ////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////
