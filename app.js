@@ -52,6 +52,7 @@ CafeBot.registerDiscordEvents(client, activator, [
     require('./CafeBot/AmigoSecreto'),
     require('./CafeBot/MeFala'),
     require('./CafeBot/Audio'), // ainda não tá pronto
+    require('./CafeBot/RoleChanger'),
 ]);
 
 // conecta o bot
