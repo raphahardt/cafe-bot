@@ -79,6 +79,7 @@ Adiciona uma ou mais roles pro seu usuário, ou para outro usuário (caso você 
                     .then((memb) => {
                         const roleDoneList = rolesToAdd.map(role => role.name.replace(/^joga-/, '')).join(', ');
                         let replyMsg = `:white_check_mark: Roles \`${roleDoneList}\` adicionadas.`;
+                        // TODO: marcar a pessoa que foi adicionada, nao só responder a quem fez a solicitação
                         if (rolesNotExist.length) {
                             replyMsg += ` :x: Roles não existentes: \`${rolesNotExist}\`
   **Roles disponiveis:**
@@ -95,6 +96,7 @@ ${roleList}
                 if (args.length - (rolesToAdd.length + rolesNotExist.length) > 0) {
                     replyMsg = `:x: Você já possui estas roles.`;
                 }
+                // TODO: marcar a pessoa que foi adicionada, nao só responder a quem fez a solicitação
                 if (rolesNotExist.length) {
                     replyMsg += ` Roles não existentes: \`${rolesNotExist}\`
   **Roles disponiveis:**
@@ -141,6 +143,7 @@ Retira uma ou mais roles do seu usuário, ou de outro usuário (caso você tenha
                     .then((memb) => {
                         const roleDoneList = rolesToRemove.map(role => role.name.replace(/^joga-/, '')).join(', ');
                         let replyMsg = `:white_check_mark: Roles \`${roleDoneList}\` removidas.`;
+                        // TODO: marcar a pessoa que foi removida, nao só responder a quem fez a solicitação
                         if (rolesNotExist.length) {
                             replyMsg += ` Roles não existentes: \`${rolesNotExist}\`
   **Sua lista de roles:**
@@ -154,6 +157,7 @@ ${myRoleList}
                     .catch(console.error);
             } else {
                 let replyMsg = `:x: Nenhuma role foi removida.`;
+                // TODO: marcar a pessoa que foi removida, nao só responder a quem fez a solicitação
                 if (rolesNotExist.length) {
                     replyMsg += ` Roles não existentes: \`${rolesNotExist}\``
                 }
@@ -183,6 +187,56 @@ ${myRoleList}
 ${roleList}
 \`\`\`
             `);
+
+        ////////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////
+        } else if (intent === 'who' || intent === 'w') {
+
+            if (args.length === 0) {
+                message.channel.send(`Modo de usar: \`+role (who | w) (role)\`
+Indica quais pessoas estão marcadas com uma role específica.
+
+  **Exemplo:**
+\`\`\`+role who cah
++role w cah\`\`\``);
+                return;
+            }
+
+            const roleName = args[0];
+            const role = roles.find('name', 'joga-' + roleName);
+            if (!role) {
+                message.reply(`:x: Role \`${roleName}\` não existente.
+  **Roles disponiveis:**
+\`\`\`
+${roleList}
+\`\`\``);
+                return;
+            }
+
+            let membersWithRole = [];
+            message.guild.members.array().forEach(mb => {
+                if (mb.roles.some(r => ['joga-' + roleName].includes(r.name))) {
+                    membersWithRole.push(mb);
+                }
+            });
+
+            const membersWithRoleList = membersWithRole.map(m => {
+                if (!m.nickname) {
+                    return `${m.user.username}#${m.user.discriminator}`;
+                }
+                return m.nickname + ` (${m.user.username}#${m.user.discriminator})`;
+            }).map(n => `:small_blue_diamond: ${n}`).join("\n");
+
+            if (membersWithRoleList) {
+                message.reply(`
+Membros que estão com a role \`${roleName}\`:
+${membersWithRoleList}
+`);
+            } else {
+                message.reply(`:x: Ninguém possui esta role.`);
+            }
 
         ////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////
@@ -294,7 +348,7 @@ Deleta uma role. Somente administradores podem usar esse comando.
         ////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////
         } else {
-            message.channel.send(`Modo de usar: \`+role (add | remove | list | suggest) [lista das roles]\`
+            message.channel.send(`Modo de usar: \`+role (add | remove | list | suggest | who) [lista das roles]\`
             
 Só vale para roles que começarem com \@joga-
 
@@ -302,6 +356,7 @@ Só vale para roles que começarem com \@joga-
 - **remove:** Retira uma ou mais roles do seu usuário, ou de outro usuário (caso você tenha permissões).
 - **list:** Lista seus roles e os roles disponíveis.
 - **suggest:** Sugere uma nova role para ser votada. Se ela receber 5 votos "sim", ela é criada.
+- **who:** Indica quais pessoas estão marcadas com uma role específica.
 
   **Exemplos:**
 \`\`\`
@@ -310,6 +365,7 @@ Só vale para roles que começarem com \@joga-
 +role add brawlhalla cah csgo
 +role list
 +role suggest pinball
++role who cah
 \`\`\`
   **Roles disponiveis:**
 \`\`\`
