@@ -14,8 +14,8 @@ const perolaChannelName = 'mesa-da-vergonha';
 // quantos reactions precisa ter pra ser uma pérola
 const perolaCountThreshold = 5;
 const perolaRankings = [
-    {color: 9006414, count: 10},
-    {color: 14408667, count: 15},
+    {color: 9006414, count: 9},
+    {color: 14408667, count: 13},
     {color: 14867071, count: 20},
     {color: 11069183, count: 30},
 ];
@@ -115,26 +115,26 @@ class Perolas {
  */
 function sendPerolaMessage(originalMessage, perolasChannel, reactCount) {
     const msgPosted = perolaMessageAlreadyExists(originalMessage, perolasChannel);
+    const originalUser = originalMessage.author;
+
+    const emb = new Discord.RichEmbed()
+        .setAuthor(originalUser.username, originalUser.avatarURL)
+        .setColor(3447003)
+        .setDescription(originalMessage.content)
+        .setTimestamp(originalMessage.createdAt);
+
+    if (originalMessage.attachments.array().length) {
+        emb.setImage(originalMessage.attachments.first().url);
+    }
+
     if (!msgPosted) {
-        const originalUser = originalMessage.author;
-
-        const emb = new Discord.RichEmbed()
-            .setAuthor(originalUser.username, originalUser.avatarURL)
-            .setColor(3447003)
-            .setDescription(originalMessage.content)
-            .setTimestamp(originalMessage.createdAt);
-
-        if (originalMessage.attachments.array().length) {
-            emb.setImage(originalMessage.attachments.first().url);
-        }
-
         perolasChannel.send({embed: emb});
     } else {
         let changeRank = false;
+        //let emb = msgPosted.embeds[0];
+
         for (let pos = 0; pos < perolaRankings.length; pos++) {
             if (reactCount >= perolaRankings[pos].count) {
-                const emb = msgPosted.embeds[0];
-
                 emb.setColor(perolaRankings[pos].color);
                 changeRank = true;
             }
@@ -142,7 +142,7 @@ function sendPerolaMessage(originalMessage, perolasChannel, reactCount) {
 
         if (changeRank) {
             // pra atualizar o embed
-            msgPosted.edit();
+            msgPosted.edit({embed: emb});
         }
     }
 }
@@ -161,7 +161,7 @@ function perolaMessageAlreadyExists(message, perolaChannel) {
             const embed = msg.embeds[j];
 
             // se a mensagem tiver o mesmo texto
-            if (embed.description === message.content.toString()) {
+            if (message.content && embed.description === message.content.toString()) {
                 return msg;
             }
 
