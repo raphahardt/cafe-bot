@@ -40,22 +40,36 @@ class Sorteio {
             case 'end':
             case 'e':
                 return Sorteio.giveawayEndCommand(message, args);
+            case 'list':
+            case 'l':
+                return Sorteio.giveawayListCommand(message, args);
+            case 'cancel':
+            case 'c':
+                return Sorteio.giveawayCancelCommand(message, args);
             default:
                 return Sorteio.giveawayParticipateCommand(message, args);
         }
     }
 
     static giveawayCreateCommand(message, args) {
-        const gamesCount = parseInt(args.shift());
-        const giveawayName = args.join(' ');
 
-        if (gamesCount === 0) {
-            message.channel.send(`Modo de usar: \`+giveaway (start | s) [numero de jogos] [nome do giveaway]\`
+        // verifica se é um admin para encerrar um giveaway
+        if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
+            message.reply(`:x: *Você não tem permissão de criar um sorteio.*`);
+            return;
+        }
+
+        const gamesCount = parseInt(args.shift());
+        const giveawayName = args.shift();
+        const gameNamesList = args;
+
+        if (gamesCount === 0 || !giveawayName || gameNamesList.length === 0 || gameNamesList.length !== gamesCount) {
+            message.channel.send(`Modo de usar: \`+giveaway (start | s) [numero de jogos] "[nome do giveaway]" "[nome do jogo 1]" "[nome do jogo 2...]" \`
 Inicia um giveaway.
 
   **Exemplo:**
-\`\`\`+giveaway start 2 Sorteio de dois jogos!
-+giveaway s 1 Sorteio de Overwatch\`\`\``);
+\`\`\`+giveaway start 2 "Sorteio de dois jogos!" "Jogo 1" "Jogo 2"
++giveaway s 1 "Sorteio de Overwatch" "Overwatch"\`\`\``);
             return;
         }
 
@@ -71,10 +85,13 @@ Inicia um giveaway.
 
             giveRef.set({
                 games: parseInt(gamesCount),
+                gameNames: gameNamesList,
                 name: giveawayName
             });
             // reseta todos os participantes
             ref.child(`lista`).set({});
+
+            message.reply(`:white_check_mark: Sorteio \`${giveawayName}\` criado.`);
         });
     }
 
@@ -116,6 +133,12 @@ Inicia um giveaway.
 
     static giveawayEndCommand(message, args) {
 
+        // verifica se é um admin para encerrar um giveaway
+        if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
+            message.reply(`:x: *Você não tem permissão de encerrar um sorteio.*`);
+            return;
+        }
+
         let giveInfo;
         const giveRef = ref.child(`atual`);
 
@@ -124,6 +147,7 @@ Inicia um giveaway.
 
             if (!giveInfo) {
                 message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
+                return;
             }
 
             ref.child(`lista`).once('value', sn => {
@@ -194,16 +218,21 @@ Inicia um giveaway.
                 }
 
                 const winnersList = winners.map(m => {
-                    if (!m.nickname) {
-                        return `${m.user.username}#${m.user.discriminator}`;
-                    }
-                    return m.nickname + ` (${m.user.username}#${m.user.discriminator})`;
+                    const idx = winners.indexOf(m);
+                    return `Prêmio *${giveInfo.gameNames[idx]}*: ${m}`;
+                    // if (!m.nickname) {
+                    //     return `${m.user.username}#${m.user.discriminator}`;
+                    // }
+                    // return m.nickname + ` (${m.user.username}#${m.user.discriminator})`;
                 }).map(n => `:small_blue_diamond: ${n}`).join("\n");
 
-                message.reply(`:trophy: **Resultados do sorteio \`${giveInfo.name}\`
-${winnersList}
-`);
-
+                const content = `:trophy: **Resultados do sorteio \`${giveInfo.name}\`**
+Vencedores:
+${winnersList}`;
+                message.channel.send(content).then(msg => {
+                    // enviou a mensagem, entao agora posso apagar o giveaway atual
+                    giveRef.set(null);
+                });
 
             });
 
@@ -211,6 +240,99 @@ ${winnersList}
             //ref.child(`lista/${userId}`).set(1);
 
         });
+    }
+
+    static giveawayCancelCommand(message, args) {
+
+        // verifica se é um admin para encerrar um giveaway
+        if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
+            message.reply(`:x: *Você não tem permissão de encerrar um sorteio.*`);
+            return;
+        }
+
+        let giveInfo;
+        const giveRef = ref.child(`atual`);
+
+        giveRef.once('value', snapshot => {
+            giveInfo = snapshot.val();
+
+            if (!giveInfo) {
+                message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
+                return;
+            }
+
+            giveRef.set(null);
+            message.reply(`:white_check_mark: Sorteio \`${giveInfo.name}\` cancelado.`);
+
+        });
+
+    }
+
+    static giveawayListCommand(message, args) {
+
+        let giveInfo;
+        const giveRef = ref.child(`atual`);
+
+        giveRef.once('value', snapshot => {
+            giveInfo = snapshot.val();
+
+            if (!giveInfo) {
+                message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
+                return;
+            }
+
+            ref.child(`lista`).once('value', sn => {
+                const keys = Object.keys(sn.val() || {});
+
+                if (keys.length === 0) {
+                    message.reply(`:x: Não há nenhum participante no sorteio \`${giveInfo.name}\`.`);
+                    return;
+                }
+
+                console.log(keys);
+
+                let ticketsCounts = {};
+                let minBound = 0, maxBound;
+
+                for (let i = 0; i < keys.length; i++) {
+                    let userId = keys[i];
+                    let ticketCount = 100;
+
+                    const mbr = message.guild.members.get(userId);
+                    mbr.roles.array().forEach(role => {
+                        if (leveledRoles.includes(role.id)) {
+                            // a cada role que o usuario tiver ele ganha 5% a mais de chance de ganhar
+                            ticketCount *= 1.05;
+                        }
+                    });
+
+                    maxBound = parseInt(ticketCount);
+                    ticketsCounts[userId] = [ minBound, minBound + maxBound, maxBound ];
+
+                    minBound += maxBound;
+                }
+
+                console.log('TICKETS', ticketsCounts);
+
+                let tickets = [];
+                for (let userId in ticketsCounts) {
+                    tickets.push(message.guild.members.get(userId));
+                }
+
+                const ticketsList = tickets.map(m => {
+                    if (!m.nickname) {
+                        return `${m.user.username}#${m.user.discriminator}`;
+                    }
+                    return m.nickname + ` (${m.user.username}#${m.user.discriminator})`;
+                }).map(n => `:small_blue_diamond: ${n}`).join("\n");
+
+                message.reply(`Participantes do sorteio \`${giveInfo.name}\`
+${ticketsList}`);
+
+            });
+
+        });
+
     }
 
     static commands() {

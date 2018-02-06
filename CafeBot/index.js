@@ -21,10 +21,13 @@ module.exports = {
             if (utils.verifyUserIsBot(message.member)) return;
 
             // ignora qualquer mensagem que não começar com o prefixo
-            if (message.content.indexOf(utils.prefix) !== 0) return;
+            // e ignora tambem caso o comando for passado com espaço entre o prefixo e o comando
+            if (message.content.indexOf(utils.prefix) !== 0
+                || message.content.charAt(utils.prefix.length) === ' ') return;
 
             // pega o comando
-            const args = message.content.slice(utils.prefix.length).trim().split(/ +/g);
+            let argsString = message.content.slice(utils.prefix.length).trim();
+            const args = parseArgs(argsString);
             const command = args.shift().toLowerCase();
 
             // comando especial para desligar o bot
@@ -90,3 +93,38 @@ module.exports = {
         }
     }
 };
+
+/**
+ * Separa os argumentos em um array. Se tiver entre aspas, ele
+ * considera sendo uma parte do string
+ *
+ * @param string
+ */
+function parseArgs(string) {
+    // tira os espaços repetidos, primeiro de tudo
+    string = string.replace(/ +/g, ' ');
+
+    let args = [];
+    let insideQuote = false, argIdx = 0;
+    for (let i = 0; i < string.length; i++) {
+        const char = string.charAt(i);
+
+        switch (char) {
+            case ' ':
+                if (!insideQuote) {
+                    argIdx++;
+                }
+                break;
+            case '"':
+                insideQuote = !insideQuote;
+                continue;
+        }
+
+        if (!args[argIdx]) {
+            args[argIdx] = '';
+        }
+        args[argIdx] += char;
+    }
+
+    return args.map(e => e.trim()).filter(e => e.length > 0);
+}

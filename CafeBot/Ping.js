@@ -13,9 +13,16 @@ class Ping {
             .catch(console.error);
     }
 
+    static argsCommand(message, args) {
+        const argsList = args.map(n => `:small_blue_diamond: ${n}`).join("\n");
+        message.channel.send(`Argumentos (**${args.length}**):
+${argsList}`)
+    }
+
     static commands() {
         return {
-            'ping': Ping.pingCommand
+            'ping': Ping.pingCommand,
+            'args': Ping.argsCommand
         }
     }
 }
