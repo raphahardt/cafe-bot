@@ -85,6 +85,7 @@ Inicia um giveaway.
 
             giveRef.set({
                 games: parseInt(gamesCount),
+                creator: message.author.id,
                 gameNames: gameNamesList,
                 name: giveawayName
             });
@@ -147,6 +148,11 @@ Inicia um giveaway.
 
             if (!giveInfo) {
                 message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
+                return;
+            }
+
+            if (giveInfo.creator !== message.author.id) {
+                message.reply(`:x: Somente o criador do giveaway pode encerra-lo.`);
                 return;
             }
 
@@ -258,6 +264,11 @@ ${winnersList}`;
 
             if (!giveInfo) {
                 message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
+                return;
+            }
+
+            if (giveInfo.creator !== message.author.id) {
+                message.reply(`:x: Somente o criador do giveaway pode cancela-lo.`);
                 return;
             }
 
