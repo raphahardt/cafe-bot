@@ -14,14 +14,22 @@ const ref = db.ref('wololo');
 
 // quais cores estarão participando
 const colors = [
-    {name: 'Verde', plural: 'Verdes', symbol: '+', count: 0},
-    {name: 'Vermelho', plural: 'Vermelhos', symbol: '-', count: 0},
+    {
+        name: 'Azul',
+        plural: 'Azuis',
+        symbol: ':large_blue_circle:',
+        symbolStreak: ':blue_heart:',
+        count: 0
+    },
+    {
+        name: 'Vermelho',
+        plural: 'Vermelhos',
+        symbol: ':red_circle:',
+        symbolStreak: ':hearts:',
+        count: 0
+    },
 ];
 
-// qual vai ser o tipo de blockquote (```) que vai ser usado pra colorir os textos
-const blockquoteLang = 'diff';
-
-let initialized = false;
 
 /**
  * Algumas regras pro wololo:
@@ -39,6 +47,18 @@ class Wololo {
 
     static get name() { return 'wololo' }
 
+    static wololoCommand(message, args) {
+        //console.log('ROLES', message.guild.roles.array().map(r => `${r.id}: ${r.name}`));
+        const arg = args.shift();
+        switch (arg) {
+            case 'score':
+            case 's':
+                return Sorteio.giveawayCreateCommand(message, args);
+            default:
+                return Sorteio.wololoMyColorCommand(message, args);
+        }
+    }
+
     static pingCommand(message, args) {
         const userId = message.author.id;
 
@@ -46,7 +66,7 @@ class Wololo {
         const coreUserRef = ref.child(`cores/${userId}`);
 
         coreUserRef.once('value', snapshot => {
-            rand = snapshot.val();
+            let rand = snapshot.val();
 
             if (!rand) {
                 rand = generateColor(message.author);
@@ -161,6 +181,11 @@ function generateScoreboardContent() {
     content += `\`\`\``;
 
     return content;
+}
+
+function logEvent(event) {
+    const logRef = ref.child(`log`);
+    logRef.push().set({ event: event, ts: new Date() });
 }
 
 module.exports = Wololo;
