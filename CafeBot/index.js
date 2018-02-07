@@ -37,7 +37,7 @@ module.exports = {
                 message.channel.send(`Desligando...`)
                     .then(() => {
                         discordClient.destroy();
-                    });
+                    }).catch(console.error);
 
                 return;
             }

@@ -238,7 +238,7 @@ ${winnersList}`;
                 message.channel.send(content).then(msg => {
                     // enviou a mensagem, entao agora posso apagar o giveaway atual
                     giveRef.set(null);
-                });
+                }).catch(console.error);
 
             });
 

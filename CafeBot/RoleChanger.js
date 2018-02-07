@@ -281,7 +281,7 @@ Mínimo de **5 votos**.
                     .then(msg => {
                         msg.react('✅');
                         msg.react('❌');
-                    });
+                    }).catch(console.error);
 
             } else {
                 message.reply(`:x: Todas as roles sugeridas já existem ou são incompatíveis com o Discord. Lembre-se que só podem ser usados *letras, números e hífen*.`);

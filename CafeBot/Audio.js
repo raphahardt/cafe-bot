@@ -40,7 +40,7 @@ class Audio {
                 let msgUpdate;
                 message.reply('Tocando...').then(msg => {
                     msgUpdate = msg;
-                });
+                }).catch(console.error);
                 voiceChatConnected = connection;
 
                 const ytUrl = "https://www.youtube.com/watch?v=" + args[0];
@@ -60,7 +60,7 @@ class Audio {
 
                         msgUpdate.edit(progressBar(seekTime, info.length_seconds, progressInfo.downloaded, progressInfo.total));
                     }, 1000);
-                });
+                }).catch(console.error);
 
                 dispatcher.on('end', () => {
                     if (interv) {

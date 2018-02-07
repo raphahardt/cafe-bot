@@ -72,7 +72,7 @@ class MeFala {
                     }
                     // acabou os emojis
                     return selectedPhraseResult;
-                });
+                }).catch(console.error);
         }
 
         // (inicio a recursividade aqui)

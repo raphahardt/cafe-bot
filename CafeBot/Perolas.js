@@ -88,7 +88,7 @@ class Perolas {
                     // manda cada uma no channel de perolas
                     sendPerolaMessage(pinMsg, perolasChannel);
                 })
-            });
+            }).catch(console.error);
     }
 
     static commands() {

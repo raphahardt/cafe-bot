@@ -77,7 +77,7 @@ class Wololo {
             message.reply(`Sua cor: ${rand}`);
             // generateScoreboardContent().then(content => {
             //     message.channel.send(content);
-            // });
+            // }).catch(console.error);
         });
     }
 
