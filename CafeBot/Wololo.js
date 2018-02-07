@@ -30,6 +30,8 @@ const colors = [
     },
 ];
 
+const MAX_WOLOLOS = 2;
+
 
 /**
  * Algumas regras pro wololo:
@@ -53,35 +55,55 @@ class Wololo {
         switch (arg) {
             case 'score':
             case 's':
-                return Sorteio.giveawayCreateCommand(message, args);
+                return Wololo.wololoScoreCommand(message, args);
             default:
-                return Sorteio.wololoMyColorCommand(message, args);
+                if (message.mentions.users.size === 1) {
+                    return Wololo.wololoConvertCommand(message, args);
+                } else if (message.mentions.users.size > 1) {
+                    message.reply(`:x: Apenas um usuário por ser convertido por vez.`);
+                    return;
+                }
+                return Wololo.wololoMyColorCommand(message, args);
         }
     }
 
-    static pingCommand(message, args) {
-        const userId = message.author.id;
+    static wololoMyColorCommand(message, args) {
+        const user = message.author;
 
-        let rand;
-        const coreUserRef = ref.child(`cores/${userId}`);
-
-        coreUserRef.once('value', snapshot => {
-            let rand = snapshot.val();
-
-            if (!rand) {
-                rand = generateColor(message.author);
-                // salva o que foi definido, se ele não tiver
-                coreUserRef.set(rand);
-            }
-
-            message.reply(`Sua cor: ${rand}`);
-            // generateScoreboardContent().then(content => {
-            //     message.channel.send(content);
-            // }).catch(console.error);
+        getInfo(user).then(info => {
+            const colorSymbol = colors[info.color].symbol;
+            message.reply(`Sua cor: ${colorSymbol}`);
         });
     }
 
-    static initCommand(message, args) {
+    static wololoConvertCommand(message, args) {
+        const user = message.author;
+        const userToConvert = message.mentions.users.first();
+
+        if (user.id === userToConvert.id) {
+            message.reply(Math.random() > 0.9 ? `:x: aff eu convertendo` : `:x: Você não pode se converter!`);
+            return;
+        }
+
+        getInfo(user).then(info => {
+            getInfo(userToConvert).then(convertInfo => {
+
+                // verifica se o user tem wololo disponivel
+                if (!hasWololo(info)) {
+                    const timeLeft = getTimeLeftForNextWololo(info);
+                    message.reply(`:x: Você não tem mais wololos por hoje. Volte em ${timeLeft}.`);
+                    return;
+                }
+
+                if (info.color === convertInfo.color) {
+                    message.reply(`:x: Você já estão no mesmo time.`);
+                    return;
+                }
+            })
+        });
+    }
+
+    static wololoScoreCommand(message, args) {
         if (initialized) {
             return;
         }
@@ -136,8 +158,7 @@ class Wololo {
 
     static commands() {
         return {
-            'my': Wololo.pingCommand,
-            'init': Wololo.initCommand,
+            'wololo': Wololo.wololoCommand,
         }
     }
 }
@@ -160,6 +181,62 @@ function generateColor(user) {
     }
 
     return quad;
+}
+
+function getInfo(user) {
+    return new Promise((resolve, reject) => {
+        const coreUserRef = ref.child(`cores/${user.id}`);
+
+        coreUserRef.once('value', snapshot => {
+            let info = snapshot.val();
+
+            if (!info) {
+                info = {
+                    color: generateColor(user),
+                    timestampCasts: [],
+                    castsUsed: 0,
+                };
+                // salva o que foi definido, se ele não tiver
+                coreUserRef.set(info);
+            }
+
+            resolve(info);
+        });
+    });
+}
+
+function hasWololo(info) {
+    for (let i = 0; i < MAX_WOLOLOS; i++) {
+        const time = (info.timestampCasts || [])[i];
+
+        // se nao tem horario, entao ele tem slot
+        if (!time) {
+            return true;
+        }
+
+        // se o horario que foi feito o wololo + 24 horas foi
+        // antes do horario atual, entao ele tem wololo
+        if (time + 86400 < (new Date()).getTime()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function getTimeLeftForNextWololo(info) {
+    const oldestTimestampCast = info.timestampCasts.slice().sort();
+    let diffSeconds = (new Date()).getTime() - oldestTimestampCast;
+
+    if (diffSeconds > 3600) {
+        return parseInt(diffSeconds / 3600) + ' hora(s)';
+    }
+
+    if (diffSeconds > 60) {
+        return parseInt(diffSeconds / 60) + ' minuto(s)';
+    }
+
+    return (diffSeconds) + ' segundo(s)';
 }
 
 function generateScoreboardContent() {
