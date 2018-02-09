@@ -8,7 +8,7 @@ const ScoreboardManager = require("./Wololo/ScoreboardManager");
 const fbApp = fbAdmin.initializeApp({
     credential: fbAdmin.credential.cert(fbServiceAccount),
     databaseURL: "https://cafebot-2018.firebaseio.com"
-});
+}, 'wololo');
 
 const db = fbApp.database();
 const ref = db.ref('wololo');

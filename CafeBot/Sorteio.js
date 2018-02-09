@@ -7,7 +7,7 @@ const Discord = require("discord.js");
 const fbApp = fbAdmin.initializeApp({
     credential: fbAdmin.credential.cert(fbServiceAccount),
     databaseURL: "https://cafebot-2018.firebaseio.com"
-});
+}, 'sorteio');
 
 const db = fbApp.database();
 const ref = db.ref('sorteio');
