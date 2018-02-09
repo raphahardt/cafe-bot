@@ -3,6 +3,7 @@ const fbAdmin = require("firebase-admin");
 const fbServiceAccount = require("../misc/cafebot-2018-firebase-adminsdk-j17ic-a11e9f3222.json");
 const utils = require('../utils');
 const Discord = require("discord.js");
+const ScoreboardManager = require("./Wololo/ScoreboardManager");
 
 const fbApp = fbAdmin.initializeApp({
     credential: fbAdmin.credential.cert(fbServiceAccount),
@@ -30,7 +31,17 @@ const colors = [
     },
 ];
 
-const MAX_WOLOLOS = 2;
+// padrão
+let MAX_CASTS = 2;
+let FAIL_CAST_CHANCE = 0.2;
+
+ref.child('config').on('value', snapshot => {
+    let config = snapshot.val();
+
+    MAX_CASTS = config.maxCasts;
+    FAIL_CAST_CHANCE = config.failCastChance;
+
+});
 
 
 /**
@@ -41,7 +52,7 @@ const MAX_WOLOLOS = 2;
  * - Somente as pessoas que estão participando que vão brincar e participam das estatisticas
  * - As estatisticas ficarão fixadas no canal e o proprio bot vai ficar alterando esse topico
  * automaticamente
- * - Um wololo tem chances de falhar de 30%
+ * - Um wololo tem chances de falhar de 20%
  *
  */
 class Wololo {
@@ -51,11 +62,20 @@ class Wololo {
 
     static wololoCommand(message, args) {
         //console.log('ROLES', message.guild.roles.array().map(r => `${r.id}: ${r.name}`));
+
+        console.log('MAX_CASTS', MAX_CASTS);
+        console.log('FAIL_CAST_CHANCE', FAIL_CAST_CHANCE);
+
         const arg = args.shift();
         switch (arg) {
+            case 'info':
+            case 'i':
+            case 'stats':
+                return Wololo.wololoStatsCommand(message, args);
             case 'score':
-            case 's':
                 return Wololo.wololoScoreCommand(message, args);
+            case 'scoreboard':
+                return Wololo.wololoScoreboardCommand(message, args);
             default:
                 if (message.mentions.users.size === 1) {
                     return Wololo.wololoConvertCommand(message, args);
@@ -68,11 +88,53 @@ class Wololo {
     }
 
     static wololoMyColorCommand(message, args) {
-        const user = message.author;
+        const user = message.mentions.users.size === 1 ? message.mentions.users.first() : message.author;
+
+        if (user.bot) {
+            message.reply(`:x: Bots não tem cor.`);
+            return;
+        }
 
         getInfo(user).then(info => {
             const colorSymbol = colors[info.color].symbol;
             message.reply(`Sua cor: ${colorSymbol}`);
+        });
+    }
+
+    static wololoStatsCommand(message, args) {
+        const user = message.mentions.users.size === 1 ? message.mentions.users.first() : message.author;
+
+        if (user.bot) {
+            message.reply(`:x: Bots não tem stats.`);
+            return;
+        }
+
+        getInfo(user).then(info => {
+            const now = parseInt((new Date()).getTime() / 1000);
+            let stats = '';
+
+            stats += `**Wololos bem sucedidos:** ${info.success}\n`;
+            stats += `**Wololos falhos:** ${info.fail}\n`;
+
+            const rating = parseInt((info.success / Math.max(info.success + info.fail, 1)) * 100);
+            stats += `**Rating de sucesso:** ${rating}%\n`;
+            stats += `**Escudos atuais:** ${info.shields}\n`;
+            stats += `**Streak de wololos atual:** ${info.streak}\n`;
+            if (user.id === '208028185584074763' || user.id === '132137996995526656') {
+                stats += `**Tempo como ${colors[info.color].name}:** Pra sempre\n`;
+            } else {
+                for (let i = 0; i < colors.length; i++) {
+                    let timeAs = info.timeAs[i] || 0;
+                    if (i === info.color && info.timeAsTimestamps[i]) {
+                        // conta o tempo que vc ta com a cor atual, pois ainda nao foi convertido pra saber
+                        timeAs += now - info.timeAsTimestamps[i];
+                    }
+                    const timeAsFormatted = formatTime(timeAs);
+                    stats += `**Tempo como ${colors[i].name}:** ${timeAsFormatted}\n`;
+                }
+            }
+
+            message.channel.send(`Stats de ${user} ${colors[info.color].symbol}:\n\n${stats}`);
         });
     }
 
@@ -85,13 +147,23 @@ class Wololo {
             return;
         }
 
+        if (userToConvert.bot) {
+            message.reply(`:x: Você não pode converter um bot.`);
+            return;
+        }
+
+        if (userToConvert.id === '208028185584074763' || userToConvert.id === '132137996995526656') {
+            message.reply(`:x: Você não pode converter os líderes da resistência!`);
+            return;
+        }
+
         getInfo(user).then(info => {
             getInfo(userToConvert).then(convertInfo => {
 
                 // verifica se o user tem wololo disponivel
                 if (!hasWololo(info)) {
                     const timeLeft = getTimeLeftForNextWololo(info);
-                    message.reply(`:x: Você não tem mais wololos por hoje. Volte em ${timeLeft}.`);
+                    message.reply(`:x: Você não tem mais wololos por hoje. Volte em **${timeLeft}**.`);
                     return;
                 }
 
@@ -99,59 +171,157 @@ class Wololo {
                     message.reply(`:x: Você já estão no mesmo time.`);
                     return;
                 }
+
+                const fail = (Math.random() * 1000) < (1000 * FAIL_CAST_CHANCE);
+                let wasShielded = false;
+
+                // descarta um wololo e conta
+                info.castsUsed++;
+                if (!info.timestampCasts) info.timestampCasts = [];
+                info.timestampCasts.push((new Date()).getTime());
+
+                // verifica se ultrapassou o limite
+                while (info.timestampCasts.length > MAX_CASTS) {
+                    // vai tirando o cast mais antigo
+                    info.timestampCasts.shift();
+                }
+
+                // converte o inimigo, se nao for fail
+                if (!fail) {
+                    // se tiver shield, perde o shield e nao a cor
+                    if (convertInfo.shields > 0) {
+                        convertInfo.shields--;
+                        wasShielded = true;
+                    } else {
+                        // contabiliza o tempo que ficou naquela cor
+                        const now = parseInt((new Date()).getTime() / 1000);
+                        if (!convertInfo.timeAs[convertInfo.color]) convertInfo.timeAs[convertInfo.color] = 0;
+                        if (convertInfo.timeAsTimestamps[convertInfo.color]) {
+                            convertInfo.timeAs[convertInfo.color] += now - convertInfo.timeAsTimestamps[convertInfo.color];
+                        }
+                        convertInfo.timeAsTimestamps[info.color] = now;
+                        // fim da contabilização -----
+
+                        // se não, converte mesmo
+                        convertInfo.color = info.color;
+                    }
+
+                    info.streak = (info.streak || 0) + 1;
+
+                    if (info.streak >= 5) {
+                        // a cada 5 streaks, ganha um shield
+                        if (user.id === '208028185584074763' || user.id === '132137996995526656') {
+                            // os lideres da resistencia nao precisam de shields
+                        } else {
+                            info.shields = (info.shields || 0) + 1;
+                        }
+                        info.streak = 0;
+                    }
+                } else {
+                    // perde o streak e o shield
+                    info.streak = 0;
+                }
+
+                // contabiliza acertos e falhas
+                const type = fail ? 'fail' : 'success';
+                info[type] = (info[type] || 0) + 1;
+
+                const replyMsg = replyWololoMessage(user, userToConvert, info, convertInfo, fail, wasShielded);
+                message.reply(replyMsg);
+
+                // salva as config dos users
+                ref.child(`cores/${user.id}`).set(info);
+                ref.child(`cores/${userToConvert.id}`).set(convertInfo);
+
             })
         });
     }
 
     static wololoScoreCommand(message, args) {
-        if (initialized) {
+
+        loadScore().then((response) => {
+
+            message.reply(`Placar rápido (**${response.totalMembers} participante(s)**):\n` + createFastScore(response.totalMembers));
+
+        }).catch(console.error);
+    }
+
+    static wololoScoreboardCommand(message, args) {
+
+        if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
+            message.reply(`:x: *Você não tem permissão pra isso.*`);
             return;
         }
 
-        message.channel.send('Carregando placar...').then(msg => {
+        // deleta a mensagem do comando
+        message.delete();
+        const scoreboardManager = new ScoreboardManager(message.channel);
+
+        loadScore().then(response => {
+            let totalMembers = response.totalMembers;
+            let members = response.members;
+
+            // atualiza a primeira vez
+            scoreboardManager.handle(generateScoreboardContent(
+                message.guild, members, totalMembers
+            ));
+
             const colorsRef = ref.child('cores');
-
-            colorsRef.once('value', (snapshot, prevKey) => {
-                console.log('value', snapshot.val());
-                const allMembers = snapshot.val();
-
-                if (!allMembers) {
-                    msg.edit(generateScoreboardContent());
-                    return;
-                }
-
-                // conta todos uma unica vez
-                for (let id in allMembers) {
-                    if (!allMembers.hasOwnProperty(id)) continue;
-
-                    colors[ allMembers[id] ].count++;
-                }
-
-                msg.edit(generateScoreboardContent());
-
-                initialized = true;
-            });
 
             colorsRef.on('child_added', (snapshot, prevKey) => {
                 console.log('added', snapshot.val());
-                const color = snapshot.val();
-                colors[color].count++;
 
-                msg.edit(generateScoreboardContent());
+                if (!members[snapshot.key]) {
+                    const info = snapshot.val();
+                    colors[info.color].count++;
+
+                    totalMembers++;
+                    members[snapshot.key] = info;
+
+                    scoreboardManager.handle(generateScoreboardContent(
+                        message.guild, members, totalMembers
+                    ));
+                }
+
             });
 
             // FIXME: como tratar uma alteração simples de cor se eu não tenho a referencia do que tava?
+            // TODO: vai dar certo o jeito q eu fiz?
             colorsRef.on('child_changed', snapshot => {
                 console.log('changed', snapshot.val());
+
+                if (members[snapshot.key]) {
+                    const info = snapshot.val();
+                    const oldInfo = members[snapshot.key];
+
+                    colors[info.color].count++;
+                    colors[oldInfo.color].count--;
+
+                    // atualiza com o novo
+                    members[snapshot.key] = info;
+
+                    scoreboardManager.handle(generateScoreboardContent(
+                        message.guild, members, totalMembers
+                    ));
+                }
             });
 
             colorsRef.on('child_removed', snapshot => {
                 console.log('removed', snapshot.val());
-                const color = snapshot.val();
-                colors[color].count--;
 
-                msg.edit(generateScoreboardContent());
+                if (members[snapshot.key]) {
+                    const info = snapshot.val();
+                    colors[info.color].count--;
+
+                    totalMembers--;
+                    delete members[snapshot.key];
+
+                    scoreboardManager.handle(generateScoreboardContent(
+                        message.guild, members, totalMembers
+                    ));
+                }
             });
+
 
         }).catch(console.error);
     }
@@ -163,7 +333,72 @@ class Wololo {
     }
 }
 
+function loadScore() {
+    return new Promise((resolve, reject) => {
+        const colorsRef = ref.child('cores');
+
+        // zera os counts das cores primeiro
+        for (let i = 0; i < colors.length; i++) {
+            colors[i].count = 0;
+        }
+
+        colorsRef.once('value', (snapshot, prevKey) => {
+            //console.log('value', snapshot.val());
+            const allMembers = snapshot.val();
+
+            if (!allMembers) {
+                reject('no members');
+                return;
+            }
+
+            // conta todos uma unica vez
+            let count = 0;
+            for (let id in allMembers) {
+                if (!allMembers.hasOwnProperty(id)) continue;
+
+                colors[allMembers[id].color].count++;
+                count++;
+            }
+
+            resolve({ members: allMembers, totalMembers: count });
+        });
+    });
+}
+
+function createFastScore(totalMembers) {
+    let colorScores = [];
+    for (let i = 0; i < colors.length; i++) {
+        //console.log('COUNT', i, colors[i].count, totalMembers);
+        const score = parseInt((colors[i].count / totalMembers) * 100);
+        colorScores.push(`${colors[i].symbol} ${score}% (${colors[i].count})`);
+    }
+    return colorScores.join(' :heavy_multiplication_x: ');
+}
+
+function replyWololoMessage(user, convertUser, info, convertInfo, fail, wasShielded) {
+    const resultEmoji = wasShielded ? ':shield:' : (fail ? ':heavy_multiplication_x:' : ':white_check_mark:');
+    const colorEmoji = colors[ info.color ].symbolStreak;
+    const oldConvertUserColorEmoji = colors[ convertInfo.color ].symbol;
+    const newConvertUserColorEmoji = colors[ info.color ].symbol;
+
+    //const emojiText = `:speaking_head:  \\--{ *wololo* }  :wavy_dash:${colorEmoji}:wavy_dash:${colorEmoji}:wavy_dash:${resultEmoji}`;
+    const emojiText = `:speaking_head:     :wavy_dash:${colorEmoji}:wavy_dash:${colorEmoji}:wavy_dash:${resultEmoji}`;
+
+    return `\n${emojiText}\n\n`
+        + (wasShielded ? `**Usou escudo!** ${convertUser} continua ${oldConvertUserColorEmoji}` :
+            (fail
+                ? `**Falhou!** ${convertUser} continua ${oldConvertUserColorEmoji}`
+                : `**Sucesso!** ${convertUser} agora é ${newConvertUserColorEmoji}`));
+
+}
+
 function generateColor(user) {
+    if (user.id === '208028185584074763') {
+        return 1; // sempre vermelho pra mim
+    } else if (user.id === '132137996995526656') {
+        return 0; // sempre azul pra dani
+    }
+
     const threshold = 5000 / colors.length;
     let factor = utils.seededRandom(user.discriminator) * 5000;
 
@@ -191,10 +426,27 @@ function getInfo(user) {
             let info = snapshot.val();
 
             if (!info) {
+                const generatedColor = generateColor(user);
+                let timeAs = {}, timeAsTimestamps = {};
+
+                for (let i = 0; i < colors.length; i++) {
+                    timeAs[i] = 0;
+                    timeAsTimestamps[i] = 0;
+                }
+
+                // coloca a primeira cor no timestamp
+                timeAsTimestamps[generatedColor] = parseInt((new Date()).getTime() / 1000);
+
                 info = {
-                    color: generateColor(user),
+                    color: generatedColor,
                     timestampCasts: [],
                     castsUsed: 0,
+                    shields: 0,
+                    streak: 0,
+                    success: 0,
+                    fail: 0,
+                    timeAs: timeAs,
+                    timeAsTimestamps: timeAsTimestamps,
                 };
                 // salva o que foi definido, se ele não tiver
                 coreUserRef.set(info);
@@ -206,56 +458,77 @@ function getInfo(user) {
 }
 
 function hasWololo(info) {
-    for (let i = 0; i < MAX_WOLOLOS; i++) {
+    for (let i = 0; i < MAX_CASTS; i++) {
         const time = (info.timestampCasts || [])[i];
 
         // se nao tem horario, entao ele tem slot
         if (!time) {
+            console.log('HASWOLOLO', 'não achei time, true');
             return true;
         }
 
         // se o horario que foi feito o wololo + 24 horas foi
         // antes do horario atual, entao ele tem wololo
-        if (time + 86400 < (new Date()).getTime()) {
+        console.log('HASWOLOLO', time, (new Date()).getTime());
+        if (time + 86400000 < (new Date()).getTime()) {
             return true;
         }
     }
 
+    console.log('HASWOLOLO', 'false');
     return false;
 }
 
 function getTimeLeftForNextWololo(info) {
     const oldestTimestampCast = info.timestampCasts.slice().sort();
-    let diffSeconds = (new Date()).getTime() - oldestTimestampCast;
+    let diffSeconds = 86400 - ((new Date()).getTime() - oldestTimestampCast[0]) / 1000;
 
-    if (diffSeconds > 3600) {
-        return parseInt(diffSeconds / 3600) + ' hora(s)';
-    }
-
-    if (diffSeconds > 60) {
-        return parseInt(diffSeconds / 60) + ' minuto(s)';
-    }
-
-    return (diffSeconds) + ' segundo(s)';
+    return formatTime(diffSeconds);
 }
 
-function generateScoreboardContent() {
-    let content = "**PLACAR WOLOLO**:\n";
-    content += `\`\`\`${blockquoteLang}\n`;
-
-    let sum = 0;
-    for (let i = 0; i < colors.length; i++) {
-        sum += colors[i].count;
+function formatTime(seconds) {
+    if (seconds > 3600) {
+        const minutes = parseInt((seconds % 3600) / 60);
+        const minutesText = minutes > 0 ? ` e ${minutes} minuto(s)` : '';
+        return parseInt(seconds / 3600) + ' hora(s)' + minutesText;
     }
 
-    for (let i = 0; i < colors.length; i++) {
-        content += colors[i].symbol + colors[i].plural + ":\n";
-        content += colors[i].count;
-        content += ' (' + parseInt((colors[i].count / Math.max(1, sum)) * 100) + '%)';
-        content += "\n";
+    if (seconds > 60) {
+        return parseInt(seconds / 60) + ' minuto(s)';
     }
 
-    content += `\`\`\``;
+    return parseInt(seconds) + ' segundo(s)';
+}
+
+/**
+ *
+ * @param {?Discord.Guild} guild
+ * @param members
+ * @param totalMembers
+ * @return {string}
+ */
+function generateScoreboardContent(guild, members, totalMembers) {
+    if (!guild) return '[ Placar não está numa guild válida ]';
+
+    let content = `**Participantes:** ${totalMembers}\n\n`;
+
+    for (let id in members) {
+        if (!members.hasOwnProperty(id)) continue;
+        const m = members[id];
+
+        const colorEmoji = m.streak > 5 ? colors[m.color].symbolStreak : colors[m.color].symbol;
+        const userName = guild.members.get(id).user.username;
+        const shieldEmoji = m.shields > 0 ? ` **${m.shields}** :shield:` : '';
+        const streakEmojis = m.streak > 0 ? ':small_orange_diamond:'.repeat(m.streak) + `` : '';
+        const leaderEmoji = id === '208028185584074763' || id === '132137996995526656' ? `:crown: ` : '';
+
+        content += `${colorEmoji}${shieldEmoji} ${leaderEmoji}${userName}${streakEmojis}\n`;
+    }
+
+    content += `\n` + createFastScore(totalMembers);
+
+    const lastUpdate = (new Date()).toLocaleString();
+    content += `\n\n*última atualização: ${lastUpdate}*`;
 
     return content;
 }

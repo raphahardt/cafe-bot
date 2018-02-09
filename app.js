@@ -53,7 +53,7 @@ CafeBot.registerDiscordEvents(client, activator, [
     require('./CafeBot/MeFala'),
     require('./CafeBot/Audio'), // ainda não tá pronto
     require('./CafeBot/RoleChanger'),
-    //require('./CafeBot/Wololo'), // ainda não tá pronto
+    require('./CafeBot/Wololo'), // ainda não tá pronto
     require('./CafeBot/Sorteio'),
 ]);
 
