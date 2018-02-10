@@ -140,7 +140,7 @@ class Wololo {
             return;
         }
 
-        if (EXITS[userToConvert.id]) {
+        if (EXITS[user.id]) {
             message.reply(`:x: Esta pessoa não está participando do jogo. **Não converta ela.**`);
             return;
         }
@@ -159,7 +159,7 @@ class Wololo {
             return;
         }
 
-        if (EXITS[userToConvert.id]) {
+        if (EXITS[user.id]) {
             message.reply(`:x: Esta pessoa não está participando do jogo. **Não converta ela.**`);
             return;
         }
