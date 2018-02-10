@@ -14,52 +14,52 @@ const db = fbApp.database();
 const ref = db.ref('wololo');
 
 // quais cores estarão participando
-const colors = [
-    {
-        name: 'Azul',
-        plural: 'Azuis',
-        symbol: ':large_blue_circle:',
-        symbolStreak: ':blue_heart:',
-        count: 0
-    },
-    {
-        name: 'Vermelho',
-        plural: 'Vermelhos',
-        symbol: ':red_circle:',
-        symbolStreak: ':hearts:',
-        count: 0
-    },
-];
 // const colors = [
 //     {
-//         name: 'Copas',
-//         plural: 'Copas',
-//         symbol: ':hearts:',
+//         name: 'Azul',
+//         plural: 'Azuis',
+//         symbol: ':large_blue_circle:',
+//         symbolStreak: ':blue_heart:',
+//         count: 0
+//     },
+//     {
+//         name: 'Vermelho',
+//         plural: 'Vermelhos',
+//         symbol: ':red_circle:',
 //         symbolStreak: ':hearts:',
 //         count: 0
 //     },
-//     {
-//         name: 'Espadas',
-//         plural: 'Espadas',
-//         symbol: ':spades:',
-//         symbolStreak: ':spades:',
-//         count: 0
-//     },
-//     {
-//         name: 'Paus',
-//         plural: 'Paus',
-//         symbol: ':clubs:',
-//         symbolStreak: ':clubs:',
-//         count: 0
-//     },
-//     {
-//         name: 'Ouros',
-//         plural: 'Ouros',
-//         symbol: ':diamonds:',
-//         symbolStreak: ':diamonds:',
-//         count: 0
-//     },
 // ];
+const colors = [
+    {
+        name: 'Fogo',
+        plural: 'Fogos',
+        symbol: ':fire:',
+        symbolStreak: ':fire:',
+        count: 0
+    },
+    {
+        name: 'Água',
+        plural: 'Águas',
+        symbol: ':ocean:',
+        symbolStreak: ':ocean:',
+        count: 0
+    },
+    {
+        name: 'Vento',
+        plural: 'Ventos',
+        symbol: ':cloud_tornado:',
+        symbolStreak: ':cloud_tornado:',
+        count: 0
+    },
+    {
+        name: 'Terra',
+        plural: 'Terras',
+        symbol: ':herb:',
+        symbolStreak: ':herb:',
+        count: 0
+    },
+];
 
 // padrão
 let MAX_CASTS = 4;
@@ -175,9 +175,9 @@ class Wololo {
             stats += `**Rating de sucesso:** ${rating}%\n`;
             stats += `**Escudos atuais:** ${info.shields}\n`;
             stats += `**Streak de wololos atual:** ${info.streak}\n`;
-            if (user.id === '208028185584074763' || user.id === '132137996995526656') {
-                stats += `**Tempo como ${colors[info.color].name}:** Pra sempre\n`;
-            } else {
+            // if (user.id === '208028185584074763' || user.id === '132137996995526656') {
+            //     stats += `**Tempo como ${colors[info.color].name}:** Pra sempre\n`;
+            // } else {
                 for (let i = 0; i < colors.length; i++) {
                     let timeAs = info.timeAs[i] || 0;
                     if (i === info.color && info.timeAsTimestamps[i]) {
@@ -187,7 +187,7 @@ class Wololo {
                     const timeAsFormatted = formatTime(timeAs);
                     stats += `**Tempo como ${colors[i].name}:** ${timeAsFormatted}\n`;
                 }
-            }
+            // }
 
             message.channel.send(`Stats de ${user} ${colors[info.color].symbol}:\n\n${stats}`);
         });
@@ -212,10 +212,10 @@ class Wololo {
             return;
         }
 
-        if (userToConvert.id === '208028185584074763' || userToConvert.id === '132137996995526656') {
-            message.reply(`:x: Você não pode converter os líderes da resistência!`);
-            return;
-        }
+        // if (userToConvert.id === '208028185584074763' || userToConvert.id === '132137996995526656') {
+        //     message.reply(`:x: Você não pode converter os líderes da resistência!`);
+        //     return;
+        // }
 
         getInfo(user).then(info => {
             getInfo(userToConvert).then(convertInfo => {
@@ -233,7 +233,7 @@ class Wololo {
                 }
 
                 const fail = (Math.random() * 10000) < (10000 * FAIL_CAST_CHANCE);
-                const reflect = (Math.random() * 10000) < (10000 * (REFLECT_CAST_CHANCE * (colors[convertInfo.color].count <= 6) ? 2 : 1));
+                const reflect = (Math.random() * 10000) < (10000 * (REFLECT_CAST_CHANCE * (colors[convertInfo.color].count <= 3) ? 2 : 1));
                 let wasShielded = false;
                 let wasReflected = false;
 
@@ -290,11 +290,11 @@ class Wololo {
 
                     if (info.streak >= 5) {
                         // a cada 5 streaks, ganha um shield
-                        if (user.id === '208028185584074763' || user.id === '132137996995526656') {
-                            // os lideres da resistencia nao precisam de shields
-                        } else {
+                        // if (user.id === '208028185584074763' || user.id === '132137996995526656') {
+                        //     // os lideres da resistencia nao precisam de shields
+                        // } else {
                             info.shields = (info.shields || 0) + 1;
-                        }
+                        // }
                         info.streak = 0;
                     }
                 } else {
@@ -507,11 +507,11 @@ function replyWololoMessage(user, convertUser, info, convertInfo, fail, wasShiel
 }
 
 function generateColor(user) {
-    if (user.id === '208028185584074763') {
-        return 1; // sempre vermelho pra mim
-    } else if (user.id === '132137996995526656') {
-        return 0; // sempre azul pra dani
-    }
+    // if (user.id === '208028185584074763') {
+    //     return 1; // sempre vermelho pra mim
+    // } else if (user.id === '132137996995526656') {
+    //     return 0; // sempre azul pra dani
+    // }
 
     const threshold = 50000 / colors.length;
     let factor = utils.seededRandom(user.discriminator) * 50000;
@@ -635,7 +635,7 @@ function generateScoreboardContent(guild, members, totalMembers) {
         const userName = guild.members.get(id).user.username;
         const shieldEmoji = m.shields > 0 ? ` **${m.shields}** :shield:` : '';
         const streakEmojis = m.streak > 0 ? ':small_orange_diamond:'.repeat(m.streak) + `` : '';
-        const leaderEmoji = id === '208028185584074763' || id === '132137996995526656' ? `:crown: ` : '';
+        const leaderEmoji = /*id === '208028185584074763' || id === '132137996995526656' ? `:crown: ` : */'';
 
         content.push(`${colorEmoji} ${leaderEmoji}${userName}${streakEmojis}\n`);
     }
