@@ -232,8 +232,8 @@ class Wololo {
                     return;
                 }
 
-                const fail = (Math.random() * 10000) < (10000 * FAIL_CAST_CHANCE);
-                const reflect = (Math.random() * 10000) < (10000 * (REFLECT_CAST_CHANCE * (colors[convertInfo.color].count <= 3) ? 2 : 1));
+                const fail = (Math.random() * 3000) < (3000 * FAIL_CAST_CHANCE);
+                const reflect = (Math.random() * 3000) < (3000 * (REFLECT_CAST_CHANCE * ((colors[convertInfo.color].count <= 3) ? 2 : 1)));
                 let wasShielded = false;
                 let wasReflected = false;
 
@@ -514,7 +514,8 @@ function generateColor(user) {
     // }
 
     const threshold = 50000 / colors.length;
-    let factor = utils.seededRandom(user.discriminator) * 50000;
+    // let factor = utils.seededRandom(user.discriminator) * 50000;
+    let factor = Math.random() * 50000;
 
     console.log('fator e thrs', factor, threshold);
 
