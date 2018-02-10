@@ -30,15 +30,47 @@ const colors = [
         count: 0
     },
 ];
+// const colors = [
+//     {
+//         name: 'Copas',
+//         plural: 'Copas',
+//         symbol: ':hearts:',
+//         symbolStreak: ':hearts:',
+//         count: 0
+//     },
+//     {
+//         name: 'Espadas',
+//         plural: 'Espadas',
+//         symbol: ':spades:',
+//         symbolStreak: ':spades:',
+//         count: 0
+//     },
+//     {
+//         name: 'Paus',
+//         plural: 'Paus',
+//         symbol: ':clubs:',
+//         symbolStreak: ':clubs:',
+//         count: 0
+//     },
+//     {
+//         name: 'Ouros',
+//         plural: 'Ouros',
+//         symbol: ':diamonds:',
+//         symbolStreak: ':diamonds:',
+//         count: 0
+//     },
+// ];
 
 // padrão
-let MAX_CASTS = 2;
-let FAIL_CAST_CHANCE = 0.2;
+let MAX_CASTS = 4;
+let DELAY_CASTS = 6; // em horas
+let FAIL_CAST_CHANCE = 0.25;
 
 ref.child('config').on('value', snapshot => {
     let config = snapshot.val();
 
     MAX_CASTS = config.maxCasts;
+    DELAY_CASTS = config.delayCasts;
     FAIL_CAST_CHANCE = config.failCastChance;
 
 });
@@ -64,6 +96,7 @@ class Wololo {
         //console.log('ROLES', message.guild.roles.array().map(r => `${r.id}: ${r.name}`));
 
         console.log('MAX_CASTS', MAX_CASTS);
+        console.log('DELAY_CASTS', DELAY_CASTS);
         console.log('FAIL_CAST_CHANCE', FAIL_CAST_CHANCE);
 
         const arg = args.shift();
@@ -91,13 +124,13 @@ class Wololo {
         const user = message.mentions.users.size === 1 ? message.mentions.users.first() : message.author;
 
         if (user.bot) {
-            message.reply(`:x: Bots não tem cor.`);
+            message.reply(`:x: Bots não tem reino.`);
             return;
         }
 
         getInfo(user).then(info => {
             const colorSymbol = colors[info.color].symbol;
-            message.reply(`Sua cor: ${colorSymbol}`);
+            message.reply(`Seu reino: ${colorSymbol}`);
         });
     }
 
@@ -470,7 +503,7 @@ function hasWololo(info) {
         // se o horario que foi feito o wololo + 24 horas foi
         // antes do horario atual, entao ele tem wololo
         console.log('HASWOLOLO', time, (new Date()).getTime());
-        if (time + 86400000 < (new Date()).getTime()) {
+        if (time + (DELAY_CASTS * 3600000) < (new Date()).getTime()) {
             return true;
         }
     }
@@ -481,7 +514,7 @@ function hasWololo(info) {
 
 function getTimeLeftForNextWololo(info) {
     const oldestTimestampCast = info.timestampCasts.slice().sort();
-    let diffSeconds = 86400 - ((new Date()).getTime() - oldestTimestampCast[0]) / 1000;
+    let diffSeconds = (DELAY_CASTS * 3600) - ((new Date()).getTime() - oldestTimestampCast[0]) / 1000;
 
     return formatTime(diffSeconds);
 }
