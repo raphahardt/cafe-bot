@@ -34,8 +34,9 @@ module.exports = class ScoreboardManager {
             let text = '', j = 0;
             for (let i = 0; i < content.length; i++) {
                 text += content[i];
+                const nextTextLength = text.length + (content[i+1] ? content[i+1].length : 0);
 
-                if (text.length >= 1800) {
+                if (nextTextLength >= 1950) {
                     this.messages[j++].edit(text);
                     text = '';
                 }

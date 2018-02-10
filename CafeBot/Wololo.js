@@ -468,7 +468,7 @@ function createFastScore(totalMembers) {
     let colorScores = [];
     for (let i = 0; i < colors.length; i++) {
         //console.log('COUNT', i, colors[i].count, totalMembers);
-        const score = parseInt((colors[i].count / totalMembers) * 100);
+        const score = parseInt((colors[i].count / Math.max(1,totalMembers)) * 100);
         colorScores.push(`${colors[i].symbol} ${score}% (${colors[i].count})`);
     }
     return colorScores.join(' :heavy_multiplication_x: ');
@@ -476,7 +476,7 @@ function createFastScore(totalMembers) {
 
 function replyWololoMessage(user, convertUser, info, convertInfo, fail, wasShielded, wasReflected) {
     let resultEmoji = '', message = '';
-    const colorEmoji = colors[ info.color ].symbolStreak;
+    const colorEmoji = wasReflected ? colors[ convertInfo.color ].symbolStreak : colors[ info.color ].symbolStreak;
     const oldConvertUserColorEmoji = colors[ convertInfo.color ].symbol;
     const newConvertUserColorEmoji = colors[ info.color ].symbol;
 
