@@ -35,7 +35,7 @@ module.exports = class ScoreboardManager {
             for (let i = 0; i < content.length; i++) {
                 text += content[i];
 
-                if (text >= 1700) {
+                if (text.length >= 1800) {
                     this.messages[j++].edit(text);
                     text = '';
                 }
