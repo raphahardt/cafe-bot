@@ -19,14 +19,28 @@ module.exports = class ScoreboardManager {
 
                     return msg2.edit('');
                 }).then(() => {
+                    return this.channel.send('Carregando placar...');
+                }).then(msg2 => {
+                    this.messages.push(msg2);
+
+                    return msg2.edit('');
+                }).then(() => {
                     resolve();
                 });
             } else {
                 resolve();
             }
         }).then(() => {
-            // agora tem 2 mensagems pra serem usadas, só editar
-            return this.messages[0].edit(content);
+            let text = '', j = 0;
+            for (let i = 0; i < content.length; i++) {
+                text += content[i];
+
+                if (text >= 1700) {
+                    this.messages[j++].edit(text);
+                    text = '';
+                }
+            }
+            this.messages[j].edit(text);
         })
     }
 
