@@ -36,6 +36,7 @@ const colors = [
         plural: 'Fogos',
         symbol: ':fire:',
         symbolStreak: ':fire:',
+        emoji: '🔥',
         count: 0
     },
     {
@@ -43,6 +44,7 @@ const colors = [
         plural: 'Águas',
         symbol: ':ocean:',
         symbolStreak: ':ocean:',
+        emoji: '🌊',
         count: 0
     },
     {
@@ -50,6 +52,7 @@ const colors = [
         plural: 'Ventos',
         symbol: ':cloud_tornado:',
         symbolStreak: ':cloud_tornado:',
+        emoji: '🌪️',
         count: 0
     },
     {
@@ -57,12 +60,13 @@ const colors = [
         plural: 'Terras',
         symbol: ':herb:',
         symbolStreak: ':herb:',
+        emoji: '🌿',
         count: 0
     },
 ];
 
 // padrão
-let MAX_CASTS = 4;
+let MAX_CASTS = 5;
 let DELAY_CASTS = 6; // em horas
 let FAIL_CAST_CHANCE = 0.25;
 let REFLECT_CAST_CHANCE = 0.15;
@@ -102,6 +106,18 @@ class Wololo {
     static wololoCommand(message, args) {
         //console.log('ROLES', message.guild.roles.array().map(r => `${r.id}: ${r.name}`));
 
+        if (Math.random() < 0.2) {
+            // pra garantir que leia do banco de vez em quando caso o evento lá em cima falhar
+            ref.child('config').once('value', snapshot => {
+                let config = snapshot.val();
+
+                MAX_CASTS = config.maxCasts;
+                DELAY_CASTS = config.delayCasts;
+                FAIL_CAST_CHANCE = config.failCastChance;
+                REFLECT_CAST_CHANCE = config.reflectCastChance;
+            });
+        }
+
         console.log('MAX_CASTS', MAX_CASTS);
         console.log('DELAY_CASTS', DELAY_CASTS);
         console.log('FAIL_CAST_CHANCE', FAIL_CAST_CHANCE);
@@ -121,6 +137,8 @@ class Wololo {
                 return Wololo.wololoScoreCommand(message, args);
             case 'scoreboard':
                 return Wololo.wololoScoreboardCommand(message, args);
+            case 'claim':
+                return Wololo.wololoClaimCommand(message, args);
             default:
                 if (message.mentions.users.size === 1) {
                     return Wololo.wololoConvertCommand(message, args);
@@ -140,14 +158,39 @@ class Wololo {
             return;
         }
 
-        if (EXITS[user.id]) {
+        if (typeof EXITS[user.id] !== 'undefined') {
             message.reply(`:x: Esta pessoa não está participando do jogo. **Não converta ela.**`);
             return;
         }
 
         getInfo(user).then(info => {
             const colorSymbol = colors[info.color].symbol;
-            message.reply(`Seu reino: ${colorSymbol}`);
+
+            let myWololos = '';
+            if (!hasWololo(info)) {
+                const timeLeft = getTimeLeftForNextWololo(info);
+                myWololos += `em ${timeLeft}`;
+            } else {
+                let wololosAvailable = 0;
+                for (let i = 0; i < MAX_CASTS; i++) {
+                    const time = (info.timestampCasts || [])[i];
+
+                    // se nao tem horario, entao ele tem slot
+                    if (!time) {
+                        wololosAvailable++;
+                    }
+
+                    // se o horario que foi feito o wololo + 24 horas foi
+                    // antes do horario atual, entao ele tem wololo
+                    if (time + (DELAY_CASTS * 3600000) < (new Date()).getTime()) {
+                        wololosAvailable++;
+                    }
+                }
+
+                myWololos += wololosAvailable + (wololosAvailable === 1 ? `disponível` : `disponíveis`);
+            }
+
+            message.reply(`Seu reino: ${colorSymbol}. **Próximo wololo disponível:** ${myWololos}`);
         });
     }
 
@@ -159,7 +202,7 @@ class Wololo {
             return;
         }
 
-        if (EXITS[user.id]) {
+        if (typeof EXITS[user.id] !== 'undefined') {
             message.reply(`:x: Esta pessoa não está participando do jogo. **Não converta ela.**`);
             return;
         }
@@ -173,7 +216,7 @@ class Wololo {
 
             const rating = parseInt((info.success / Math.max(info.success + info.fail, 1)) * 100);
             stats += `**Rating de sucesso:** ${rating}%\n`;
-            stats += `**Escudos atuais:** ${info.shields}\n`;
+            //stats += `**Escudos atuais:** ${info.shields}\n`;
             stats += `**Streak de wololos atual:** ${info.streak}\n`;
             // if (user.id === '208028185584074763' || user.id === '132137996995526656') {
             //     stats += `**Tempo como ${colors[info.color].name}:** Pra sempre\n`;
@@ -207,7 +250,7 @@ class Wololo {
             return;
         }
 
-        if (EXITS[userToConvert.id]) {
+        if (typeof EXITS[userToConvert.id] !== 'undefined') {
             message.reply(`:x: Esta pessoa não está participando do jogo. **Não converta ela.**`);
             return;
         }
@@ -215,6 +258,14 @@ class Wololo {
         // if (userToConvert.id === '208028185584074763' || userToConvert.id === '132137996995526656') {
         //     message.reply(`:x: Você não pode converter os líderes da resistência!`);
         //     return;
+        // }
+
+        // function calculateMultiplier(color, minMemberThreshold, maxMemberThreshold, lowerMultiplier, upperMultiplier) {
+        //     const membersCount = colors[convertInfo.color].count;
+        //     const min = Math.max(0, membersCount - minMemberThreshold);
+        //     const max = maxMemberThreshold - minMemberThreshold;
+        //
+        //     return Math.max(0.15, (10 - min) / 10);
         // }
 
         getInfo(user).then(info => {
@@ -232,8 +283,10 @@ class Wololo {
                     return;
                 }
 
+                const reflectRatingMultiplier = 0;
+
                 const fail = (Math.random() * 3000) < (3000 * FAIL_CAST_CHANCE);
-                const reflect = (Math.random() * 3000) < (3000 * (REFLECT_CAST_CHANCE * ((colors[convertInfo.color].count <= 3) ? 2 : 1)));
+                const reflect = (Math.random() * 3000) < (3000 * (REFLECT_CAST_CHANCE * ((colors[convertInfo.color].count <= 3) ? 2.3 : 0.5)));
                 let wasShielded = false;
                 let wasReflected = false;
 
@@ -317,6 +370,71 @@ class Wololo {
         });
     }
 
+    static wololoClaimCommand(message, args) {
+        const user = message.author;
+        const colorToClaim = getColorFromArg(args[0]);
+
+        if (colorToClaim === false) {
+            const colorsList = colors.map(c => `${c.name} ${c.symbol}`).join(', ');
+            message.reply(`:x: Este reino não existe. Use o emoji correspondente ou o nome do reino.\n\n**Reinos disponíveis:**\n${colorsList}`);
+            return;
+        }
+
+        getInfo(user).then(info => {
+            // verifica se o user tem wololo disponivel
+            if (!hasWololo(info)) {
+                const timeLeft = getTimeLeftForNextWololo(info);
+                message.reply(`:x: Você não tem mais wololos por hoje. Volte em **${timeLeft}**.`);
+                return;
+            }
+
+            // chance base pra conseguir um claim, depois eu vou diminuindo ele conforme algumas regras
+            let chanceToClaim = 1;
+
+            // explicação: o -2 é pra considerar 0 a partir de duas pessoas ainda como aquele reino
+            // o 10 é pq o rating vai de 2 até 10 pessoas com aquele reino, que vai diminuindo conforme
+            // a quantidade de membros aumenta
+            // minimo de 15% de chance caso dê 0
+            const ratingCountMembers = Math.max(0.15, (10 - Math.max(0, colors[colorToClaim].count - 2)) / 10);
+            chanceToClaim *= ratingCountMembers;
+
+            const claim = (Math.random() * 3000) < (3000 * chanceToClaim);
+
+            // descarta um wololo e conta
+            info.castsUsed++;
+            if (!info.timestampCasts) info.timestampCasts = [];
+            info.timestampCasts.push((new Date()).getTime());
+
+            // verifica se ultrapassou o limite
+            while (info.timestampCasts.length > MAX_CASTS) {
+                // vai tirando o cast mais antigo
+                info.timestampCasts.shift();
+            }
+
+            // da claim, se nao for fail
+            if (claim) {
+                // se tiver shield, perde o shield e nao a cor
+                // contabiliza o tempo que ficou naquela cor
+                const now = parseInt((new Date()).getTime() / 1000);
+                if (!info.timeAs[info.color]) info.timeAs[info.color] = 0;
+                if (info.timeAsTimestamps[info.color]) {
+                    info.timeAs[info.color] += now - info.timeAsTimestamps[info.color];
+                }
+                info.timeAsTimestamps[colorToClaim] = now;
+                // fim da contabilização -----
+
+                // se não, converte mesmo
+                info.color = colorToClaim;
+            }
+
+            const replyMsg = replyClaimMessage(user, info, colorToClaim, !claim);
+            message.reply(replyMsg);
+
+            // salva as config dos users
+            ref.child(`cores/${user.id}`).set(info);
+        });
+    }
+
     static wololoScoreCommand(message, args) {
 
         loadScore().then((response) => {
@@ -329,20 +447,27 @@ class Wololo {
     static wololoExitCommand(message, args) {
         const user = message.author;
 
-        EXITS[user.id] = user.username;
-        ref.child(`exits`).set(EXITS);
-        ref.child(`cores/${user.id}`).set(null);
+        getInfo(user).then(info => {
 
-        message.reply(':white_check_mark: Você será ignorado pelo jogo.');
+            EXITS[user.id] = info.color;
+            ref.child(`exits`).set(EXITS);
+            ref.child(`cores/${user.id}`).set(null);
+
+            message.reply(':white_check_mark: Você será ignorado pelo jogo.');
+        });
     }
 
     static wololoEnterCommand(message, args) {
         const user = message.author;
 
-        delete EXITS[user.id];
-        ref.child(`exits`).set(EXITS);
+        getInfo(user, EXITS[user.id]).then(info => {
 
-        message.reply(':white_check_mark: Você voltou ao jogo.');
+            delete EXITS[user.id];
+            ref.child(`exits`).set(EXITS);
+
+            message.reply(':white_check_mark: Você voltou ao jogo.');
+
+        });
     }
 
     static wololoScoreboardCommand(message, args) {
@@ -425,9 +550,21 @@ class Wololo {
         }).catch(console.error);
     }
 
+    static onGuildMemberRemove(member) {
+        // retira os membros do jogo quando eles quitarem do server
+        const user = member.user;
+        ref.child(`cores/${user.id}`).set(null);
+    }
+
     static commands() {
         return {
             'wololo': Wololo.wololoCommand,
+        }
+    }
+
+    static events() {
+        return {
+            'guildMemberRemove': Wololo.onGuildMemberRemove
         }
     }
 }
@@ -482,7 +619,7 @@ function replyWololoMessage(user, convertUser, info, convertInfo, fail, wasShiel
 
     switch (true) {
         case wasReflected:
-            resultEmoji = ':repeat:';
+            resultEmoji = ':repeat:' + oldConvertUserColorEmoji;
             message = `**${convertUser} refletiu!** ${user} agora é ${oldConvertUserColorEmoji}`;
             break;
         case wasShielded:
@@ -501,6 +638,29 @@ function replyWololoMessage(user, convertUser, info, convertInfo, fail, wasShiel
 
     //const emojiText = `:speaking_head:  \\--{ *wololo* }  :wavy_dash:${colorEmoji}:wavy_dash:${colorEmoji}:wavy_dash:${resultEmoji}`;
     const emojiText = `:speaking_head:     :wavy_dash:${colorEmoji}:wavy_dash:${colorEmoji}:wavy_dash:${resultEmoji}`;
+
+    return `\n${emojiText}\n\n${message}`;
+
+}
+
+function replyClaimMessage(user, info, colorToClaim, fail) {
+    let resultEmoji = '', message = '';
+    const colorEmoji = colors[ colorToClaim ].symbolStreak;
+    const oldConvertUserColorEmoji = colors[ info.color ].symbol;
+    const newConvertUserColorEmoji = colors[ colorToClaim ].symbol;
+
+    switch (true) {
+        case fail:
+            resultEmoji = ':heavy_multiplication_x:';
+            message = `**Falhou!** Você continua ${oldConvertUserColorEmoji}`;
+            break;
+        default:
+            resultEmoji = ':white_check_mark:';
+            message = `**Sucesso!** Você agora é ${newConvertUserColorEmoji}`;
+            break;
+    }
+
+    const emojiText = `:bust_in_silhouette::scroll:     :curly_loop:${colorEmoji}:curly_loop:${colorEmoji}:curly_loop:${resultEmoji}`;
 
     return `\n${emojiText}\n\n${message}`;
 
@@ -533,7 +693,7 @@ function generateColor(user) {
     return quad;
 }
 
-function getInfo(user) {
+function getInfo(user, forceColor) {
     return new Promise((resolve, reject) => {
         const coreUserRef = ref.child(`cores/${user.id}`);
 
@@ -541,7 +701,7 @@ function getInfo(user) {
             let info = snapshot.val();
 
             if (!info) {
-                const generatedColor = generateColor(user);
+                const generatedColor = forceColor !== undefined ? forceColor : generateColor(user);
                 let timeAs = {}, timeAsTimestamps = {};
 
                 for (let i = 0; i < colors.length; i++) {
@@ -630,10 +790,11 @@ function generateScoreboardContent(guild, members, totalMembers) {
 
     for (let id in members) {
         if (!members.hasOwnProperty(id)) continue;
+        //if (!guild.members.get(id)) continue; // usuario já não é mais membro do server, ignorar
         const m = members[id];
 
         const colorEmoji = m.streak > 5 ? colors[m.color].symbolStreak : colors[m.color].symbol;
-        const userName = guild.members.get(id).user.username;
+        const userName = guild.members.get(id) ? guild.members.get(id).user.username : id;
         const shieldEmoji = m.shields > 0 ? ` **${m.shields}** :shield:` : '';
         const streakEmojis = m.streak > 0 ? ':small_orange_diamond:'.repeat(m.streak) + `` : '';
         const leaderEmoji = /*id === '208028185584074763' || id === '132137996995526656' ? `:crown: ` : */'';
@@ -647,6 +808,17 @@ function generateScoreboardContent(guild, members, totalMembers) {
     content.push(`\n\n*última atualização: ${lastUpdate}*`);
 
     return content;
+}
+
+function getColorFromArg(arg) {
+    for (let i = 0; i < colors.length; i++) {
+        let lowerArg = arg;
+        try { lowerArg = lowerArg.toLowerCase(); } catch (e) {}
+        if (arg === colors[i].emoji || lowerArg === colors[i].name.toLowerCase() || lowerArg === colors[i].plural.toLowerCase()) {
+            return i;
+        }
+    }
+    return false;
 }
 
 function logEvent(event) {
