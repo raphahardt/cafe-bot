@@ -42,6 +42,11 @@ module.exports = class ScoreboardManager {
                 }
             }
             this.messages[j].edit(text);
+            // limpa as msgs que sobraram, se sobraram
+            j++;
+            while (j < this.messages.length) {
+                this.messages[j++].edit('');
+            }
         })
     }
 
