@@ -511,7 +511,6 @@ class Wololo {
 
             message.reply(':white_check_mark: Você será ignorado pelo jogo.');
         });
-        collector.stop();
 
         // const motivo = args.join(' ');
         // message.reply(`\n:door: **Requisição de exit do jogo**\nVocê precisa de pelo menos **3 votos :thumbsup: dos admins/mods** na sua mensagem para poder sair do jogo. Para cancelar, apenas apague sua mensagem.\n\n\`\`\`\nMotivo: ${motivo}\n\`\`\`<@&316568273296687104> <@&240269317361369088>`)
