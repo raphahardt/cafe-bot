@@ -140,6 +140,8 @@ class Wololo {
                 return Wololo.wololoScoreboardCommand(message, args);
             case 'claim':
                 return Wololo.wololoClaimCommand(message, args);
+            case 'swap':
+                return Wololo.wololoSwapCommand(message, args);
             default:
                 if (message.mentions.users.size === 1) {
                     return Wololo.wololoConvertCommand(message, args);
@@ -239,6 +241,10 @@ class Wololo {
             emb.addField(':wavy_dash:', `:scroll: __Claims__`, false);
             emb.addField(`Bem sucedidos`, info.claimsSuccess || 0, true);
             emb.addField(`Falhos`, info.claimsFail || 0, true);
+
+            emb.addField(':wavy_dash:', `:black_joker: __Jokers__`, false);
+            emb.addField(`Vezes como joker`, info.jokerTimes || 0, true);
+            emb.addField(`Swaps feitos`, info.swaps || 0, true);
 
             const totalClaims = (info.claimsSuccess || 0) + (info.claimsFail || 0);
             const ratingC = parseInt(((info.claimsSuccess || 0) / Math.max(totalClaims, 1)) * 100);
@@ -344,17 +350,23 @@ class Wololo {
                             wasReflected = true;
                             oldColorReflected = info.color;
 
-                            // contabiliza o tempo que ficou naquela cor
-                            const now = parseInt((new Date()).getTime() / 1000);
-                            if (!info.timeAs[info.color]) info.timeAs[info.color] = 0;
-                            if (info.timeAsTimestamps[info.color]) {
-                                info.timeAs[info.color] += now - info.timeAsTimestamps[info.color];
-                            }
-                            info.timeAsTimestamps[convertInfo.color] = now;
-                            // fim da contabilização -----
+                            if (info.shields > 0) {
+                                info.shields--;
+                                wasShielded = true;
+                            } else {
 
-                            // se não, converte mesmo
-                            info.color = convertInfo.color;
+                                // contabiliza o tempo que ficou naquela cor
+                                const now = parseInt((new Date()).getTime() / 1000);
+                                if (!info.timeAs[info.color]) info.timeAs[info.color] = 0;
+                                if (info.timeAsTimestamps[info.color]) {
+                                    info.timeAs[info.color] += now - info.timeAsTimestamps[info.color];
+                                }
+                                info.timeAsTimestamps[convertInfo.color] = now;
+                                // fim da contabilização -----
+
+                                // se não, converte mesmo
+                                info.color = convertInfo.color;
+                            }
 
                         } else {
                             // contabiliza o tempo que ficou naquela cor
@@ -441,6 +453,63 @@ class Wololo {
             chanceToClaim *= ratingCountMembers;
 
             const claim = (Math.random() * 3000) < (3000 * chanceToClaim);
+
+            // descarta um wololo e conta
+            info.castsUsed++;
+            if (!info.timestampCasts) info.timestampCasts = [];
+            info.timestampCasts.push((new Date()).getTime());
+
+            // verifica se ultrapassou o limite
+            while (info.timestampCasts.length > MAX_CASTS) {
+                // vai tirando o cast mais antigo
+                info.timestampCasts.shift();
+            }
+
+            // da claim, se nao for fail
+            if (claim) {
+                // se tiver shield, perde o shield e nao a cor
+                // contabiliza o tempo que ficou naquela cor
+                const now = parseInt((new Date()).getTime() / 1000);
+                if (!info.timeAs[info.color]) info.timeAs[info.color] = 0;
+                if (info.timeAsTimestamps[info.color]) {
+                    info.timeAs[info.color] += now - info.timeAsTimestamps[info.color];
+                }
+                info.timeAsTimestamps[colorToClaim] = now;
+                // fim da contabilização -----
+
+                // se não, converte mesmo
+                info.color = colorToClaim;
+            }
+
+            // contabiliza acertos e falhas
+            const type = !claim ? 'claimsFail' : 'claimsSuccess';
+            info[type] = (info[type] || 0) + 1;
+
+            const replyMsg = replyClaimMessage(user, info, colorToClaim, !claim);
+            message.reply(replyMsg);
+
+            // salva as config dos users
+            ref.child(`cores/${user.id}`).set(info);
+        });
+    }
+
+    static wololoSwapCommand(message, args) {
+        const user = message.author;
+        const colorSource = getColorFromArg(args[0]);
+        const colorDest = getColorFromArg(args[1]);
+
+        if (colorSource === false || colorDest === false) {
+            const colorsList = colors.map(c => `${c.name} ${c.symbol}`).join(' - ');
+            message.reply(`:x: Este(s) reino(s) não existe(m). Use o *emoji* ou o *nome* do reino correspondente.\n\n**Reinos disponíveis:**\n${colorsList}`);
+            return;
+        }
+
+        getInfo(user).then(info => {
+            // verifica se o user tem wololo disponivel
+            if (!info.joker) {
+                message.reply(`:x: Você precisa ser um joker para fazer isso.`);
+                return;
+            }
 
             // descarta um wololo e conta
             info.castsUsed++;
@@ -729,7 +798,14 @@ function replyWololoMessage(user, convertUser, info, convertInfo, fail, wasShiel
     switch (true) {
         case wasReflected:
             resultEmoji = ':repeat:' + oldConvertUserColorEmoji;
-            message = `**${convertUser} refletiu!** ${user} agora é ${oldConvertUserColorEmoji}`;
+            if (wasShielded) {
+                resultEmoji += '   :wavy_dash::shield:';
+
+                const stillReflectedEmoji = colors[ oldColorReflected ].symbol;
+                message = `**${convertUser} refletiu, mas você usou escudo!** ${user} continua ${stillReflectedEmoji}`;
+            } else {
+                message = `**${convertUser} refletiu!** ${user} agora é ${oldConvertUserColorEmoji}`;
+            }
             break;
         case wasShielded:
             resultEmoji = ':shield:';
@@ -834,6 +910,9 @@ function getInfo(user, forceColor) {
                     defenses: 0,
                     claimsSuccess: 0,
                     claimsFail: 0,
+                    swaps: 0,
+                    jokerTimes: 0,
+                    joker: false,
                     timeAs: timeAs,
                     timeAsTimestamps: timeAsTimestamps,
                 };
