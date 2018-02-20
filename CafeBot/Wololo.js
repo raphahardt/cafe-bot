@@ -986,7 +986,7 @@ function generateScoreboardContent(guild, members, totalMembers) {
         //if (!guild.members.get(id)) continue; // usuario já não é mais membro do server, ignorar
         const m = members[id];
 
-        const colorEmoji = m.streak > 5 ? colors[m.color].symbolStreak : colors[m.color].symbol;
+        const colorEmoji = m.joker ? ':black_joker:' : colors[m.color].symbol;
         const userName = guild.members.get(id) ? guild.members.get(id).user.username : id;
         const shieldEmoji = m.shields > 0 ? ` **${m.shields}** :shield:` : '';
         const streakEmojis = m.streak > 0 ? ':small_orange_diamond:'.repeat(m.streak) + `` : '';
