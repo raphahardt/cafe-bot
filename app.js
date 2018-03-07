@@ -7,6 +7,7 @@ const packageCfg = require("./package.json");
 
 /**
  * Invocado toda vez que o bot é conectado
+ * TODO: fazer um arquivo de configuracao pra cada ambiente, puxando todas as variaveis tipo "numero de votos" pra um lugar onde eu possa mudar pora fazer teste sem ter que ficar mudando em dev e esquecendo de alterar depois q boto em produção
  */
 client.on("ready", () => {
     console.log(`Bot cafe-bot v${packageCfg.version} [${client.users.size} membros] [${client.channels.size} canais] [${client.guilds.size} server]`);
@@ -51,10 +52,11 @@ CafeBot.registerDiscordEvents(client, activator, [
     require('./CafeBot/Perolas'),
     require('./CafeBot/AmigoSecreto'),
     require('./CafeBot/MeFala'),
-    require('./CafeBot/Audio'), // ainda não tá pronto
+    //require('./CafeBot/Audio'), // ainda não tá pronto
     require('./CafeBot/RoleChanger'),
     //require('./CafeBot/Wololo'), // fim do wololo (19/02/18 ✝)
     require('./CafeBot/Sorteio'),
+    //require('./CafeBot/Exp'), // ainda não tá pronto
 ]);
 
 // conecta o bot
