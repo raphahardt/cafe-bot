@@ -111,7 +111,7 @@ Inicia um giveaway.
             }
 
             if (!message.member.roles.some(r => leveledRoles.includes(r.id))) {
-                const minimumLevel = message.guild.roles.get(leveledRoles[0]);
+                const minimumLevel = message.guild.roles.get(leveledRoles[1]);
                 message.reply(`:x: Você precisa ter pelo menos o nível \`${minimumLevel.name}\` para participar.`);
                 return;
             }

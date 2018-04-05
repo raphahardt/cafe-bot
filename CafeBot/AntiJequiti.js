@@ -3,7 +3,11 @@ const utils = require('../utils');
 const Discord = require("discord.js");
 
 // nomes dos canais que o bot vai verificar os jequitis
-const permittedJequitiChannels = ['mesa-do-nsfw', 'log-e-comandos', 'testes'];
+const permittedJequitiChannels = [
+    318948034362736640, // nsfw
+    240297584420323338, // log e comandos
+    392024446589730816
+];
 
 /**
  * Verifica as mensagens quando elas são editadas ou deletadas, e caso seja, posta
@@ -84,7 +88,7 @@ function verifyIsCafeBot(user) {
  * @returns {boolean}
  */
 function isInPermittedChannel(channel) {
-    return (permittedJequitiChannels.includes(channel.name));
+    return (permittedJequitiChannels.includes(channel.id));
 }
 
 /**

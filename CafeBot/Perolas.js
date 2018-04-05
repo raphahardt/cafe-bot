@@ -3,13 +3,15 @@ const emojis = require("../emojis.json");
 const utils = require("../utils");
 const Discord = require("discord.js");
 
-// array com os possíveis nomes do canal principal, que vai ser lido os pins
-const mainChannelNames = ['mesa-shop', 'mesa-do-cafe'];
 // array com os canais que tem q ser ignorados
-const perolaIgnoredChannelsNames = ['mesa-do-nsfw', 'mural'];
+const perolaIgnoredChannelsIds = [
+    341395801093963787, // mural
+    391287769189580812, // propria meda da vergonha
+    318948034362736640, // nsfw
+];
 
 // nome do channel que vai receber as mensagens pérola
-const perolaChannelName = 'mesa-da-vergonha';
+const perolaChannelId = 391287769189580812;
 
 // quantos reactions precisa ter pra ser uma pérola
 const perolaCountThreshold = 5;
@@ -43,10 +45,10 @@ class Perolas {
         //console.log('REACTION', perolaValidEmojis.includes(messageReaction.emoji.name), messageReaction.count);
 
         // ignora canais "especiais"
-        if (perolaIgnoredChannelsNames.includes(messageReaction.message.channel.name)) return;
+        if (perolaIgnoredChannelsIds.includes(messageReaction.message.channel.id)) return;
 
         // procura o canal pra mandar as mensagens pinnadas
-        const perolasChannel = messageReaction.message.guild.channels.find('name', perolaChannelName);
+        const perolasChannel = messageReaction.message.guild.channels.get(perolaChannelId);
         if (!perolasChannel) return;
 
         // ignora os reactions na propria mesa perola, pra nao entrar em loop infinito
@@ -77,8 +79,8 @@ class Perolas {
      * @param {Array} args Parametros do comando
      */
     static pinsCommand(message, args) {
-        const mainChannel = message.guild.channels.find('name', args[0] || mainChannelNames[0]);
-        const perolasChannel = message.guild.channels.find('name', perolaChannelName);
+        const mainChannel = message.guild.channels.find('name', args[0]);
+        const perolasChannel = message.guild.channels.get(perolaChannelId);
         if (!mainChannel || !perolasChannel) return;
 
         // pega todas as mensagens pinnadas
