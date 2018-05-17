@@ -1,3 +1,4 @@
+const levenshtein = require('fast-levenshtein');
 
 const utils = {
 
@@ -91,6 +92,107 @@ const utils = {
             matches.push(arr);
         });
         return matches.length ? matches : null;
+    },
+
+    uniqueArray: (array) => {
+        return array.filter((item, pos) => array.indexOf(item) === pos);
+    },
+
+    /**
+     * Pega todas as pessoas que foram mencionadas da mensagem e/ou dos argumentos.
+     * Usa levenshtein pra tentar aproximar do nome do usuário, em caso de argumentos.
+     * Se o argumento começar com '=', ele sempre vai ser tratado como menção e o levenshtein
+     * vai tentar identificar qual foi.
+     *
+     * @param {Message} message
+     * @param {Array} args Argumentos passados no comando que podem ser menções
+     * @param {Boolean} allArgsAreMembers Se todos os argumentos devem ser tratados como menções ou necessita do prefixo '=' pra identificar um possivel membro. Por exemplo, se os args vem ['=raphadura', '=dani', 'adicionar'], caso `allArgsAreMembers` for TRUE, os 3 argumentos vão ser testados se são menções. Caso for FALSE, somente os 2 primeiros argumentos serão testados, o último será ignorado. Padrão: FALSE
+     * @param {Boolean} clearMentionedUsersFromArgs Se os args retornados conterão os mencionados ou não. Padrão: TRUE
+     *
+     * @return {Array} Retorna os usuários mencionados
+     */
+    resolveAllMentioned: (message, args, allArgsAreMembers, clearMentionedUsersFromArgs) => {
+        if (allArgsAreMembers === undefined) allArgsAreMembers = false;
+        if (clearMentionedUsersFromArgs === undefined) clearMentionedUsersFromArgs = true;
+
+        let mentionedMembers = [];
+
+        if (message.mentions.members.size > 0) {
+            const members = message.mentions.members.array();
+
+            mentionedMembers = mentionedMembers.concat(members);
+
+            if (clearMentionedUsersFromArgs) {
+                // tira eles da lista de argumentos
+                members.forEach(member => {
+                    args.splice(args.indexOf('<@!'+member.id+'>'), 1);
+                });
+            }
+        }
+
+        if (args.length > 0) {
+            let foundMembers = [], foundMembersTexts = [];
+
+            args.forEach(arg => {
+                if (arg.match(/^=?[0-9]+$/) && arg.length >= 10) {
+                    // se encontrar um id numerico
+                    const text = arg.replace(/^=/, '');
+
+                    foundMembers.push(message.guild.members.get(text));
+                    foundMembersTexts.push(arg);
+
+                } else if (allArgsAreMembers || arg.charAt(0) === '=') {
+                    let alternative, shortest;
+                    alternative = shortest = null;
+                    const text = arg.replace(/^=/, '').toLowerCase();
+
+                    for (let i = 0; i < message.guild.members.size; i++) {
+                        const guildMember = message.guild.members.array()[i];
+                        let usernames = [guildMember.user.username.toLowerCase()];
+                        if (guildMember.nickname) {
+                            usernames.push(guildMember.nickname.toLowerCase());
+                        }
+                        for (let j = 0; j < usernames.length; j++) {
+                            const username = usernames[j];
+
+                            // se o nome parcial já for parte do nick, retorna
+                            if (text.length >= 3 && username.indexOf(text) === 0) {
+                                alternative = guildMember;
+                                break;
+                            }
+
+                            const lev = levenshtein.get(text, username, { useCollator: true });
+                            if (lev <= 3) {
+                                console.log('LEVEN', lev, text, username);
+                                console.log('LEVEN RATIO', (lev <= text.length / 3));
+                            }
+                            if (lev <= text.length / 3 && (null === alternative || lev < shortest)) {
+                                alternative = guildMember;
+                                shortest = lev;
+                            }
+                        }
+                    }
+
+                    if (alternative) {
+                        foundMembers.push(alternative);
+                        foundMembersTexts.push(arg);
+                    }
+                }
+            });
+
+            if (clearMentionedUsersFromArgs && foundMembersTexts.length) {
+                // tira eles da lista de argumentos
+                foundMembersTexts.forEach(text => {
+                    args.splice(args.indexOf(text), 1);
+                });
+            }
+
+            mentionedMembers = mentionedMembers.concat(foundMembers);
+
+        }
+
+        return utils.uniqueArray(mentionedMembers);
+
     }
 
 };

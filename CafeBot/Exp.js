@@ -45,6 +45,15 @@ const expConfig = {
     },
 };
 
+const STATS_TEMPLATE = {
+    messageTotalCount: 0,
+    messageTotalSize: 0,
+    xp: 0,
+    credits: 0,
+    welcomeDate: null,
+
+};
+
 let timestamps = {};
 let lastMessages = {};
 

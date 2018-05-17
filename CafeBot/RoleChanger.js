@@ -30,19 +30,19 @@ class RoleChanger {
         }
 
         // pega os membros que vão ter suas roles alteradas
-        let members = [];
-        if (message.mentions.members.size > 0) {
+        let members = utils.resolveAllMentioned(message, args, false, true);
+        if (members.length > 0) {
             if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_ROLES)) {
                 message.reply(`:x: *Você não tem permissão de alterar as roles de outra pessoa.*`);
                 return;
             }
 
-            members = message.mentions.members.array();
-
-            // tira eles da lista de argumentos
-            members.forEach(member => {
-                args.splice(args.indexOf('<@!'+member.id+'>'), 1);
-            });
+            // members = message.mentions.members.array();
+            //
+            // // tira eles da lista de argumentos
+            // members.forEach(member => {
+            //     args.splice(args.indexOf('<@!'+member.id+'>'), 1);
+            // });
         } else {
             members.push(message.member);
         }

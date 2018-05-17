@@ -42,7 +42,8 @@ class Sorteio {
                 return Sorteio.giveawayEndCommand(message, args);
             case 'list':
             case 'l':
-                return Sorteio.giveawayListCommand(message, args);
+                //return Sorteio.giveawayListParticipantsCommand(message, args);
+                return Sorteio.giveawayListGamesCommand(message, args);
             case 'cancel':
             case 'c':
                 return Sorteio.giveawayCancelCommand(message, args);
@@ -111,7 +112,7 @@ Inicia um giveaway.
             }
 
             if (!message.member.roles.some(r => leveledRoles.includes(r.id))) {
-                const minimumLevel = message.guild.roles.get(leveledRoles[1]);
+                const minimumLevel = message.guild.roles.get(leveledRoles[0]);
                 message.reply(`:x: Você precisa ter pelo menos o nível \`${minimumLevel.name}\` para participar.`);
                 return;
             }
@@ -279,7 +280,27 @@ ${winnersList}`;
 
     }
 
-    static giveawayListCommand(message, args) {
+    static giveawayListGamesCommand(message, args) {
+        let giveInfo;
+        const giveRef = ref.child(`atual`);
+
+        giveRef.once('value', snapshot => {
+            giveInfo = snapshot.val();
+
+            if (!giveInfo) {
+                message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
+                return;
+            }
+
+            const gamesList = giveInfo.gameNames.map(n => `:small_blue_diamond: ${n}`).join("\n");
+
+            message.reply(`Lista de jogos do sorteio \`${giveInfo.name}\`
+${gamesList}`);
+
+        });
+    }
+
+    static giveawayListParticipantsCommand(message, args) {
 
         let giveInfo;
         const giveRef = ref.child(`atual`);
