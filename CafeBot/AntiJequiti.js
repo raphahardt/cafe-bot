@@ -4,9 +4,9 @@ const Discord = require("discord.js");
 
 // nomes dos canais que o bot vai verificar os jequitis
 const permittedJequitiChannels = [
-    318948034362736640, // nsfw
-    240297584420323338, // log e comandos
-    392024446589730816
+    '318948034362736640', // nsfw
+    '240297584420323338', // log e comandos
+    '392024446589730816'
 ];
 
 /**

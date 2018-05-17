@@ -5,13 +5,13 @@ const Discord = require("discord.js");
 
 // array com os canais que tem q ser ignorados
 const perolaIgnoredChannelsIds = [
-    341395801093963787, // mural
-    391287769189580812, // propria meda da vergonha
-    318948034362736640, // nsfw
+    '341395801093963787', // mural
+    '391287769189580812', // propria meda da vergonha
+    '318948034362736640', // nsfw
 ];
 
 // nome do channel que vai receber as mensagens pérola
-const perolaChannelId = 391287769189580812;
+const perolaChannelId = '391287769189580812';
 
 // quantos reactions precisa ter pra ser uma pérola
 const perolaCountThreshold = 5;
