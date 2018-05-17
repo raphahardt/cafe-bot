@@ -11,6 +11,7 @@ const fbApp = fbAdmin.initializeApp({
 
 const db = fbApp.database();
 const ref = db.ref('sorteio');
+const adminsIds = require('../adminIds');
 
 const leveledRoles = [
     '240282044209299457', // level 0
@@ -42,11 +43,13 @@ class Sorteio {
                 return Sorteio.giveawayEndCommand(message, args);
             case 'list':
             case 'l':
-                //return Sorteio.giveawayListParticipantsCommand(message, args);
                 return Sorteio.giveawayListGamesCommand(message, args);
             case 'cancel':
             case 'c':
                 return Sorteio.giveawayCancelCommand(message, args);
+            case 'who':
+            case 'w':
+                return Sorteio.giveawayListParticipantsCommand(message, args);
             default:
                 return Sorteio.giveawayParticipateCommand(message, args);
         }
@@ -54,7 +57,7 @@ class Sorteio {
 
     static giveawayCreateCommand(message, args) {
 
-        // verifica se é um admin para encerrar um giveaway
+        // verifica se é um admin para criar um giveaway
         if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
             message.reply(`:x: *Você não tem permissão de criar um sorteio.*`);
             return;
@@ -180,13 +183,15 @@ Inicia um giveaway.
                     let userId = keys[i];
                     let ticketCount = 100;
 
-                    const mbr = message.guild.members.get(userId);
-                    mbr.roles.array().forEach(role => {
-                        if (leveledRoles.includes(role.id)) {
-                            // a cada role que o usuario tiver ele ganha 5% a mais de chance de ganhar
-                            ticketCount *= 1.05;
-                        }
-                    });
+                    if (!adminsIds.includes(userId)) {
+                        const mbr = message.guild.members.get(userId);
+                        mbr.roles.array().forEach(role => {
+                            if (leveledRoles.includes(role.id)) {
+                                // a cada role que o usuario tiver ele ganha 5% a mais de chance de ganhar
+                                ticketCount *= 1.05;
+                            }
+                        });
+                    }
 
                     maxBound = parseInt(ticketCount);
                     ticketsCounts[userId] = [ minBound, minBound + maxBound, maxBound ];
@@ -198,6 +203,7 @@ Inicia um giveaway.
                 console.log('TICKETS', ticketsCounts);
 
                 let winners = [];
+                let luckyNumbers = [];
 
                 while (gameCount) {
                     const luckyNumber = parseInt(Math.random() * maxShuffle);
@@ -220,13 +226,14 @@ Inicia um giveaway.
 
                     // coloca nos ganhadores
                     winners.push(winner);
+                    luckyNumbers.push(luckyNumber);
 
                     gameCount--;
                 }
 
                 const winnersList = winners.map(m => {
                     const idx = winners.indexOf(m);
-                    return `Prêmio *${giveInfo.gameNames[idx]}*: ${m}`;
+                    return `Prêmio *${giveInfo.gameNames[idx]}*: ${m} *[ticket: ${luckyNumbers[idx]}]*`;
                     // if (!m.nickname) {
                     //     return `${m.user.username}#${m.user.discriminator}`;
                     // }
@@ -253,7 +260,7 @@ ${winnersList}`;
 
         // verifica se é um admin para encerrar um giveaway
         if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
-            message.reply(`:x: *Você não tem permissão de encerrar um sorteio.*`);
+            message.reply(`:x: *Você não tem permissão de cancelar um sorteio.*`);
             return;
         }
 
@@ -330,16 +337,18 @@ ${gamesList}`);
                     let userId = keys[i];
                     let ticketCount = 100;
 
-                    const mbr = message.guild.members.get(userId);
-                    mbr.roles.array().forEach(role => {
-                        if (leveledRoles.includes(role.id)) {
-                            // a cada role que o usuario tiver ele ganha 5% a mais de chance de ganhar
-                            ticketCount *= 1.05;
-                        }
-                    });
+                    if (!adminsIds.includes(userId)) {
+                        const mbr = message.guild.members.get(userId);
+                        mbr.roles.array().forEach(role => {
+                            if (leveledRoles.includes(role.id)) {
+                                // a cada role que o usuario tiver ele ganha 5% a mais de chance de ganhar
+                                ticketCount *= 1.05;
+                            }
+                        });
+                    }
 
                     maxBound = parseInt(ticketCount);
-                    ticketsCounts[userId] = [ minBound, minBound + maxBound, maxBound ];
+                    ticketsCounts[userId] = [ minBound, minBound + maxBound - 1, maxBound - 1 ];
 
                     minBound += maxBound;
                 }
@@ -348,14 +357,17 @@ ${gamesList}`);
 
                 let tickets = [];
                 for (let userId in ticketsCounts) {
-                    tickets.push(message.guild.members.get(userId));
+                    tickets.push([message.guild.members.get(userId), ticketsCounts[userId]]);
                 }
 
-                const ticketsList = tickets.map(m => {
+                const ticketsList = tickets.map(t => {
+                    const m = t[0], tickets = t[1];
+                    const addon = giveInfo.creator === message.author.id ? ` *[tickets nº: ${tickets[0]}-${tickets[1]}]*` : ` *[tickets: ${tickets[2]}]*`;
+
                     if (!m.nickname) {
-                        return `${m.user.username}#${m.user.discriminator}`;
+                        return `**${m.user.username}#${m.user.discriminator}**${addon}`;
                     }
-                    return m.nickname + ` (${m.user.username}#${m.user.discriminator})`;
+                    return `**${m.nickname} (${m.user.username}#${m.user.discriminator})**${addon}`;
                 }).map(n => `:small_blue_diamond: ${n}`).join("\n");
 
                 message.reply(`Participantes do sorteio \`${giveInfo.name}\`
