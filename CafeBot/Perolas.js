@@ -2,6 +2,16 @@
 const emojis = require("../emojis.json");
 const utils = require("../utils");
 const Discord = require("discord.js");
+const fbAdmin = require("firebase-admin");
+const fbServiceAccount = require("../misc/cafebot-2018-firebase-adminsdk-j17ic-a11e9f3222.json");
+
+const fbApp = fbAdmin.initializeApp({
+    credential: fbAdmin.credential.cert(fbServiceAccount),
+    databaseURL: "https://cafebot-2018.firebaseio.com"
+}, 'perolas');
+
+const db = fbApp.database();
+const ref = db.ref('perolas');
 
 // array com os canais que tem q ser ignorados
 const perolaIgnoredChannelsIds = [
@@ -12,6 +22,16 @@ const perolaIgnoredChannelsIds = [
 
 // nome do channel que vai receber as mensagens pérola
 const perolaChannelId = '391287769189580812';
+
+// DEV ---------------------------------
+// const perolaCountThreshold = 1;
+// const perolaRankings = [
+//     {color: 9006414, count: 2},
+//     {color: 14408667, count: 3},
+//     {color: 14867071, count: 4},
+//     {color: 11069183, count: 5},
+// ];
+// DEV ---------------------------------
 
 // quantos reactions precisa ter pra ser uma pérola
 const perolaCountThreshold = 5;
@@ -65,7 +85,7 @@ class Perolas {
                 }
 
                 if (perolaValidEmojis.includes(messageReaction.emoji.name) && reactCount >= perolaCountThreshold) {
-                    sendPerolaMessage(messageReaction.message, perolasChannel, reactCount);
+                    sendPerolaMessage(messageReaction.message, perolasChannel, reactCount, users);
                 }
             })
             .catch(console.error);
@@ -114,39 +134,41 @@ class Perolas {
  * @param {Discord.Message} originalMessage
  * @param {Discord.TextChannel} perolasChannel
  * @param {number} reactCount
+ * @param {Collection<User>} reactUsers
  */
-function sendPerolaMessage(originalMessage, perolasChannel, reactCount) {
-    const msgPosted = perolaMessageAlreadyExists(originalMessage, perolasChannel);
-    const originalUser = originalMessage.author;
+function sendPerolaMessage(originalMessage, perolasChannel, reactCount, reactUsers) {
+    perolaMessageAlreadyExists(originalMessage, perolasChannel).then(msgPosted => {
+        const originalUser = originalMessage.author;
 
-    const emb = new Discord.RichEmbed()
-        .setAuthor(originalUser.username, originalUser.avatarURL)
-        .setColor(3447003)
-        .setDescription(originalMessage.content)
-        .setTimestamp(originalMessage.createdAt);
+        const emb = new Discord.RichEmbed()
+            .setAuthor(originalUser.username, originalUser.avatarURL)
+            .setColor(3447003)
+            .setDescription(originalMessage.content)
+            .setTimestamp(originalMessage.createdAt);
 
-    if (originalMessage.attachments.array().length) {
-        emb.setImage(originalMessage.attachments.first().url);
-    }
+        if (originalMessage.attachments.array().length) {
+            emb.setImage(originalMessage.attachments.first().url);
+        }
 
-    if (!msgPosted) {
-        perolasChannel.send({embed: emb});
-    } else {
-        let changeRank = false;
-        //let emb = msgPosted.embeds[0];
+        if (!msgPosted) {
+            const userReactLast = reactUsers.last();
+            doSendPerolaMessage(perolasChannel, originalMessage, emb, userReactLast);
+        } else {
+            let changeRank = false;
 
-        for (let pos = 0; pos < perolaRankings.length; pos++) {
-            if (reactCount >= perolaRankings[pos].count) {
-                emb.setColor(perolaRankings[pos].color);
-                changeRank = true;
+            for (let pos = 0; pos < perolaRankings.length; pos++) {
+                if (reactCount >= perolaRankings[pos].count) {
+                    emb.setColor(perolaRankings[pos].color);
+                    changeRank = true;
+                }
+            }
+
+            if (changeRank) {
+                // pra atualizar o embed
+                msgPosted.edit({embed: emb});
             }
         }
-
-        if (changeRank) {
-            // pra atualizar o embed
-            msgPosted.edit({embed: emb});
-        }
-    }
+    }).catch(console.error);
 }
 
 /**
@@ -156,27 +178,61 @@ function sendPerolaMessage(originalMessage, perolasChannel, reactCount) {
  * @param {Discord.TextChannel} perolaChannel
  */
 function perolaMessageAlreadyExists(message, perolaChannel) {
-    const arr = perolaChannel.messages.array();
-    for (let i = 0; i < arr.length; i++) {
-        const msg = arr[i];
-        for (let j = 0; j < msg.embeds.length; j++) {
-            const embed = msg.embeds[j];
+    // const arr = perolaChannel.messages.array();
+    // for (let i = 0; i < arr.length; i++) {
+    //     const msg = arr[i];
+    //     for (let j = 0; j < msg.embeds.length; j++) {
+    //         const embed = msg.embeds[j];
+    //
+    //         // se a mensagem tiver o mesmo texto
+    //         if (message.content && embed.description === message.content.toString()) {
+    //             return msg;
+    //         }
+    //
+    //         if (embed.image && message.attachments.array().length) {
+    //             // se a mensagem tiver a mesma imagem URL
+    //             if (embed.image.url === message.attachments.first().url) {
+    //                 return msg;
+    //             }
+    //         }
+    //     }
+    // }
+    //
+    // return false;
 
-            // se a mensagem tiver o mesmo texto
-            if (message.content && embed.description === message.content.toString()) {
-                return msg;
+    return new Promise((resolve, reject) => {
+        ref.child(`msgs/${message.id}`).once('value', snapshot => {
+            let infoMsg = snapshot.val();
+
+            if (infoMsg && infoMsg.perolaId) {
+                perolaChannel.fetchMessage(infoMsg.perolaId)
+                    .then(postedMsg => {
+                        resolve(postedMsg);
+                    })
+                    .catch(() => {
+                        // mensagem não existe ou deu algum problema em dar fetch nessa msg
+                        // se for esse o caso, cria outro wilted
+                        resolve(false);
+                    });
+                return;
             }
 
-            if (embed.image && message.attachments.array().length) {
-                // se a mensagem tiver a mesma imagem URL
-                if (embed.image.url === message.attachments.first().url) {
-                    return msg;
-                }
-            }
-        }
-    }
+            // não achou a msg
+            resolve(false);
+        });
+    });
+}
 
-    return false;
+function doSendPerolaMessage(perolasChannel, originalMessage, emb, userReactLast) {
+    perolasChannel.send({embed: emb})
+        .then(postedMsg => {
+            const info = {
+                perolaId: postedMsg.id,
+                userReactLast: userReactLast ? userReactLast.id : null,
+                timestamp: (new Date()).getTime()
+            };
+            return ref.child(`msgs/${originalMessage.id}`).set(info);
+        }).catch(console.error);
 }
 
 module.exports = Perolas;
