@@ -4,10 +4,14 @@
   "description": "",
   "main": "app.js",
   "dependencies": {
+    "@redblobgames/dual-mesh": "git+https://github.com/redblobgames/dual-mesh.git",
+    "@redblobgames/mapgen2": "git+https://github.com/redblobgames/mapgen2.git",
     "discord.js": "^11.2.1",
     "fast-levenshtein": "^2.0.6",
     "firebase-admin": "^5.8.0",
     "opusscript": "0.0.6",
+    "poisson-disk-sampling": "^1.0.2",
+    "simplex-noise": "^2.4.0",
     "ytdl-core": "^0.18.5"
   },
   "devDependencies": {},
