@@ -10,6 +10,7 @@
     "fast-levenshtein": "^2.0.6",
     "firebase-admin": "^5.8.0",
     "opusscript": "0.0.6",
+    "points-in-polygon": "^0.2.1",
     "poisson-disk-sampling": "^1.0.2",
     "simplex-noise": "^2.4.0",
     "ytdl-core": "^0.18.5"

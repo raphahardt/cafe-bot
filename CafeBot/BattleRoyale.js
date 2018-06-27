@@ -7,9 +7,12 @@ const ADMIN_IDS = require('../adminIds');
 
 const DualMesh =     require('@redblobgames/dual-mesh');
 const MeshBuilder =   require('@redblobgames/dual-mesh/create');
-let Poisson = require('poisson-disk-sampling');
+const Poisson = require('poisson-disk-sampling');
 const SimplexNoise = require('simplex-noise');
 const Map =          require('@redblobgames/mapgen2');
+
+const pointsInPolygon = require('points-in-polygon');
+
 
 const fbApp = fbAdmin.initializeApp({
     credential: fbAdmin.credential.cert(fbServiceAccount),
@@ -86,14 +89,14 @@ class BattleRoyale {
     static royaleCommand(message, args) {
         //console.log('ROLES', message.guild.roles.array().map(r => `${r.id}: ${r.name}`));
 
-        if (message.channel.id !== '461224031123800101') {
-            message.reply(`:x: Só é permitido jogar o *royale* no <#461224031123800101>.`)
-                .then(m => {
-                    // deleta a mensagem dps de 8 segundos
-                    m.delete(8000);
-                });
-            return;
-        }
+        // if (message.channel.id !== '461224031123800101') {
+        //     message.reply(`:x: Só é permitido jogar o *royale* no <#461224031123800101>.`)
+        //         .then(m => {
+        //             // deleta a mensagem dps de 8 segundos
+        //             m.delete(8000);
+        //         });
+        //     return;
+        // }
 
         if (Math.random() < 0.2) {
             // pra garantir que leia do banco de vez em quando caso o evento lá em cima falhar
@@ -157,26 +160,94 @@ class BattleRoyale {
             return;
         }
 
+        let seed = args[0] || 78;
+
         let map = new Map(
-            (new MeshBuilder({boundarySpacing: 75})).addPoisson(Poisson, 100).create(),
-            {amplitude: 0.2, length: 4, seed: 12345},
+            (new MeshBuilder({boundarySpacing: 75})).addPoisson(Poisson, 50).create(),
+            {amplitude: 0.2, length: 4, seed: seed},
             makeRandomInt
         );
-        let noise = new SimplexNoise(12345);
+        let noise = new SimplexNoise(seed);
         map.calculate({
             noise: noise
         });
+
+        function region_bondaries(mesh, r) {
+            let rx = mesh.r_x(r), ry = mesh.r_y(r);
+            let upper_x = Infinity,
+                upper_y = Infinity,
+                bottom_x = -Infinity,
+                bottom_y = -Infinity;
+            let out_t = [];
+            mesh.r_circulate_t(out_t, r);
+            for (let t of out_t) {
+                let tx = mesh.t_x(t), ty = mesh.t_y(t);
+
+                if (tx < upper_x) {
+                    upper_x = tx;
+                }
+                if (tx > bottom_x) {
+                    bottom_x = tx;
+                }
+                if (ty < upper_y) {
+                    upper_y = ty;
+                }
+                if (ty > bottom_y) {
+                    bottom_y = ty;
+                }
+            }
+            return {
+                min: [upper_x, upper_y],
+                max: [bottom_x, bottom_y],
+                value: [rx, ry]
+            };
+        }
 
         let polygons = [];
         for (let r = 0; r < map.mesh.numSolidRegions; r++) {
             polygons.push({
                 biome: map.r_biome[r],
-                //vertices: map.mesh.r_circulate_t([], r)
-                //    .map((t) => map.t_pos([], t))
+                prop: region_bondaries(map.mesh, r)
             });
+            // polygons.push(map.mesh.r_circulate_t([], r)
+            //     .map((t) => map.mesh.t_pos([], t)));
         }
 
-        console.log(map.mesh);
+        //pointsInPolygon(polygons, (x, y) => console.log(x, y));
+
+        let arrayMap = [];
+
+        let width = 62, height = 28;
+        for (let x = 0; x < height; x++) {
+            arrayMap[x] = [];
+            for (let y = 0; y < width; y++) {
+                let found = false;
+                let xCenter = (x * (1000 / height)) + ((1000 / height) / 2),
+                    yCenter = (y * (1000 / width)) + ((1000 / width) / 2);
+                for (let i = 0; i < polygons.length; i++) {
+                    if (polygons[i].prop.min[0] <= xCenter && polygons[i].prop.max[0] >= xCenter
+                     && polygons[i].prop.min[1] <= yCenter && polygons[i].prop.max[1] >= yCenter) {
+                        arrayMap[x][y] = {
+                            biome: polygons[i].biome,
+                        };
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    arrayMap[x][y] = {
+                        biome: 'OCEAN'
+                    };
+                }
+            }
+        }
+
+        let textMap = "";
+        arrayMap.map(ax => {
+            textMap += ax.map(ay => ay.biome ==='OCEAN' ? '~' : ay.biome.charAt(0)).join('') + "\n";
+        });
+
+        message.reply(`Mapa:\n\`\`\`\n${textMap}\`\`\``);
     }
 
 
