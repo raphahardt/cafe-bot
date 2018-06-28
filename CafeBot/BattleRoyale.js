@@ -140,13 +140,18 @@ class BattleRoyale {
             case 'generate-map':
                 return BattleRoyale.generateMapCommand(message, args);
             case 'view-map':
+            case 'map':
                 return BattleRoyale.viewMapCommand(message, args);
             case 'drop-loot':
             case 'loot':
+            case 'drop':
                 return BattleRoyale.dropLootCommand(message, args);
+            case 'loots':
+            case 'drops':
+                return BattleRoyale.lootListCommand(message, args);
             default:
                 if (throwErrorIfNotInRoyaleChannel(message)) return;
-                message.reply(`:x: Comando inexistente.\nComandos disponíveis: \`enter\`, \`exit\`, \`info/stats\`, \`view/look\`, \`walk\``);
+                message.reply(`:x: Comando inexistente.\nComandos disponíveis: \`enter\`, \`exit\`, \`info/stats\`, \`view/look\`, \`walk\`, \`drops/loots\``);
         }
     }
 
@@ -201,6 +206,34 @@ class BattleRoyale {
     static royaleStatsCommand(message, args) {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
+
+        getPlayer(message.author).then((player) => {
+            const availableWalks = getWalksAvailable(player);
+
+            const emb = new Discord.RichEmbed()
+                .setColor(3447003)
+                .setTitle(`Stats de ${message.author.username}`);
+
+            emb.addField(':wavy_dash:', `${tileEmojis.player} __Informações__`, false);
+            emb.addField(`Vitórias`, player.wins || 0, true);
+            emb.addField(`Mortes`, player.deaths || 0, true);
+            emb.addField(`Total caminhado`, distanceName(player.walksUsed || 0), true);
+            const rating = parseInt(((player.wins || 0) / Math.max(player.wins + player.deaths, 1)) * 100);
+            emb.addField(`% Sucesso`, rating + '%', true);
+
+            let text = `${message.author}`;
+
+            text += `Você tem **${availableWalks}** passos disponíveis no momento.`;
+            if (availableWalks <= 0) {
+                const timeLeft = getTimeLeftForNextWalk(player);
+                text += ` Volte em **${timeLeft}** para mais passos.`;
+                return;
+            }
+
+            text += "\n";
+
+            channel.send(text, {embed: emb});
+        });
     }
 
     /**
@@ -221,6 +254,14 @@ class BattleRoyale {
             getPlayer(message.author).then(player => {
 
                 let coord = normalizeCoord(args[0]);
+
+                if (!coord) {
+                    coord = player.lastCoord || '';
+                }
+
+                if (!coord) {
+                    coord = 's';
+                }
 
                 const vision = calcVision(map, player.pos[0], player.pos[1], coord, MAX_DISTANCE_OBJECTS_DETECT);
 
@@ -274,13 +315,17 @@ class BattleRoyale {
                                 const distance = calcDistancePos(player.pos, tile.pos);
                                 const distanceText = distanceName(distance);
 
-                                textProximities += `${tileEmojis.player} Um jogador **${playerId}** está há ${distanceText}\n`;
+                                textProximities += `${tileEmojis.player} Um jogador está há ${distanceText}\n`;
 
                                 gone.push('p:' + playerId);
                             }
                         }
                     }
                 }
+
+                // grava a ultima coordenada usada
+                player.lastCoord = coord;
+                ref.child(`player/${player.id}`).set(player);
 
                 message.reply(`**Visão:**\n${renderedVision}\n**Proximidades:**\n${textProximities}`);
 
@@ -308,6 +353,7 @@ class BattleRoyale {
     static royaleWalkCommand(message, args) {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
+        const helpMsgText = `:x: Digite a quantidade de passos para andar. Por exemplo \`+royale walk 4n 3l\`, você irá andar **7** tiles: **4** pro norte e **3** pro leste.`;
 
         Promise.all([
             getMap(),
@@ -316,7 +362,18 @@ class BattleRoyale {
         ]).then(([map, players, loots]) => {
             getPlayer(message.author).then(player => {
 
+                if (!args.length) {
+                    message.reply(helpMsgText);
+                    return;
+                }
+
                 let walks = walkSyntaxToWalks(args.join(" "));
+
+                if (walks.length === 0) {
+                    message.reply(helpMsgText);
+                    return;
+                }
+
                 let availableWalks = getWalksAvailable(player);
 
                 if (availableWalks < walks.length) {
@@ -361,12 +418,14 @@ class BattleRoyale {
                         if (getPlayerFromTile(tile, players)) {
                             steppedBy.push({
                                 type: 'player',
+                                emoji: tileEmojis.player,
                                 action: 'lutou',
                                 pos: tile.pos
                             })
                         } else if (getLootFromTile(tile, loots)) {
                             steppedBy.push({
                                 type: 'loot',
+                                emoji: tileEmojis.loot,
                                 action: 'pegou',
                                 pos: tile.pos
                             })
@@ -394,6 +453,7 @@ class BattleRoyale {
 
                 // se tem loot
                 let loot = getLootFromTile(newTile, loots);
+                let hasLootCollected = null;
                 if (loot) {
                     player.loot = player.loot || [];
 
@@ -403,21 +463,34 @@ class BattleRoyale {
                     // e tira ele da lista de loots no mapa
                     loots.splice(loots.indexOf(loot), 1);
 
+                    hasLootCollected = {loot: loot};
+
                     // salva os loots
                     ref.child(`loot`).set(loots);
                 }
 
                 // se tem player
                 let playerEnemy = getPlayerFromTile(newTile, players);
+                let wasBattle = null;
                 if (playerEnemy && playerEnemy.id !== player.id) {
                     // começa uma luta!
                     const win = (Math.random() * 2000) <= 1000;
 
                     if (win) {
                         // se ganhou, pega todos os loots do outro player
-                        respawnPlayer()
+                        respawnPlayer(map, players, loots, playerEnemy, true);
+                        player.wins++;
 
+
+                    } else {
+                        // se perdeu, vc morre e respawna
+                        respawnPlayer(map, players, loots, player, true);
+                        playerEnemy.wins++;
+
+                        // e salva o player inimigo
+                        ref.child(`player/${playerEnemy.id}`).set(playerEnemy);
                     }
+                    wasBattle = {winner: win, enemy: playerEnemy};
                 }
 
                 // salva o player
@@ -430,12 +503,37 @@ class BattleRoyale {
                     // tira todos os stepped by que SÃO o tile q vc ta pisando
                     return sb.pos[0] !== player.pos[0] && sb.pos[1] !== player.pos[1];
                 }).map(sb => {
-                    return 'você passou por um ' + sb.type
-                        + ', mas não '
-                        + sb.action + ' há uns '
-                        + distanceName(calcDistance(sb.pos[0], sb.pos[1], player.pos[0], player.pos[1]));
-                }).join("\n");
-                message.reply(`:white_check_mark: Você andou **${distanceWalked}**, ` + (availableWalks === 0 ? `mas não tem mais passos disponíveis. Volte em **${timeLeft}** para mais passos.` : `e ainda tem ${availableWalks} passos disponíveis.`) + (steppedByText ? `\nEnquanto andava...\n` + steppedByText : ''));
+                    return `Você passou por um ${sb.emoji} **${sb.type}**, mas não ${sb.action} há uns ${distanceName(calcDistancePos(sb.pos, player.pos))}`;
+                }).map(n => `:small_blue_diamond: ${n}`).join("\n");
+
+                let text = `:white_check_mark: Você andou **${distanceWalked}**, `;
+                if (availableWalks === 0) {
+                    text += `mas não tem mais passos disponíveis. Volte em **${timeLeft}** para mais passos.`;
+                } else {
+                    text += `e ainda tem ${availableWalks} passos disponíveis.`;
+                }
+                text += "\n";
+
+                if (steppedByText) {
+                    text += `\n**Enquanto andava...\n${steppedByText}`;
+                }
+                text += "\n";
+
+                if (wasBattle) {
+                    text += `\n**Batalha!**\nVocê enfrentou ${tileEmojis.player} <@${wasBattle.enemy.id}> e...`;
+
+                    if (wasBattle.winner) {
+                        text += `**venceu!** O inimigo teve seu loot espalhado e foi respawnado em algum outro ponto do mapa.`;
+                    } else {
+                        text += `**perdeu!** Você teve seu loot todo espalhado e foi respawnado em algum outro ponto do mapa.`;
+                    }
+                }
+
+                if (hasLootCollected) {
+                    text += `\n**Drops coletados!**\nVocê coletou ${tileEmojis.loot} **${hasLootCollected.loot.name}**!`;
+                }
+
+                message.reply(text);
 
 
             }).catch(error => {
@@ -448,6 +546,13 @@ class BattleRoyale {
         })
     }
 
+    /**
+     * Gera um novo mapa.
+     * Espalha todos os loots e todos os players de novo
+     *
+     * @param message
+     * @param args
+     */
     static generateMapCommand(message, args) {
 
         if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
@@ -455,182 +560,245 @@ class BattleRoyale {
             return;
         }
 
-        let seed = args[0] || 78;
+        let textLoading = ":map: **Gerando novo mapa...**\n";
+        const channel = message.channel;
 
-        let map = new Map(
-            (new MeshBuilder({boundarySpacing: 75})).addPoisson(Poisson, 50).create(),
-            {amplitude: 0.2, length: 4, seed: seed},
-            makeRandomInt
-        );
-        let noise = new SimplexNoise(seed);
-        map.calculate({
-            noise: noise,
-            drainageSeed: 0, // variant
-            riverSeed: 0, // variant
-            biomeBias: {
-                north_temperature: 0.5, // pra gerar menos gelo
-                south_temperature: 0.5, // pra gerar menos gelo
-                moisture: 0
-            }
-        });
+        channel.send(textLoading + "*Aguarde...*").then(msgLoading => {
 
-        function region_bondaries(mesh, r) {
-            let rx = mesh.r_x(r), ry = mesh.r_y(r);
-            let upper_x = Infinity,
-                upper_y = Infinity,
-                bottom_x = -Infinity,
-                bottom_y = -Infinity;
-            let out_t = [];
-            mesh.r_circulate_t(out_t, r);
-            for (let t of out_t) {
-                let tx = mesh.t_x(t), ty = mesh.t_y(t);
+            let seed = args[0] || 78;
 
-                if (tx < upper_x) {
-                    upper_x = tx;
-                }
-                if (tx > bottom_x) {
-                    bottom_x = tx;
-                }
-                if (ty < upper_y) {
-                    upper_y = ty;
-                }
-                if (ty > bottom_y) {
-                    bottom_y = ty;
-                }
-            }
-            return {
-                min: [upper_x, upper_y],
-                max: [bottom_x, bottom_y],
-                value: [rx, ry]
-            };
-        }
+            textLoading += "Criando mesh do mapa...\n";
+            msgLoading.edit(textLoading);
 
-        let polygons = [];
-        for (let r = 0; r < map.mesh.numSolidRegions; r++) {
-            polygons.push({
-                tile: {
-                    biome: map.r_biome[r],
-                    walkable: !(map.r_water[r] || map.r_ocean[r])
-                },
-                prop: region_bondaries(map.mesh, r)
+            let map = new Map(
+                (new MeshBuilder({boundarySpacing: 75})).addPoisson(Poisson, 50).create(),
+                {amplitude: 0.2, length: 4, seed: seed},
+                makeRandomInt
+            );
+
+            textLoading += "Calculando biomas...\n";
+            msgLoading.edit(textLoading);
+
+            let noise = new SimplexNoise(seed);
+            map.calculate({
+                noise: noise,
+                drainageSeed: 0, // variant
+                riverSeed: 0, // variant
+                biomeBias: {
+                    north_temperature: 0.5, // pra gerar menos gelo
+                    south_temperature: 0.5, // pra gerar menos gelo
+                    moisture: 0
+                }
             });
-            // polygons.push(map.mesh.r_circulate_t([], r)
-            //     .map((t) => map.mesh.t_pos([], t)));
-        }
 
-        console.log(polygons);
+            function region_bondaries(mesh, r) {
+                let rx = mesh.r_x(r), ry = mesh.r_y(r);
+                let upper_x = Infinity,
+                    upper_y = Infinity,
+                    bottom_x = -Infinity,
+                    bottom_y = -Infinity;
+                let out_t = [];
+                mesh.r_circulate_t(out_t, r);
+                for (let t of out_t) {
+                    let tx = mesh.t_x(t), ty = mesh.t_y(t);
 
-        //pointsInPolygon(polygons, (x, y) => console.log(x, y));
-
-        let arrayMap = [];
-
-        // colocando os biomas nos tiles
-        for (let x = 0; x < MAP_HEIGHT; x++) {
-            arrayMap[x] = [];
-            for (let y = 0; y < MAP_WIDTH; y++) {
-                let found = false;
-                let xCenter = (x * (1000 / MAP_HEIGHT)) + ((1000 / MAP_HEIGHT) / 2),
-                    yCenter = (y * (1000 / MAP_WIDTH)) + ((1000 / MAP_WIDTH) / 2);
-                for (let i = 0; i < polygons.length; i++) {
-                    if (polygons[i].prop.min[0] <= xCenter && polygons[i].prop.max[0] >= xCenter
-                     && polygons[i].prop.min[1] <= yCenter && polygons[i].prop.max[1] >= yCenter) {
-                        arrayMap[x][y] = Object.assign({}, polygons[i].tile);
-                        arrayMap[x][y].pos = [x, y];
-                        found = true;
-                        break;
+                    if (tx < upper_x) {
+                        upper_x = tx;
+                    }
+                    if (tx > bottom_x) {
+                        bottom_x = tx;
+                    }
+                    if (ty < upper_y) {
+                        upper_y = ty;
+                    }
+                    if (ty > bottom_y) {
+                        bottom_y = ty;
                     }
                 }
-                if (!found) {
-                    arrayMap[x][y] = Object.assign({}, polygons[0].tile);
-                    arrayMap[x][y].pos = [x, y];
+                return {
+                    min: [upper_x, upper_y],
+                    max: [bottom_x, bottom_y],
+                    value: [rx, ry]
+                };
+            }
+
+            textLoading += "Identificando os polígonos...\n";
+            msgLoading.edit(textLoading);
+
+            let polygons = [];
+            for (let r = 0; r < map.mesh.numSolidRegions; r++) {
+                polygons.push({
+                    tile: {
+                        biome: map.r_biome[r],
+                        walkable: !(map.r_water[r] || map.r_ocean[r])
+                    },
+                    prop: region_bondaries(map.mesh, r)
+                });
+                // polygons.push(map.mesh.r_circulate_t([], r)
+                //     .map((t) => map.mesh.t_pos([], t)));
+            }
+
+            //console.log(polygons);
+
+            textLoading += "Encontrando os boundaries dos polígonos...\n";
+            msgLoading.edit(textLoading);
+
+            //pointsInPolygon(polygons, (x, y) => console.log(x, y));
+
+            let arrayMap = [];
+
+            // colocando os biomas nos tiles
+            for (let x = 0; x < MAP_HEIGHT; x++) {
+                arrayMap[x] = [];
+                for (let y = 0; y < MAP_WIDTH; y++) {
+                    let found = false;
+                    let xCenter = (x * (1000 / MAP_HEIGHT)) + ((1000 / MAP_HEIGHT) / 2),
+                        yCenter = (y * (1000 / MAP_WIDTH)) + ((1000 / MAP_WIDTH) / 2);
+                    for (let i = 0; i < polygons.length; i++) {
+                        if (polygons[i].prop.min[0] <= xCenter && polygons[i].prop.max[0] >= xCenter
+                            && polygons[i].prop.min[1] <= yCenter && polygons[i].prop.max[1] >= yCenter) {
+                            arrayMap[x][y] = Object.assign({}, polygons[i].tile);
+                            arrayMap[x][y].pos = [x, y];
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        arrayMap[x][y] = Object.assign({}, polygons[0].tile);
+                        arrayMap[x][y].pos = [x, y];
+                    }
                 }
             }
-        }
 
-        // distribuindo as cidades nos tiles
-        for (let c = 0; c < cities.length; c++) {
-            const city = cities[c];
+            textLoading += "Distribuindo as cidades...\n";
+            msgLoading.edit(textLoading);
 
-            // se o bioma exigido for qq um, colocar em qq tile aleatorio,
-            // menos no oceano
-            let testBiome = null;
-            if (city.biomes === true) {
-                testBiome = function (city, biome) {
-                    return biome !== 'OCEAN';
-                };
+            // distribuindo as cidades nos tiles
+            for (let c = 0; c < cities.length; c++) {
+                const city = cities[c];
 
-            } else if (city.biomes.length) {
-                testBiome = function (city, biome) {
-                    return city.biomes.includes(biome);
-                };
-            }
+                // se o bioma exigido for qq um, colocar em qq tile aleatorio,
+                // menos no oceano
+                let testBiome = null;
+                if (city.biomes === true) {
+                    testBiome = function (city, biome) {
+                        return biome !== 'OCEAN';
+                    };
 
-            if (testBiome !== null) {
-                let tries = 500;
-                while (tries--) {
-                    let xa = parseInt(Math.random() * MAP_HEIGHT),
-                        ya = parseInt(Math.random() * MAP_WIDTH);
+                } else if (city.biomes.length) {
+                    testBiome = function (city, biome) {
+                        return city.biomes.includes(biome);
+                    };
+                }
 
-                    if (testBiome(city, arrayMap[xa][ya].biome)) {
-                        arrayMap[xa][ya].city = city;
-                        console.log('CITY' + city.name + ' IN ', xa, ya);
+                if (testBiome !== null) {
+                    let tries = 500;
+                    while (tries--) {
+                        let xa = parseInt(Math.random() * MAP_HEIGHT),
+                            ya = parseInt(Math.random() * MAP_WIDTH);
 
-                        // coloca os pontos adjacentes
-                        const startx = Math.max(xa - city.radius, 0),
-                            endx = Math.min(xa + city.radius, MAP_HEIGHT),
-                            starty = Math.max(ya - city.radius, 0),
-                            endy = Math.min(ya + city.radius, MAP_WIDTH);
+                        if (testBiome(city, arrayMap[xa][ya].biome)) {
+                            arrayMap[xa][ya].city = city;
+                            console.log('CITY' + city.name + ' IN ', xa, ya);
 
-                        for (let x = startx; x < endx; x++) {
-                            for (let y = starty; y < endy; y++) {
-                                arrayMap[x][y].proxCity = {
-                                    origin: [xa, ya]
+                            // coloca os pontos adjacentes
+                            const startx = Math.max(xa - city.radius, 0),
+                                endx = Math.min(xa + city.radius, MAP_HEIGHT),
+                                starty = Math.max(ya - city.radius, 0),
+                                endy = Math.min(ya + city.radius, MAP_WIDTH);
+
+                            for (let x = startx; x < endx; x++) {
+                                for (let y = starty; y < endy; y++) {
+                                    arrayMap[x][y].proxCity = {
+                                        origin: [xa, ya]
+                                    }
                                 }
                             }
+
+                            break;
+                        }
+                    }
+                }
+            }
+
+            textLoading += "Salvando no db...\n";
+            msgLoading.edit(textLoading);
+
+            saveMap(arrayMap).then(map => {
+                // verifica se tem loots no mapa, pra poder reespalhar
+                return Promise.all([
+                    getLoots(),
+                    getPlayers()
+                ]).then(([loots, players]) => {
+                    // se tiver loots no mapa, respalhar eles
+                    if (loots.length) {
+                        textLoading += "Espalhando os loots atuais...\n";
+                        msgLoading.edit(textLoading);
+
+                        const lootRef = ref.child(`loot`);
+
+                        for (let i = 0; i < loots.length; i++) {
+                            loots[i].pos = getRandomWalkablePos(map);
+                            // aqui não passo os players e loots pq tecnicamente eu
+                            // quero q o loot possa ficar no tile que quiser,
+                            // mesmo q tenha player, pq eu vou espalhar eles
+                            // logo em seguida
                         }
 
-                        break;
-                    }
-                }
-            }
-        }
+                        // salva o novo array de loots
+                        lootRef.set(loots);
 
-        saveMap(arrayMap);
-
-        // verifica se tem loots no mapa, pra poder reespalhar
-        getLoots().then(loots => {
-            // se tiver loots no mapa, respalhar eles
-            if (loots.length) {
-                let lootPromises = [];
-                for (let i = 0; i < loots.length; i++) {
-                    lootPromises.push(getRandomWalkableTile());
-                }
-
-                Promise.all(lootPromises).then(tiles => {
-                    const lootRef = ref.child(`loot`);
-
-                    for (let i = 0; i < loots.length; i++) {
-                        loots[i].pos = tiles[i];
+                        console.log('LOOTS REESPALHADOS COM SUCESSO');
                     }
 
-                    // salva o novo array de loots
-                    lootRef.set(loots);
+                    // se tiver players no mapa, respalhar tbm
+                    if (players) {
+                        textLoading += "Espalhando os players atuais...\n";
+                        msgLoading.edit(textLoading);
 
-                    console.log('LOOTS REESPALHADOS COM SUCESSO');
+                        const playerRef = ref.child(`player`);
 
+                        for (let p in players) {
+                            players[p].pos = getRandomWalkablePos(map, players, loots);
+                            // aqui eu passo pq agora já tem loot na tela
+                        }
+
+                        // salva o novo array de loots
+                        playerRef.set(players);
+
+                        console.log('PLAYERS REESPALHADOS COM SUCESSO');
+                    }
+
+                    textLoading += "*Pronto!*\n\nPra visualizar, use `+royale view-map`";
+                    msgLoading.edit(textLoading);
                 });
-            }
+
+            }).catch(error => {
+                console.error(error);
+                message.reply(`:x: ${error}`);
+            });
+
+        }).catch(error => {
+            console.error(error);
+            message.reply(`:x: ${error}`);
         });
 
-        // renderiza o mapa aproveitando o metodo q ja faz só isso
-        BattleRoyale.viewMapCommand(message, args);
     }
 
+    /**
+     * Mostra o mapa total.
+     *
+     * @param message
+     * @param args
+     */
     static viewMapCommand(message, args) {
         if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
             message.reply(`:x: *Você não tem permissão de usar esse comando.*`);
             return;
         }
+        //if (throwErrorIfNotInRoyaleChannel(message)) return;
+        //const channel = getRoyaleChannel(message);
+        const channel = message.channel;
 
         Promise.all([
             getMap(),
@@ -645,67 +813,200 @@ class BattleRoyale {
                 !args.includes('--no-city')
             );
 
-            message.channel.send("**Mapa** (escala 1/2)\nCada *1 tile real* equivale a *100m*");
+            channel.send(":map: **Mapa**\n*Aguarde, carregando...*")
+                .then(msgTitle => {
+                    function _sendMapPiece() {
+                        const mapText = texts.shift();
+                        return channel.send(mapText)
+                            .then(() => {
+                                if (texts.length) {
+                                    // continua enquanto tiver emoji pra mandar
+                                    return _sendMapPiece();
+                                }
+                                // acabou os emojis
+                                return true;
+                            }).catch(console.error);
+                    }
 
-            function _sendMapPiece() {
-                const mapText = texts.shift();
-                return message.channel.send(mapText)
-                    .then(() => {
-                        if (texts.length) {
-                            // continua enquanto tiver emoji pra mandar
-                            return _sendMapPiece();
-                        }
-                        // acabou os emojis
-                        return true;
-                    }).catch(console.error);
-            }
+                    _sendMapPiece().then(() => {
+                        console.log('RENDERIZOU O MAPA');
+                        msgTitle.edit(":map: **Mapa** (escala 1/2)\nCada *1 tile real* equivale a *100m*");
+                    })
+                });
 
-            _sendMapPiece().then(() => {
-                console.log('RENDERIZOU O MAPA');
-            })
         });
     }
 
-
+    /**
+     * Dropa um loot que nós admins quisermos
+     *
+     * @param message
+     * @param args
+     */
     static dropLootCommand(message, args) {
-
         if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
             message.reply(`:x: *Você não tem permissão de dropar um loot.*`);
             return;
         }
 
-        const lootName = args[0];
+        const lootName = args.shift();
         const channel = getRoyaleChannel(message);
 
-        getRandomWalkableTile(args[1], args[2]).then(tile => {
-            const lootRef = ref.child(`loot`);
+        // vai pegar as sintaxes:
+        // x y
+        // x,y
+        // x, y
+        const forcedPos = args.join(',').split(/,+/).slice(0, 2);
 
-            lootRef.once('value', snapshot => {
-                let loots = snapshot.val();
+        Promise.all([
+            getMap(),
+            getPlayers(),
+            getLoots()
+        ]).then(([map, players, loots]) => {
+            const pos = getRandomWalkablePos(map, players, loots, forcedPos);
 
-                if (!loots) {
-                    loots = [];
+            loots.push({
+                name: lootName,
+                pos: pos,
+                ts: (new Date()).getTime()
+            });
+
+            // salva o novo array de loots
+            ref.child(`loot`).set(loots, function (error) {
+                if (error) {
+                    throw error;
                 }
-
-                loots.push({
-                    name: lootName,
-                    pos: tile,
-                    ts: (new Date()).getTime()
-                });
-
-                // salva o novo array de loots
-                lootRef.set(loots);
 
                 channel.send(`${tileEmojis.loot} **Atenção!** Um drop caiu na ilha! O loot é **${lootName}**!`);
             });
 
+
         }).catch(error => {
+            console.error(error);
             message.reply(`:x: ${error}`);
-        })
+        });
     }
 
+    /**
+     * Lista os loots do mapa
+     *
+     * @param message
+     * @param args
+     */
+    static lootListCommand(message, args) {
+        if (throwErrorIfNotInRoyaleChannel(message)) return;
+        const channel = getRoyaleChannel(message);
+
+        function findClosestCity(map, pos) {
+            const radius = parseInt(MAX_DISTANCE_OBJECTS_DETECT / 2);
+            let x0 = pos[0] - radius,
+                y0 = pos[1] - radius,
+                x1 = pos[0] + radius,
+                y1 = pos[1] + radius;
+
+            x0 = Math.max(Math.min(x0, MAP_HEIGHT - 1), 0);
+            y0 = Math.max(Math.min(y0, MAP_WIDTH - 1), 0);
+            x1 = Math.max(Math.min(x1, MAP_HEIGHT - 1), 0);
+            y1 = Math.max(Math.min(y1, MAP_WIDTH - 1), 0);
+
+            let shortestDistance = Infinity;
+            let shortestCity = null;
+
+            for (let x = x0; x <= x1; x++) {
+                for (let y = y0; y <= y1; y++) {
+                    let cityPos = null;
+                    if (map[x][y].proxCity) {
+                        const xc = map[x][y].proxCity.origin[0],
+                            yc = map[x][y].proxCity.origin[1];
+
+                        cityPos = [xc, yc];
+                    } else if (map[x][y].city) {
+                        cityPos = [x, y];
+                    }
+
+                    if (cityPos) {
+                        const distance = calcDistancePos(cityPos, pos);
+
+                        if (distance < shortestDistance) {
+                            shortestDistance = distance;
+                            shortestCity = map[cityPos[0]][cityPos[1]].city.name;
+                        }
+                    }
+                }
+            }
+
+            return shortestCity;
+        }
+
+        Promise.all([
+            getMap(),
+            getPlayers(),
+            getLoots()
+        ]).then(([map, players, loots]) => {
+
+            let orderedLoots = [];
+
+            // se tem loots na ilha, listar
+            if (loots.length) {
+                for (let l = 0; l < loots.length; l++) {
+                    orderedLoots.push({
+                        name: loots[l].name,
+                        pos: loots[l].pos,
+                        ownedBy: null,
+                        closestCity: findClosestCity(map, loots[l].pos)
+                    });
+                }
+            }
+
+            // se tem players, ver os loots deles
+            if (players) {
+                for (let p in players) {
+                    if (players[p].loot) {
+                        const pLoots = players[p].loot;
+                        for (let l = 0; l < pLoots.length; l++) {
+                            orderedLoots.push({
+                                name: pLoots[l].name,
+                                pos: pLoots[l].pos,
+                                ownedBy: players[p].id,
+                                closestCity: findClosestCity(map, pLoots[l].pos)
+                            });
+                        }
+                    }
+                }
+            }
+
+            orderedLoots.sort(function (a, b) {
+                const nameA = a.name.toUpperCase(); // ignore upper and lowercase
+                const nameB = b.name.toUpperCase(); // ignore upper and lowercase
+                if (nameA < nameB) {
+                    return -1;
+                }
+                if (nameA > nameB) {
+                    return 1;
+                }
+
+                // names must be equal
+                return 0;
+            });
+
+            const lootText = orderedLoots.map(l => {
+                return `**${l.name}**` + (l.ownedBy ? ` (com: ${tileEmojis.player} <@${l.ownedBy}>)` : (l.closestCity ? ` (local mais próximo: ${tileEmojis.city} *${l.closestCity}*)` : ``));
+            }).map(n => `:small_blue_diamond: ${n}`).join("\n");
+
+            channel.send(`${message.member}, ${tileEmojis.loot} **Lista de drops**\n${lootText}`);
+
+        }).catch(error => {
+            console.error(error);
+            message.reply(`:x: ${error}`);
+        });
+    }
+
+    /**
+     * Quando um membro sair do server
+     *
+     * @param member
+     */
     static onGuildMemberRemove(member) {
-        // retira os membros do jogo quando eles quitarem do server
         const user = member.user;
 
         exitPlayer(user).then(successMsg => {
@@ -788,17 +1089,17 @@ function renderTile(tile, players, loots) {
 
 function getPlayer(user) {
     return new Promise((resolve, reject) => {
-        const coreUserRef = ref.child(`player/${user.id}`);
+        const playerRef = ref.child(`player/${user.id}`);
 
-        coreUserRef.once('value', snapshot => {
-            let info = snapshot.val();
+        playerRef.once('value', snapshot => {
+            let player = snapshot.val();
 
-            if (!info) {
+            if (!player) {
                 reject('Usuário não está jogando. Use `+royale enter` pra participar.');
             } else {
-                info.timestampWalks = info.timestampWalks || [];
-                info.loot = info.loot || [];
-                resolve(info);
+                player.timestampWalks = player.timestampWalks || [];
+                player.loot = player.loot || [];
+                resolve(player);
             }
         });
     });
@@ -806,13 +1107,18 @@ function getPlayer(user) {
 
 function createPlayer(user) {
     return new Promise((resolve, reject) => {
-        const coreUserRef = ref.child(`player/${user.id}`);
+        Promise.all([
+            getMap(),
+            getPlayers()
+        ]).then(([ map, players ]) => {
+            const playerRef = ref.child(`player/${user.id}`);
 
-        coreUserRef.once('value', snapshot => {
-            let info = snapshot.val();
+            playerRef.once('value', snapshot => {
+                let info = snapshot.val();
 
-            if (!info) {
-                getRandomWalkableTile().then(tile => {
+                if (!info) {
+                    const randomPos = getRandomWalkablePos(map, players);
+
                     info = {
                         id: user.id,
                         deaths: 0,
@@ -820,111 +1126,100 @@ function createPlayer(user) {
                         loot: [],
                         timestampWalks: [],
                         walksUsed: 0,
-                        pos: tile
+                        pos: randomPos
                     };
 
                     // salva o que foi definido
-                    coreUserRef.set(info);
+                    playerRef.set(info);
 
                     resolve([false, info]);
-
-                }).catch(reject);
-            } else {
-                resolve([true, info]);
-            }
-
-        });
-    });
-}
-
-function respawnPlayer(user, inBattle) {
-    return new Promise((resolve, reject) => {
-        Promise.all([
-            getPlayer(user),
-            getLoots()
-        ]).then(([ player, loots ]) => {
-            getRandomWalkableTile().then(tile => {
-                // seta novo tile pro player
-                player.pos = tile;
-                // aumenta uma morte
-                player.deaths++;
-
-                // se for em batalha, não perde os passos
-                if (!inBattle) {
-
-                }
-
-                if (player.loot && player.loot.length) {
-                    let playerLoots = utils.shuffle(player.loot);
-                    let lostLoot = playerLoots.shift(); // pega o primeiro loot, depois de embaralhar os loots
-                    getRandomWalkableTile().then(tile => {
-                        loots.push({
-                            name: lostLoot.name,
-                            pos: tile,
-                            ts: (new Date()).getTime()
-                        });
-
-                        // seta os loots do player, faltando aquele q ele perdeu respawnando
-                        player.loot = playerLoots;
-
-                        ref.child(`loot`).set(loots);
-                        ref.child(`player/${user.id}`).set(player);
-                    });
                 } else {
-                    // salva se não tem loot pra perder
-                    ref.child(`player/${user.id}`).set(player);
+                    resolve([true, info]);
                 }
 
-            }).catch(reject);
-
+            });
         }).catch(reject);
     });
 }
 
+function respawnPlayer(map, players, loots, userOrPlayer, inBattle) {
+    const randomPos = getRandomWalkablePos(map, players);
+    const player = players[userOrPlayer.id];
+
+    // seta novo tile pro player
+    player.pos = randomPos;
+    // aumenta uma morte
+    player.deaths++;
+
+    let droppedLoots = [];
+    if (player.loot && player.loot.length) {
+        let lostLoots = [];
+
+        if (inBattle) {
+            // se foi em batalha, perde todos os loots
+            lostLoots = player.loot;
+            player.loot = [];
+        } else {
+            // se nao foi em batalha, perde só um loot aleatorio
+            let playerLoots = utils.shuffle(player.loot);
+            lostLoots.push(playerLoots.shift());
+            player.loot = playerLoots;
+        }
+
+        for (let i = 0; i < lostLoots.length; i++) {
+            const loot = lostLoots[i],
+                  randomPos = getRandomWalkablePos(map, players, loots);
+
+            loots.push({
+                name: loot.name,
+                pos: randomPos,
+                ts: (new Date()).getTime()
+            });
+
+            droppedLoots.push(loot.name);
+        }
+
+        // salva infos do loot
+        ref.child(`loot`).set(loots);
+    }
+    // salva o player
+    ref.child(`player/${userOrPlayer.id}`).set(player);
+}
+
 function exitPlayer(user) {
     return new Promise((resolve, reject) => {
-        getPlayer(user).then(player => {
+        Promise.all([
+            getMap(),
+            getPlayers(),
+            getLoots()
+        ]).then(([ map, players, loots ]) => {
+            const player = players[user.id];
+
             // se tiver loot, espalhar eles no mapa
             if (player.loot && player.loot.length) {
-                let lootPromises = [];
+
+                let droppedLoots = [];
+
                 for (let i = 0; i < player.loot.length; i++) {
-                    lootPromises.push(getRandomWalkableTile());
-                }
+                    const loot = player.loot[i],
+                          randomPos = getRandomWalkablePos(map, players, loots);
 
-                Promise.all(lootPromises).then(tiles => {
-                    const lootRef = ref.child(`loot`);
-
-                    lootRef.once('value', snapshot => {
-                        let loots = snapshot.val();
-                        let droppedLoots = [];
-
-                        if (!loots) {
-                            loots = [];
-                        }
-
-                        for (let i = 0; i < player.loot.length; i++) {
-                            const loot = player.loot[i],
-                                  tile = tiles[i];
-
-                            loots.push({
-                                name: loot.name,
-                                pos: tile,
-                                ts: (new Date()).getTime()
-                            });
-
-                            droppedLoots.push(loot.name);
-                        }
-
-                        // salva o novo array de loots
-                        lootRef.set(loots);
-
-                        // deleta o usuario da lista
-                        ref.child(`player/${user.id}`).set(null);
-
-                        resolve(`:outbox_tray: Usuário ${user} saiu do jogo e deixou os loots espalhados: **${droppedLoots.join('**, **')}**`);
+                    loots.push({
+                        name: loot.name,
+                        pos: randomPos,
+                        ts: (new Date()).getTime()
                     });
 
-                }).catch(reject);
+                    droppedLoots.push(loot.name);
+                }
+
+                // salva o novo array de loots
+                ref.child(`loot`).set(loots);
+
+                // deleta o usuario da lista
+                ref.child(`player/${user.id}`).set(null);
+
+                resolve(`:outbox_tray: Usuário ${user} saiu do jogo e deixou os loots espalhados: **${droppedLoots.join('**, **')}**`);
             } else {
                 // não tem loot pra espalhar, entao simplesmente deleta o usuario
                 ref.child(`player/${user.id}`).set(null);
@@ -975,38 +1270,30 @@ function getLoots() {
 // TODO: mudar o nome pra Pos em vez de Tile, pois Tile tem outra conotação agora
 // TODO: transformar essa funcao em algo sem promise, em que receba todos os params necessarios
 // exemplo: function grwt(forcePos, map, players, loots, tries) { ...
-function getRandomWalkableTile(forceX, forceY, tries) {
-    return new Promise((resolve, reject) => {
-        Promise.all([
-            getMap(),
-            getPlayers()
-        ]).then(([ map, players ]) => {
-            tries = tries || 200;
+function getRandomWalkablePos(map, players, loots, forcePos, tries) {
+    tries = tries || 200;
 
-            if (forceX && forceY) {
-                let xa = forceX,
-                    ya = forceY;
+    if (forcePos) {
+        let xa = forcePos[0],
+            ya = forcePos[1];
 
-                if (map[xa][ya].walkable && !getPlayerFromTile({ pos: [xa, ya] }, players)) {
-                    resolve([xa, ya]);
-                } else {
-                    reject('Não pode ser colocado neste tile.');
-                }
-            } else {
-                while (tries--) {
-                    let xa = parseInt(Math.random() * MAP_HEIGHT),
-                        ya = parseInt(Math.random() * MAP_WIDTH);
+        if (map[xa][ya].walkable && !getPlayerFromTile({ pos: [xa, ya] }, players)) {
+            return forcePos;
+        } else {
+            throw new Error('Não pode ser colocado neste tile.');
+        }
+    }
 
-                    if (map[xa][ya].walkable && !getPlayerFromTile({ pos: [xa, ya] }, players)) {
-                        resolve([xa, ya]);
-                        return;
-                    }
-                }
+    while (tries--) {
+        let xa = parseInt(Math.random() * MAP_HEIGHT),
+            ya = parseInt(Math.random() * MAP_WIDTH);
 
-                reject('Houve um erro inesperado e não foi possível detectar um tile no momento. Tente novamente.');
-            }
-        }).catch(reject);
-    });
+        if (map[xa][ya].walkable && !getPlayerFromTile({ pos: [xa, ya] }, players)) {
+            return [xa, ya];
+        }
+    }
+
+    throw new Error('Houve um erro inesperado e não foi possível detectar um tile no momento. Tente novamente.');
 }
 
 function getMap() {
@@ -1027,7 +1314,13 @@ function getMap() {
 
 function saveMap(map) {
     return new Promise((resolve, reject) => {
-        return ref.child(`map`).set(map);
+        return ref.child(`map`).set(map, function (error) {
+            if (error) {
+                reject(error);
+            } else {
+                resolve(map);
+            }
+        });
     });
 }
 
@@ -1236,19 +1529,40 @@ function renderMap(map, players, loots, showCities) {
 
 // transforma a sintaxe 2s 1l 3n em ['s', 's', 'l', 'n', 'n', 'n']
 function walkSyntaxToWalks(syntax) {
-    const parts = syntax.split(/\s+/);
+    // limito pra evitar o exploit de varias direções, ex: 1n 1l 1s 1l 1n 1l 1n 1s ...
+    const parts = syntax.split(/\s+/).slice(0, MAX_WALKS + 1);
     let walks = [];
-    parts.forEach(part => {
-        const matchs = part.match(/^(\d+)([a-z]+)$/);
-        let [, steps, coord] = matchs;
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        let steps, coord;
+        // tenta a sintaxe padrão: 1n
+        let matchs = part.match(/^(\d+)([a-z]+)$/);
+        if (!matchs) {
+            // tenta o modo ao contrario: n1
+            matchs = part.match(/^([a-z]+)(\d+)$/);
 
-        steps = Math.max(0, steps);
-        coord = normalizeCoord(coord);
-        while (coord && steps--) {
-            // adiciona no array quantas vezes tiver step
-            walks.push(coord);
+            if (!matchs) {
+                // se ainda assim nao der, desiste
+                break;
+            } else {
+                [, coord, steps] = matchs;
+            }
+        } else {
+            [, steps, coord] = matchs;
         }
-    });
+        if (steps && coord) {
+            // limito os steps, pra evitar o exploit de uma direção, ex: 99999n
+            steps = Math.min(Math.max(0, steps), MAX_WALKS + 1);
+            coord = normalizeCoord(coord);
+            while (coord && steps--) {
+                // adiciona no array quantas vezes tiver step
+                walks.push(coord);
+            }
+        }
+    }
+
+    // no fim, ainda limito o resultado tbm, pq pode ter o exploit de fazer 999n 999l 999s ...
+    walks = walks.slice(0, MAX_WALKS + 1);
 
     console.log('WALKS CALCULATED', walks);
 
