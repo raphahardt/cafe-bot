@@ -22,6 +22,8 @@ const fbApp = fbAdmin.initializeApp({
 const db = fbApp.database();
 const ref = db.ref('royale');
 
+let tileEmojis = {};
+
 const equips = [
     {
         // por enquanto nada ainda, tenho q pensar em como implementar isso
@@ -38,6 +40,7 @@ const cities = [
 ];
 
 const distances = [
+    { value: 0, name: 'aqui' },
     { value: 1, name: 'muito perto' },
     { value: 2, name: 'bem perto' },
     { value: 4, name: 'perto' },
@@ -86,6 +89,20 @@ class BattleRoyale {
     static royaleCommand(message, args) {
         //console.log('ROLES', message.guild.roles.array().map(r => `${r.id}: ${r.name}`));
 
+        const client = message.client;
+        tileEmojis = {
+            empty: client.emojis.find("name", "r0"),
+            areia: client.emojis.find("name", "ra"),
+            oceano: client.emojis.find("name", "ro"),
+            arvore: client.emojis.find("name", "rt"),
+            arvore2: client.emojis.find("name", "rm"),
+            player: client.emojis.find("name", "rp"),
+            loot: client.emojis.find("name", "rl"),
+            grama: client.emojis.find("name", "rg"),
+            deserto: client.emojis.find("name", "rd"),
+            rio: client.emojis.find("name", "rr")
+        };
+
         // if (message.channel.id !== '461224031123800101') {
         //     message.reply(`:x: Só é permitido jogar o *royale* no <#461224031123800101>.`)
         //         .then(m => {
@@ -124,6 +141,8 @@ class BattleRoyale {
                 return BattleRoyale.royaleWalkCommand(message, args);
             case 'generate-map':
                 return BattleRoyale.generateMapCommand(message, args);
+            case 'view-map':
+                return BattleRoyale.viewMapCommand(message, args);
             case 'drop-loot':
             case 'loot':
                 return BattleRoyale.dropLootCommand(message, args);
@@ -162,58 +181,137 @@ class BattleRoyale {
     static royaleStatsCommand(message, args) {}
 
     static royaleVisionCommand(message, args) {
-
-        getMap().then(map => {
+        Promise.all([
+            getMap(),
+            getPlayers(),
+            getLoots()
+        ]).then(([map, players, loots]) => {
             getPlayer(message.author).then(player => {
                 const channel = getRoyaleChannel(message);
 
-                channel.send(`pos: ${player.pos[0]}, ${player.pos[1]}`);
+                message.reply(`pos: ${player.pos[0]}, ${player.pos[1]}`);
 
-                const vision = calcVision(map, player.pos[0], player.pos[1], args[0], MAX_DISTANCE_OBJECTS_DETECT);
+                let coord = args[0];
+                switch (coord) {
+                    case 'n':
+                    case 'norte':
+                    case 'north':
+                    case 'cima':
+                        coord = 'n';
+                        break;
+                    case 's':
+                    case 'sul':
+                    case 'south':
+                    case 'baixo':
+                        coord = 's';
+                        break;
+                    case 'l':
+                    case 'e':
+                    case 'leste':
+                    case 'east':
+                    case 'esquerda':
+                    case 'esq':
+                        coord = 'l';
+                        break;
+                    case 'o':
+                    case 'w':
+                    case 'oeste':
+                    case 'west':
+                    case 'direita':
+                    case 'dir':
+                        coord = 'o';
+                }
+
+                const vision = calcVision(map, player.pos[0], player.pos[1], coord, MAX_DISTANCE_OBJECTS_DETECT);
 
                 let textMap = "";
-                for (var v = 0; v < MAX_VISION; v++) {
+                for (let v = 0; v < MAX_VISION; v++) {
                     const x = vision[v];
-                    const row = x.map(y => biomeSymbol(y.biome)).join('');
-                    const blanks = (1 + (2 * (MAX_VISION - 1))) - row.length;
+                    const row = x.map(y => renderTile(y, players, loots)).join('');
+                    const blanks = (1 + (2 * (MAX_VISION - 1))) - x.length;
                     const midBlank = parseInt(blanks / 2);
 
-                    textMap += (" ".repeat(midBlank)) + row + (" ".repeat(midBlank));
+                    textMap += (`${tileEmojis.empty}`.repeat(midBlank)) + row;
                     textMap += "\n";
                 }
 
                 // encontrar proximidades
                 let textProx = "";
                 let gone = [];
-                for (var d = 0; d < MAX_DISTANCE_OBJECTS_DETECT; d++) {
+                for (let d = 0; d < MAX_DISTANCE_OBJECTS_DETECT; d++) {
                     for (let i = 0; i < vision[d].length; i++) {
                         const tile = vision[d][i];
 
+                        // se tem cidade
                         if (tile.proxCity) {
-                            const cityName = map[tile.proxCity.origin[0]][tile.proxCity.origin[1]].city.name;
+                            const city = map[tile.proxCity.origin[0]][tile.proxCity.origin[1]].city;
+                            const cityName = city.name;
 
-                            if (!gone.includes(cityName)) {
-                                const distance = distanceName(calcDistance(
+                            if (!gone.includes('c:' + cityName)) {
+                                const distance = calcDistance(
                                     player.pos[0], player.pos[1],
                                     tile.proxCity.origin[0], tile.proxCity.origin[1]
-                                ));
+                                ) - city.radius;
 
-                                textProx += `O local **${cityName}** está ${distance}\n`;
+                                const distanceNam = distanceName(distance);
 
-                                gone.push(cityName);
+                                textProx += `O local **${cityName}** está ${distanceNam}\n`;
+
+                                gone.push('c:' + cityName);
                             }
+                        }
 
+                        // se tem loot
+                        let loot = getLootFromTile(tile, loots);
+                        if (loot) {
+                            console.log('LOOT', loot);
+                            const lootName = loot.name;
+
+                            if (!gone.includes('l:' + lootName)) {
+                                const distance = calcDistance(
+                                    player.pos[0], player.pos[1],
+                                    tile.pos[0], tile.pos[1]
+                                );
+
+                                const distanceNam = distanceName(distance);
+
+                                textProx += `Um drop **${lootName}** está ${distanceNam}\n`;
+
+                                gone.push('l:' + lootName);
+                            }
+                        }
+
+                        // se tem player
+                        let playerFound = getPlayerFromTile(tile, players);
+                        if (playerFound && playerFound.id !== player.id) {
+                            console.log('PLAYER', playerFound);
+                            const playerId = playerFound.id;
+
+                            if (!gone.includes('p:' + playerId)) {
+                                const distance = calcDistance(
+                                    player.pos[0], player.pos[1],
+                                    tile.pos[0], tile.pos[1]
+                                );
+
+                                const distanceNam = distanceName(distance);
+
+                                textProx += `Um jogador **${playerId}** está ${distanceNam}\n`;
+
+                                gone.push('p:' + playerId);
+                            }
                         }
                     }
                 }
 
-                message.reply(`Visão:\n\`\`\`\n${textMap}\`\`\`\nProximidades:\n${textProx}`);
+                message.reply(`Visão:\n${textMap}\nProximidades:\n${textProx}`);
 
 
             }).catch(error => {
+                console.error(error);
                 message.reply(`:x: ${error}`);
             });
         }).catch(error => {
+            console.error(error);
             message.reply(`:x: ${error}`);
         })
     }
@@ -308,12 +406,14 @@ class BattleRoyale {
                     if (polygons[i].prop.min[0] <= xCenter && polygons[i].prop.max[0] >= xCenter
                      && polygons[i].prop.min[1] <= yCenter && polygons[i].prop.max[1] >= yCenter) {
                         arrayMap[x][y] = Object.assign({}, polygons[i].tile);
+                        arrayMap[x][y].pos = [x, y];
                         found = true;
                         break;
                     }
                 }
                 if (!found) {
                     arrayMap[x][y] = Object.assign({}, polygons[0].tile);
+                    arrayMap[x][y].pos = [x, y];
                 }
             }
         }
@@ -368,32 +468,29 @@ class BattleRoyale {
 
         saveMap(arrayMap);
 
-        let textMap = "";
-        arrayMap.map(ax => {
-            let y = 0;
-            while (y < ax.length) {
-                const tile = ax[y];
+        const texts = renderMap(arrayMap);
 
-                if (tile.city) {
-                    const nameLength = tile.city.name.length + 2;
-                    const negativeDiffCityText = parseInt(nameLength / 2);
-                    const positiveDiffCityText = nameLength - negativeDiffCityText;
+        message.channel.send("Mapa:");
+        texts.map(t => { message.channel.send(t); });
+    }
 
-                    // retira os biomas da metade do texto
-                    textMap = textMap.substr(0, textMap.length - negativeDiffCityText);
+    static viewMapCommand(message, args) {
+        if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
+            message.reply(`:x: *Você não tem permissão de usar esse comando.*`);
+            return;
+        }
 
-                    textMap += '[' + tile.city.name + ']';
-                    y += positiveDiffCityText;
-                    continue;
-                }
+        Promise.all([
+            getMap(),
+            getPlayers(),
+            getLoots()
+        ]).then(([map, players, loots]) => {
 
-                textMap += biomeSymbol(tile.biome);
-                y++;
-            }
-            textMap += "\n";
+            const texts = renderMap(map, players, loots, args.includes('--city'));
+
+            message.channel.send("Mapa:");
+            texts.map(t => { message.channel.send(t); });
         });
-
-        message.reply(`Mapa:\n\`\`\`\n${textMap}\`\`\``);
     }
 
 
@@ -472,24 +569,31 @@ function getRoyaleChannel(message) {
 
 /**
  * Retorna a letra daquele bioma
- * @param biome
  */
-function biomeSymbol(biome) {
-    if (biome === 'OCEAN') return '~'; //return '▓';
-    if (biome === 'BEACH') return '░';
-    if (biome === 'TEMPERATE_RAIN_FOREST'
-        || biome === 'TEMPERATE_DECIDUOUS_FOREST'
-        || biome === 'TROPICAL_RAIN_FOREST'
-        || biome === 'TROPICAL_SEASONAL_FOREST') return Math.random() < 0.1 ? '¥' : '▓';
-    if (biome === 'LAKE'
-        || biome === 'MARSH'
-        || biome === 'ICE') return '≡';
-    if (biome === 'TEMPERATE_DESERT'
-        || biome === 'SUBTROPICAL_DESERT'
-        || biome === 'SHRUBLAND') return '▒';
-    if (biome === 'GRASSLAND'
-        || biome === 'TAIGA') return '▒';
-    return biome.substr(0,2);
+function renderTile(tile, players, loots) {
+    let p = players ? getPlayerFromTile(tile, players) : null,
+        l = loots ? getLootFromTile(tile, loots): null;
+    if (p) {
+        return tileEmojis.player;
+    }
+    if (l) {
+        return tileEmojis.loot;
+    }
+    if (tile.biome === 'OCEAN') return tileEmojis.oceano; //return '▓';
+    if (tile.biome === 'BEACH') return tileEmojis.areia; //return '░';
+    if (tile.biome === 'TEMPERATE_RAIN_FOREST'
+        || tile.biome === 'TEMPERATE_DECIDUOUS_FOREST'
+        || tile.biome === 'TROPICAL_RAIN_FOREST'
+        || tile.biome === 'TROPICAL_SEASONAL_FOREST') return Math.random() < 0.1 ? tileEmojis.arvore : tileEmojis.arvore2; //'▓';
+    if (tile.biome === 'LAKE'
+        || tile.biome === 'MARSH'
+        || tile.biome === 'ICE') return tileEmojis.rio;
+    if (tile.biome === 'TEMPERATE_DESERT'
+        || tile.biome === 'SUBTROPICAL_DESERT'
+        || tile.biome === 'SHRUBLAND') return tileEmojis.deserto; //return '▒';
+    if (tile.biome === 'GRASSLAND'
+        || tile.biome === 'TAIGA') return tileEmojis.grama; //return '▒';
+    return tileEmojis.empty;
 }
 
 function getPlayer(user) {
@@ -518,6 +622,7 @@ function createPlayer(user) {
             if (!info) {
                 getRandomWalkableTile().then(tile => {
                     info = {
+                        id: user.id,
                         deaths: 0,
                         wins: 0,
                         loot: [],
@@ -627,28 +732,33 @@ function getPlayers() {
     });
 }
 
+function getLoots() {
+    return new Promise((resolve, reject) => {
+        const lootRef = ref.child(`loot`);
+
+        lootRef.once('value', snapshot => {
+            let loots = snapshot.val();
+
+            if (!loots) {
+                resolve([]);
+            } else {
+                resolve(loots);
+            }
+        });
+    });
+}
+
 function getRandomWalkableTile(forceX, forceY, tries) {
     return new Promise((resolve, reject) => {
         getMap().then(map => {
             getPlayers().then(players => {
                 tries = tries || 200;
 
-                function hasPlayer(x, y) {
-                    if (players) {
-                        for (let p in players) {
-                            if (players[p].pos[0] === x && players[p].pos[1] === y) {
-                                return true;
-                            }
-                        }
-                    }
-                    return false;
-                }
-
                 if (forceX && forceY) {
                     let xa = forceX,
                         ya = forceY;
 
-                    if (map[xa][ya].walkable && !hasPlayer(xa, ya)) {
+                    if (map[xa][ya].walkable && !getPlayerFromTile({ pos: [xa, ya] })) {
                         resolve([xa, ya]);
                     } else {
                         reject('Não pode ser colocado neste tile.');
@@ -658,7 +768,7 @@ function getRandomWalkableTile(forceX, forceY, tries) {
                         let xa = parseInt(Math.random() * MAP_HEIGHT),
                             ya = parseInt(Math.random() * MAP_WIDTH);
 
-                        if (map[xa][ya].walkable && !hasPlayer(xa, ya)) {
+                        if (map[xa][ya].walkable && !getPlayerFromTile({ pos: [xa, ya] })) {
                             resolve([xa, ya]);
                             return;
                         }
@@ -703,8 +813,9 @@ function calcDistance(xorig, yorig, xdest, ydest) {
 }
 
 function distanceName(distance) {
-    let distanceName = "";
-    for (var i = 0; i < distances.length; i++) {
+    return distance;
+    let distanceName = distances[0].name;
+    for (let i = 0; i < distances.length; i++) {
         if (distance >= distances[i].value) {
             distanceName = distances[i].name;
         }
@@ -753,6 +864,135 @@ function calcVision(map, x, y, coord, distanceVision) {
 
     return vision;
 
+}
+
+function getLootFromTile(tile, loots) {
+    let loot = loots.filter(l => l.pos[0] === tile.pos[0] && l.pos[1] === tile.pos[1]);
+    if (loot.length) {
+        return loot[0];
+    }
+    return null;
+}
+
+function getPlayerFromTile(tile, players) {
+    if (players) {
+        for (let p in players) {
+            if (players[p].pos[0] === tile.pos[0] && players[p].pos[1] === tile.pos[1]) {
+                players[p].id = p; // FIXME: precisa sempre colocar o id de novo?
+                return players[p];
+            }
+        }
+    }
+    return null;
+}
+
+function renderMap(map, players, loots, showCities) {
+    // primeiro eu tento diminuir uma escada do mapa, pra ele ficar pela metade
+    function compareTiles(tile1, tile2) {
+        if (!players || !loots) {
+            return tile1;
+        }
+
+        if (getPlayerFromTile(tile2, players) || getLootFromTile(tile2, loots)) {
+            return tile2;
+        } else if (tile2.biome !== 'BEACH' && tile2.biome !== 'OCEAN') {
+            return tile2;
+        } else if (tile2.city) {
+            return tile2;
+        }
+
+        return tile1;
+    }
+
+    // pra saber qtos placeholer eu preciso colocar na frase
+    function numPlaceholders(text) {
+        console.log('NUM PLACE', text);
+        let generator = generatorNumPlaceholder();
+        let value = 0;
+        do {
+            value = generator.next().value;
+        } while (value <= text.length);
+
+        console.log('NUM PLACE :', value, text.length);
+
+        return value - text.length;
+    }
+
+    // gera numero nessa sequencia: 3, 6, 10, 13, 16, 20, 23, 26, 30...
+    function* generatorNumPlaceholder() {
+        let c = 0;
+        let i = 0;
+        while (i < 999) {
+            if (i > 0) yield i;
+            i += 3;
+            c++;
+            if (c === 3) {
+                i++;
+                c = 0;
+            }
+        }
+    }
+
+    let newMap = [];
+    for (let x = 0; x < map.length; x+=2) {
+        newMap[x/2] = [];
+        for (let y = 0; y < map[x].length; y+=2) {
+            newMap[x/2][y/2] = compareTiles(compareTiles(map[x][y], map[x][y+1]), compareTiles(map[x+1][y], map[x+1][y+1]));
+        }
+    }
+
+    let textMap = [""], textIdx = 0;
+    let obs = [], obsIdx = 1;
+    newMap.map(ax => {
+        let y = 0;
+        let textRow = [];
+        while (y < ax.length) {
+            const tile = ax[y];
+
+            // if (showCities && tile.city) {
+            //     let cityName = tile.city.name;
+            //     // coloca um espaço no final a cada 9 caracteres pra "compensar"
+            //     cityName += '='.repeat(numPlaceholders(cityName));
+            //     const nameLength = cityName.length;
+            //     const negativeDiffCityText = parseInt(nameLength / 2);
+            //     const positiveDiffCityText = nameLength - negativeDiffCityText;
+            //
+            //     // retira os biomas da metade do texto
+            //     // 3 = cada emoji vale 3 letras
+            //     // 4 = cada emoji é escrito com 4 caracteres
+            //     textRow.splice(textRow.length - parseInt(negativeDiffCityText / 3));
+            //
+            //     textRow.push('`' + cityName + '`');
+            //     y += parseInt(positiveDiffCityText / 3);
+            //     continue;
+            // }
+
+            textRow.push(renderTile(tile, players, loots));
+
+            if (showCities && tile.city) {
+                // tira o ultimo inserido
+                textRow.pop();
+
+                textRow.push('`[' + obsIdx + ']`');
+                obs.push('`[' + obsIdx + ']` ' + tile.city.name);
+                obsIdx++;
+            }
+
+            y++;
+        }
+        textRow = textRow.join("");
+        if (textMap[textIdx].length + textRow.length > 1800) {
+            textIdx++;
+            textMap[textIdx] = "";
+        }
+        textMap[textIdx] += textRow + "\n";
+    });
+
+    if (obs.length) {
+        textMap[++textIdx] += obs.join("\n");
+    }
+
+    return textMap;
 }
 
 module.exports = BattleRoyale;
