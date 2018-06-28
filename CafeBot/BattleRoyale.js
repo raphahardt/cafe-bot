@@ -54,13 +54,9 @@ let MAP_WIDTH = 62;
 let MAP_HEIGHT = 28;
 let MAX_VISION = 5;
 let MAX_DISTANCE_OBJECTS_DETECT = 15;
+
 let MAX_WALKS = 30;
 let DELAY_WALKS = 10; // em minutos
-
-let MAX_CASTS = 5;
-let DELAY_CASTS = 6; // em horas
-let FAIL_CAST_CHANCE = 0.25;
-let REFLECT_CAST_CHANCE = 0.15;
 
 // ref.child('config').on('value', snapshot => {
 //     let config = snapshot.val();
@@ -100,7 +96,8 @@ class BattleRoyale {
             loot: client.emojis.find("name", "rl"),
             grama: client.emojis.find("name", "rg"),
             deserto: client.emojis.find("name", "rd"),
-            rio: client.emojis.find("name", "rr")
+            rio: client.emojis.find("name", "rr"),
+            city: ':house_abandoned:'
         };
 
         // if (message.channel.id !== '461224031123800101') {
@@ -134,6 +131,7 @@ class BattleRoyale {
                 return BattleRoyale.royaleStatsCommand(message, args);
             case 'view':
             case 'vision':
+            case 'look':
             case 'v':
                 return BattleRoyale.royaleVisionCommand(message, args);
             case 'walk':
@@ -147,27 +145,43 @@ class BattleRoyale {
             case 'loot':
                 return BattleRoyale.dropLootCommand(message, args);
             default:
-                message.reply(`:x: Comando inexistente.\nComandos disponíveis: \`enter, exit, info, view, walk\``);
+                if (throwErrorIfNotInRoyaleChannel(message)) return;
+                message.reply(`:x: Comando inexistente.\nComandos disponíveis: \`enter\`, \`exit\`, \`info/stats\`, \`view/look\`, \`walk\``);
         }
     }
 
+    /**
+     * Faz o usuário sair do jogo.
+     * Se ele tiver loot, todos eles serão espalhados pelo mapa.
+     *
+     * @param message
+     * @param args
+     */
     static royaleExitCommand(message, args) {
+        if (throwErrorIfNotInRoyaleChannel(message)) return;
+        const channel = getRoyaleChannel(message);
 
         exitPlayer(message.author).then(successMsg => {
-            const channel = getRoyaleChannel(message);
             channel.send(successMsg);
         }).catch(error => {
             message.reply(`:x: ${error}`);
         })
     }
 
+    /**
+     * Faz o usuário entrar no jogo.
+     *
+     * @param message
+     * @param args
+     */
     static royaleEnterCommand(message, args) {
+        if (throwErrorIfNotInRoyaleChannel(message)) return;
+        const channel = getRoyaleChannel(message);
 
         createPlayer(message.author).then(([ exists, player ]) => {
-            const channel = getRoyaleChannel(message);
 
             if (exists) {
-                message.reply(`:thumbsup: Você já está no jogo!`);
+                channel.send(`:thumbsup: ${message.author}, você já está no jogo!`);
             } else {
                 channel.send(`:inbox_tray: Usuário ${message.author} entrou no jogo!`);
                 console.log('ENTER', player);
@@ -178,36 +192,42 @@ class BattleRoyale {
         })
     }
 
-    static royaleStatsCommand(message, args) {}
+    /**
+     * Mostra os stats do jogador.
+     *
+     * @param message
+     * @param args
+     */
+    static royaleStatsCommand(message, args) {
+        if (throwErrorIfNotInRoyaleChannel(message)) return;
+        const channel = getRoyaleChannel(message);
+    }
 
+    /**
+     * Olha para uma direção e mostra os tiles até um certo ponto daquela visão
+     *
+     * @param message
+     * @param args
+     */
     static royaleVisionCommand(message, args) {
+        if (throwErrorIfNotInRoyaleChannel(message)) return;
+        const channel = getRoyaleChannel(message);
+
         Promise.all([
             getMap(),
             getPlayers(),
             getLoots()
         ]).then(([map, players, loots]) => {
             getPlayer(message.author).then(player => {
-                const channel = getRoyaleChannel(message);
-
-                message.reply(`pos: ${player.pos[0]}, ${player.pos[1]}`);
 
                 let coord = normalizeCoord(args[0]);
 
                 const vision = calcVision(map, player.pos[0], player.pos[1], coord, MAX_DISTANCE_OBJECTS_DETECT);
 
-                let textMap = renderVision(vision, coord, players, loots);
-                // for (let v = 0; v < MAX_VISION; v++) {
-                //     const x = vision[v];
-                //     const row = x.map(y => renderTile(y, players, loots)).join('');
-                //     const blanks = (1 + (2 * (MAX_VISION - 1))) - x.length;
-                //     const midBlank = parseInt(blanks / 2);
-                //
-                //     textMap += (`${tileEmojis.empty}`.repeat(midBlank)) + row;
-                //     textMap += "\n";
-                // }
+                const renderedVision = renderVision(vision, coord, players, loots);
 
                 // encontrar proximidades
-                let textProx = "";
+                let textProximities = "";
                 let gone = [];
                 for (let d = 0; d < MAX_DISTANCE_OBJECTS_DETECT; d++) {
                     for (let i = 0; i < vision[d].length; i++) {
@@ -219,14 +239,10 @@ class BattleRoyale {
                             const cityName = city.name;
 
                             if (!gone.includes('c:' + cityName)) {
-                                const distance = calcDistance(
-                                    player.pos[0], player.pos[1],
-                                    tile.proxCity.origin[0], tile.proxCity.origin[1]
-                                ) - city.radius;
+                                const distance = calcDistancePos(player.pos, tile.proxCity.origin) - city.radius;
+                                const distanceText = distanceName(distance);
 
-                                const distanceNam = distanceName(distance);
-
-                                textProx += `O local **${cityName}** está ${distanceNam}\n`;
+                                textProximities += `${tileEmojis.city} O local **${cityName}** está há ${distanceText}\n`;
 
                                 gone.push('c:' + cityName);
                             }
@@ -239,14 +255,10 @@ class BattleRoyale {
                             const lootName = loot.name;
 
                             if (!gone.includes('l:' + lootName)) {
-                                const distance = calcDistance(
-                                    player.pos[0], player.pos[1],
-                                    tile.pos[0], tile.pos[1]
-                                );
+                                const distance = calcDistancePos(player.pos, tile.pos);
+                                const distanceText = distanceName(distance);
 
-                                const distanceNam = distanceName(distance);
-
-                                textProx += `Um drop **${lootName}** está ${distanceNam}\n`;
+                                textProximities += `${tileEmojis.loot} O drop **${lootName}** está há ${distanceText}\n`;
 
                                 gone.push('l:' + lootName);
                             }
@@ -259,14 +271,10 @@ class BattleRoyale {
                             const playerId = playerFound.id;
 
                             if (!gone.includes('p:' + playerId)) {
-                                const distance = calcDistance(
-                                    player.pos[0], player.pos[1],
-                                    tile.pos[0], tile.pos[1]
-                                );
+                                const distance = calcDistancePos(player.pos, tile.pos);
+                                const distanceText = distanceName(distance);
 
-                                const distanceNam = distanceName(distance);
-
-                                textProx += `Um jogador **${playerId}** está ${distanceNam}\n`;
+                                textProximities += `${tileEmojis.player} Um jogador **${playerId}** está há ${distanceText}\n`;
 
                                 gone.push('p:' + playerId);
                             }
@@ -274,7 +282,7 @@ class BattleRoyale {
                     }
                 }
 
-                message.reply(`Visão:\n${textMap}\nProximidades:\n${textProx}`);
+                message.reply(`**Visão:**\n${renderedVision}\n**Proximidades:**\n${textProximities}`);
 
 
             }).catch(error => {
@@ -287,21 +295,33 @@ class BattleRoyale {
         })
     }
 
+    /**
+     * Faz o player andar pelo mapa.
+     * O player só pode andar pelos tiles que são "andáveis".
+     * A sintaxe dos walks é feita de [numero]+[coordenada], em sequencia
+     * Exemplo: 10n 3l 4s
+     *          (anda 10 para o norte, 3 para leste e 4 para sul)
+     *
+     * @param message
+     * @param args
+     */
     static royaleWalkCommand(message, args) {
+        if (throwErrorIfNotInRoyaleChannel(message)) return;
+        const channel = getRoyaleChannel(message);
+
         Promise.all([
             getMap(),
             getPlayers(),
             getLoots()
         ]).then(([map, players, loots]) => {
             getPlayer(message.author).then(player => {
-                const channel = getRoyaleChannel(message);
 
                 let walks = walkSyntaxToWalks(args.join(" "));
                 let availableWalks = getWalksAvailable(player);
 
                 if (availableWalks < walks.length) {
                     const timeLeft = getTimeLeftForNextWalk(player);
-                    message.reply(`:x: Você não tem passos suficientes (tem: ${availableWalks}, precisa: ${walks.length}).` + (availableWalks === 0 ? ` Volte em **${timeLeft}** para mais passos.` : ''));
+                    message.reply(`:x: Você não tem passos suficientes *(tem: ${availableWalks}, precisaria: ${walks.length})*.` + (availableWalks === 0 ? ` Volte em **${timeLeft}** para mais passos.` : ''));
                     return;
                 }
 
@@ -329,10 +349,15 @@ class BattleRoyale {
                     // a cada passo, checa se não está andando em chão "não pisável"
                     const tile = map[newPos[0]][newPos[1]];
                     if (!tile.walkable) {
+                        // se o tile não for andável, já para o andar e não altera nada
                         const terrain = renderTile(tile);
                         message.reply(`:x: Ops! No passo **${w+1}** você encontrou ${terrain} e você não pode passar sobre. Você continua na mesma posição e pode tentar andar novamente.`);
                         return;
+
                     } else {
+                        // registra alguns itens pelos quais o player passou
+                        // mas não interagiu. isso serve pro player ficar atento aos
+                        // drops e outros players por perto
                         if (getPlayerFromTile(tile, players)) {
                             steppedBy.push({
                                 type: 'player',
@@ -349,7 +374,8 @@ class BattleRoyale {
                     }
                 }
 
-                // muda alguns stats e descarta os walks usados
+                // se deu certo andar, muda alguns
+                // stats e descarta os walks usados
                 player.walksUsed += walks.length;
                 availableWalks -= walks.length;
                 if (!player.timestampWalks) player.timestampWalks = [];
@@ -360,7 +386,11 @@ class BattleRoyale {
                 // coloca o player na nova posição
                 player.pos = newPos;
 
+                // pega o tile novo no qual o player está atualmente
                 const newTile = map[player.pos[0]][player.pos[1]];
+
+                // verifica aqui o que tinha naquele tile, pra fazer algumas
+                // interações
 
                 // se tem loot
                 let loot = getLootFromTile(newTile, loots);
@@ -378,21 +408,22 @@ class BattleRoyale {
                 }
 
                 // se tem player
-                let playerFound = getPlayerFromTile(newTile, players);
-                if (playerFound && playerFound.id !== player.id) {
+                let playerEnemy = getPlayerFromTile(newTile, players);
+                if (playerEnemy && playerEnemy.id !== player.id) {
                     // começa uma luta!
                     const win = (Math.random() * 2000) <= 1000;
 
                     if (win) {
                         // se ganhou, pega todos os loots do outro player
+                        respawnPlayer()
 
                     }
                 }
 
+                // salva o player
                 ref.child(`player/${player.id}`).set(player);
 
-                message.reply(`pos nova: ${newPos[0]}, ${newPos[1]}`);
-
+                // mostra msg de resposta
                 const timeLeft = getTimeLeftForNextWalk(player);
                 const distanceWalked = distanceName(walks.length);
                 const steppedByText = steppedBy.filter(sb => {
@@ -405,82 +436,6 @@ class BattleRoyale {
                         + distanceName(calcDistance(sb.pos[0], sb.pos[1], player.pos[0], player.pos[1]));
                 }).join("\n");
                 message.reply(`:white_check_mark: Você andou **${distanceWalked}**, ` + (availableWalks === 0 ? `mas não tem mais passos disponíveis. Volte em **${timeLeft}** para mais passos.` : `e ainda tem ${availableWalks} passos disponíveis.`) + (steppedByText ? `\nEnquanto andava...\n` + steppedByText : ''));
-
-                // let coord = normalizeCoord(args[0]);
-                //
-                // const vision = calcVision(map, player.pos[0], player.pos[1], coord, MAX_DISTANCE_OBJECTS_DETECT);
-                //
-                // let textMap = renderVision(vision, coord, players, loots);
-                //
-                // // encontrar proximidades
-                // let textProx = "";
-                // let gone = [];
-                // for (let d = 0; d < MAX_DISTANCE_OBJECTS_DETECT; d++) {
-                //     for (let i = 0; i < vision[d].length; i++) {
-                //         const tile = vision[d][i];
-                //
-                //         // se tem cidade
-                //         if (tile.proxCity) {
-                //             const city = map[tile.proxCity.origin[0]][tile.proxCity.origin[1]].city;
-                //             const cityName = city.name;
-                //
-                //             if (!gone.includes('c:' + cityName)) {
-                //                 const distance = calcDistance(
-                //                     player.pos[0], player.pos[1],
-                //                     tile.proxCity.origin[0], tile.proxCity.origin[1]
-                //                 ) - city.radius;
-                //
-                //                 const distanceNam = distanceName(distance);
-                //
-                //                 textProx += `O local **${cityName}** está ${distanceNam}\n`;
-                //
-                //                 gone.push('c:' + cityName);
-                //             }
-                //         }
-                //
-                //         // se tem loot
-                //         let loot = getLootFromTile(tile, loots);
-                //         if (loot) {
-                //             console.log('LOOT', loot);
-                //             const lootName = loot.name;
-                //
-                //             if (!gone.includes('l:' + lootName)) {
-                //                 const distance = calcDistance(
-                //                     player.pos[0], player.pos[1],
-                //                     tile.pos[0], tile.pos[1]
-                //                 );
-                //
-                //                 const distanceNam = distanceName(distance);
-                //
-                //                 textProx += `Um drop **${lootName}** está ${distanceNam}\n`;
-                //
-                //                 gone.push('l:' + lootName);
-                //             }
-                //         }
-                //
-                //         // se tem player
-                //         let playerFound = getPlayerFromTile(tile, players);
-                //         if (playerFound && playerFound.id !== player.id) {
-                //             console.log('PLAYER', playerFound);
-                //             const playerId = playerFound.id;
-                //
-                //             if (!gone.includes('p:' + playerId)) {
-                //                 const distance = calcDistance(
-                //                     player.pos[0], player.pos[1],
-                //                     tile.pos[0], tile.pos[1]
-                //                 );
-                //
-                //                 const distanceNam = distanceName(distance);
-                //
-                //                 textProx += `Um jogador **${playerId}** está ${distanceNam}\n`;
-                //
-                //                 gone.push('p:' + playerId);
-                //             }
-                //         }
-                //     }
-                // }
-                //
-                // message.reply(`Visão:\n${textMap}\nProximidades:\n${textProx}`);
 
 
             }).catch(error => {
@@ -741,7 +696,7 @@ class BattleRoyale {
                 // salva o novo array de loots
                 lootRef.set(loots);
 
-                channel.send(`:gift: **Atenção!** Um drop caiu na ilha! O loot é **${lootName}**!`);
+                channel.send(`${tileEmojis.loot} **Atenção!** Um drop caiu na ilha! O loot é **${lootName}**!`);
             });
 
         }).catch(error => {
@@ -785,10 +740,26 @@ function getRoyaleChannel(message) {
     return ch;
 }
 
+function throwErrorIfNotInRoyaleChannel(message) {
+    if (message.channel.id !== '461224031123800101') {
+        message.reply(`:x: Só é permitido jogar o *Battle Royale* no canal <#461224031123800101>.`)
+            .then(m => {
+                // deleta a sua mensagem de comando
+                message.delete();
+                // deleta a mensagem de aviso dps de 4 segundos
+                m.delete(4000);
+            });
+        return true;
+    }
+
+    return false;
+}
+
 /**
  * Retorna a letra daquele bioma
  */
 function renderTile(tile, players, loots) {
+    const tileSeed = tile.pos[0] + tile.pos[1];
     //return `[BIOME: ${tile.biome}, X: ${tile.pos[0]}, Y: ${tile.pos[1]}]`;
     let p = players ? getPlayerFromTile(tile, players) : null,
         l = loots ? getLootFromTile(tile, loots): null;
@@ -803,7 +774,7 @@ function renderTile(tile, players, loots) {
     if (tile.biome === 'TEMPERATE_RAIN_FOREST'
         || tile.biome === 'TEMPERATE_DECIDUOUS_FOREST'
         || tile.biome === 'TROPICAL_RAIN_FOREST'
-        || tile.biome === 'TROPICAL_SEASONAL_FOREST') return Math.random() < 0.1 ? tileEmojis.arvore : tileEmojis.arvore2; //'▓';
+        || tile.biome === 'TROPICAL_SEASONAL_FOREST') return utils.seededRandom(tileSeed) < 0.1 ? tileEmojis.arvore : tileEmojis.arvore2; //'▓';
     if (tile.biome === 'LAKE'
         || tile.biome === 'MARSH'
         || tile.biome === 'ICE') return tileEmojis.rio;
@@ -825,6 +796,8 @@ function getPlayer(user) {
             if (!info) {
                 reject('Usuário não está jogando. Use `+royale enter` pra participar.');
             } else {
+                info.timestampWalks = info.timestampWalks || [];
+                info.loot = info.loot || [];
                 resolve(info);
             }
         });
@@ -965,14 +938,18 @@ function exitPlayer(user) {
 
 function getPlayers() {
     return new Promise((resolve, reject) => {
-        const coreUserRef = ref.child(`player`);
+        const playerRef = ref.child(`player`);
 
-        coreUserRef.once('value', snapshot => {
+        playerRef.once('value', snapshot => {
             let players = snapshot.val();
 
             if (!players) {
                 resolve({});
             } else {
+                for (var p in players) {
+                    players[p].timestampWalks = players[p].timestampWalks || [];
+                    players[p].loot = players[p].loot || [];
+                }
                 resolve(players);
             }
         });
@@ -995,37 +972,39 @@ function getLoots() {
     });
 }
 
+// TODO: mudar o nome pra Pos em vez de Tile, pois Tile tem outra conotação agora
+// TODO: transformar essa funcao em algo sem promise, em que receba todos os params necessarios
+// exemplo: function grwt(forcePos, map, players, loots, tries) { ...
 function getRandomWalkableTile(forceX, forceY, tries) {
     return new Promise((resolve, reject) => {
-        getMap().then(map => {
-            getPlayers().then(players => {
-                tries = tries || 200;
+        Promise.all([
+            getMap(),
+            getPlayers()
+        ]).then(([ map, players ]) => {
+            tries = tries || 200;
 
-                if (forceX && forceY) {
-                    let xa = forceX,
-                        ya = forceY;
+            if (forceX && forceY) {
+                let xa = forceX,
+                    ya = forceY;
 
-                    if (map[xa][ya].walkable && !getPlayerFromTile({ pos: [xa, ya] })) {
-                        resolve([xa, ya]);
-                    } else {
-                        reject('Não pode ser colocado neste tile.');
-                    }
+                if (map[xa][ya].walkable && !getPlayerFromTile({ pos: [xa, ya] }, players)) {
+                    resolve([xa, ya]);
                 } else {
-                    while (tries--) {
-                        let xa = parseInt(Math.random() * MAP_HEIGHT),
-                            ya = parseInt(Math.random() * MAP_WIDTH);
+                    reject('Não pode ser colocado neste tile.');
+                }
+            } else {
+                while (tries--) {
+                    let xa = parseInt(Math.random() * MAP_HEIGHT),
+                        ya = parseInt(Math.random() * MAP_WIDTH);
 
-                        if (map[xa][ya].walkable && !getPlayerFromTile({ pos: [xa, ya] })) {
-                            resolve([xa, ya]);
-                            return;
-                        }
+                    if (map[xa][ya].walkable && !getPlayerFromTile({ pos: [xa, ya] }, players)) {
+                        resolve([xa, ya]);
+                        return;
                     }
-
-                    reject('Houve um erro inesperado e não foi possível detectar um tile no momento. Tente novamente.');
                 }
 
-            }).catch(reject);
-
+                reject('Houve um erro inesperado e não foi possível detectar um tile no momento. Tente novamente.');
+            }
         }).catch(reject);
     });
 }
@@ -1059,8 +1038,13 @@ function calcDistance(xorig, yorig, xdest, ydest) {
     return Math.sqrt(hipotenuse);
 }
 
+function calcDistancePos(posOrig, posDest) {
+    return calcDistance(posOrig[0], posOrig[1], posDest[0], posDest[1]);
+}
+
 function distanceName(distance) {
-    return Math.round(distance * 100) + ' metros';
+    let value = parseInt(Math.round(distance * 100));
+    return value + ' metro' + (value !== 1 ? 's' : '');
     //return distance;
     // let distanceName = distances[0].name;
     // for (let i = 0; i < distances.length; i++) {
@@ -1092,8 +1076,6 @@ function calcVision(map, x, y, coord, distanceVision) {
         if (orientation === 'h') {
             let yo = origBounds[2];
             for (let xo = origBounds[0]; xo <= origBounds[1]; xo++) {
-                //console.log('VISION '+ i, map[xo][yo].biome);
-
                 vision[i].push(map[xo][yo]);
             }
             origBounds[2] += direction;
@@ -1102,7 +1084,6 @@ function calcVision(map, x, y, coord, distanceVision) {
         } else {
             let xo = origBounds[1];
             for (let yo = origBounds[2]; yo <= origBounds[3]; yo++) {
-                //console.log('VISION '+ i, map[xo][yo].biome);
                 vision[i].push(map[xo][yo]);
             }
             origBounds[1] += direction;
@@ -1128,6 +1109,9 @@ function renderVision(vision, coord, players, loots) {
     if (orientation === 'v') {
         for (let v = 0; v < MAX_VISION; v++) {
             const x = visionCopy[v];
+            if (!x) {
+                break;
+            }
             const row = x.map(y => renderTile(y, players, loots)).join('');
             const blanks = (1 + (2 * (MAX_VISION - 1))) - x.length;
             if (blanks < 0) continue; // segurança
@@ -1142,6 +1126,9 @@ function renderVision(vision, coord, players, loots) {
 
         for (let v = 0; v < MAX_VISION; v++) {
             const x = visionCopy[v];
+            if (!x) {
+                break;
+            }
             const row = x.map(y => renderTile(y, players, loots));
             const blanks = (1 + (2 * (MAX_VISION - 1))) - x.length;
             if (blanks < 0) continue; // segurança
