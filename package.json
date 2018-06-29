@@ -6,7 +6,7 @@
   "dependencies": {
     "@redblobgames/dual-mesh": "git+https://github.com/redblobgames/dual-mesh.git",
     "@redblobgames/mapgen2": "git+https://github.com/redblobgames/mapgen2.git",
-    "discord.js": "^11.2.1",
+    "discord.js": "^11.3.2",
     "fast-levenshtein": "^2.0.6",
     "firebase-admin": "^5.8.0",
     "opusscript": "0.0.6",

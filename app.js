@@ -2,6 +2,7 @@
 
 const Discord = require("discord.js");
 const client = new Discord.Client();
+const utils = require('./utils');
 
 const packageCfg = require("./package.json");
 
@@ -23,8 +24,9 @@ client.on("ready", () => {
     //client.channels.find('name', 'mesa-shop').fetchMessage('394125088896581653').then(msg => msg.react('💒')).catch(console.error);
 
     // modifica o "playing" do bot
-    //client.user.setGame(`on ${client.guilds.size} servers`);
-    client.user.setGame(`${packageCfg.version}`);
+    //client.user.setGame(`${phrases[0]} (${packageCfg.version})`);
+    const phrases = utils.shuffle(['você tomar café', 'os ghosts safados', 'seus abcs']);
+    client.user.setActivity(`${phrases[0]} (${packageCfg.version})`, { type: 'WATCHING' });
 
     // procura o canal pra mandar as mensagens pinnadas
     const logChannel = client.channels.find('name', 'log-e-comandos');

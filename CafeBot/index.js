@@ -18,7 +18,7 @@ module.exports = {
         }
 
         discordClient.on('message', message => {
-            if (utils.verifyUserIsBot(message.member)) return;
+            if (message.author.bot) return;
 
             // ignora qualquer mensagem que não começar com o prefixo
             // e ignora tambem caso o comando for passado com espaço entre o prefixo e o comando

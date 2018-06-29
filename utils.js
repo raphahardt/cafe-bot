@@ -193,6 +193,129 @@ const utils = {
 
         return utils.uniqueArray(mentionedMembers);
 
+    },
+
+    /**
+     * Manda uma mensagem maior do que 2000 caracteres.
+     * Se passou dos 2000, ele separa em duas msgs.
+     * Ele é inteligente o suficiente pra não separar metades de frases.
+     *
+     * @param channel
+     * @param longContent
+     */
+    sendLongMessage(channel, longContent) {
+        const MAX_MESSAGE_LENGTH = 1970; // faixa de 30 caracteres pra menos só pra garantir
+
+        // se nem passa dos 2000 caracteres, nao tem nem pq fazer tudo isso
+        if (longContent.length <= MAX_MESSAGE_LENGTH) {
+            return channel.send(longContent);
+        }
+
+        // ...agora se passa dos 2000 caracteres, vamos ter q dividir o
+        // texto em chunks inteligentes
+        function* generateChunks(text, separators) {
+            if (!separators.length) {
+                // entao infelizmente separa POR caractere
+                let chunks = text.match(new RegExp('.{1,' + MAX_MESSAGE_LENGTH + '}', 'g'));
+                for (let k = 0; k < chunks.length; k++) {
+                    yield chunks[k];
+                }
+            } else {
+                let separator = separators.shift();
+                if (!(text.indexOf(separator) >= 0)) {
+                    // se nao tem o simbolo, tenta com o proximo
+                    yield* generateChunks(text, separators);
+                } else {
+                    // se tem, tenta separar
+                    let arrayText = text.split(separator).map(t => t + separator);
+                    let textRow = "";
+                    for (let i = 0; i < arrayText.length; i++) {
+                        const row = arrayText[i];
+                        if (row.length > MAX_MESSAGE_LENGTH) {
+                            // se mesmo assim a msg ta grande, tenta com o proximo
+                            yield* generateChunks(row, separators);
+                        } else {
+                            if (textRow.length + row.length > MAX_MESSAGE_LENGTH) {
+                                yield textRow;
+                                textRow = "";
+                            }
+                            textRow += row;
+                        }
+                    }
+                    // o que sobrou do ultimo chunk de row
+                    if (textRow) yield textRow;
+                }
+            }
+        }
+
+        // let iterableChunks = {};
+        // iterableChunks[Symbol.iterator] = function* () {
+        //     if (!longContent.match(/\n/)) {
+        //
+        //     } else {
+        //
+        //     }
+        //     let longArrayRows = longContent.split(/\n/).map(t => t + "\n");
+        //     let textRow = "";
+        //     for (let i = 0; i < longArrayRows.length; i++) {
+        //         const row = longArrayRows[i];
+        //         // primeiro verifica se a propria linha não tem mais de 2000 caracteres
+        //         if (row.length > MAX_MESSAGE_LENGTH) {
+        //             // se tiver, separa por espaços
+        //             let longArrayColumns = row.split(/ /).map(t => t + " ");
+        //             let textColumn = "";
+        //             for (let j = 0; j < longArrayColumns.length; i++) {
+        //                 const column = longArrayColumns[j];
+        //                 // se ainda assim, o pedaço da coluna for maior que 2000...
+        //                 if (column.length > MAX_MESSAGE_LENGTH) {
+        //                     // entao infelizmente separa POR caractere
+        //                     let chunks = column.match(new RegExp('.{1,' + MAX_MESSAGE_LENGTH + '}', 'g'));
+        //                     for (let k = 0; k < chunks.length; k++) {
+        //                         yield chunks[k];
+        //                     }
+        //                 } else {
+        //                     if (textColumn.length + column.length > MAX_MESSAGE_LENGTH) {
+        //                         yield textColumn;
+        //                         textColumn = "";
+        //                     }
+        //                     textColumn += column;
+        //                 }
+        //             }
+        //             // o que sobrou do ultimo chunk de column
+        //             if (textColumn) yield textColumn;
+        //         } else {
+        //             if (textRow.length + row.length > MAX_MESSAGE_LENGTH) {
+        //                 yield textRow;
+        //                 textRow = "";
+        //             }
+        //             textRow += row;
+        //         }
+        //     }
+        //     // o que sobrou do ultimo chunk de row
+        //     if (textRow) yield textRow;
+        // };
+
+        let generator = generateChunks(longContent, ["\n", " "]);
+        let msgPromises = [], content = [];
+        let chunk;
+        while (chunk = generator.next()) {
+            if (chunk.done) {
+                break;
+            }
+            content.push(chunk.value);
+            msgPromises.push(channel.send("**...**"));
+        }
+        // for (let chunk of iterableChunks) {
+        //     content.push(chunk);
+        //     msgPromises.push(channel.send("**...**"));
+        // }
+
+        // manda a mensagem de quantas msgs vao ser e envia uma a uma
+        return Promise.all(msgPromises).then((msgs) => {
+            for (let m = 0; m < msgs.length; m++) {
+                msgs[m].edit(content[m]);
+            }
+        });
     }
 
 };

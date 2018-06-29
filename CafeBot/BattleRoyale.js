@@ -39,16 +39,6 @@ const cities = [
     { name: 'Floresta da decepção', radius: 3, biomes: ['TEMPERATE_RAIN_FOREST', 'TEMPERATE_DECIDUOUS_FOREST'] },
 ];
 
-const distances = [
-    { value: 0, name: 'aqui' },
-    { value: 1, name: 'muito perto' },
-    { value: 2, name: 'bem perto' },
-    { value: 4, name: 'perto' },
-    { value: 6, name: 'pouco longe' },
-    { value: 10, name: 'bem longe' },
-    { value: Infinity, name: 'muito longe' },
-];
-
 // padrão
 let MAP_WIDTH = 54;
 let MAP_HEIGHT = 54;
@@ -58,13 +48,17 @@ let MAX_DISTANCE_OBJECTS_DETECT = 15;
 let MAX_WALKS = 30;
 let DELAY_WALKS = 10; // em minutos
 
-// ref.child('config').on('value', snapshot => {
-//     let config = snapshot.val();
-//
-//     MAP_WIDTH = config.mapWidth;
-//     MAP_HEIGHT = config.mapHeight;
-//
-// });
+let ROYALE_CHANNEL_ID = '461224031123800101';
+let DEBUG = false;
+
+ref.child('config').on('value', snapshot => {
+    let config = snapshot.val();
+
+    if (config) {
+        ROYALE_CHANNEL_ID = config.channelId || ROYALE_CHANNEL_ID;
+        DEBUG = config.debug || false;
+    }
+});
 
 function makeRandomInt(seed) {
     return function (n) {
@@ -100,23 +94,16 @@ class BattleRoyale {
             city: ':house_abandoned:'
         };
 
-        // if (message.channel.id !== '461224031123800101') {
-        //     message.reply(`:x: Só é permitido jogar o *royale* no <#461224031123800101>.`)
-        //         .then(m => {
-        //             // deleta a mensagem dps de 8 segundos
-        //             m.delete(8000);
-        //         });
-        //     return;
-        // }
-
         if (Math.random() < 0.2) {
             // pra garantir que leia do banco de vez em quando caso o evento lá em cima falhar
-            // ref.child('config').once('value', snapshot => {
-            //     let config = snapshot.val();
-            //
-            //     MAP_WIDTH = config.mapWidth;
-            //     MAP_HEIGHT = config.mapHeight;
-            // });
+            ref.child('config').once('value', snapshot => {
+                let config = snapshot.val();
+
+                if (config) {
+                    ROYALE_CHANNEL_ID = config.channelId || ROYALE_CHANNEL_ID;
+                    DEBUG = config.debug || false;
+                }
+            });
         }
 
         const arg = args.shift();
@@ -171,9 +158,14 @@ class BattleRoyale {
     static royaleExitCommand(message, args) {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
+        const responseChannel = getResponseChannel(message);
 
         exitPlayer(message.author).then(successMsg => {
-            channel.send(successMsg);
+            responseChannel.send(successMsg);
+            if (responseChannel.id !== channel.id) {
+                // anuncia tbm no canal do jogo
+                channel.send(successMsg);
+            }
         }).catch(error => {
             message.reply(`:x: ${error}`);
         })
@@ -188,13 +180,13 @@ class BattleRoyale {
     static royaleEnterCommand(message, args) {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
-        const hasPermission = message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS);
+        const responseChannel = getResponseChannel(message);
 
         // vai pegar as sintaxes:
         // x y
         // x,y
         // x, y
-        let forcedPos = hasPermission ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
+        let forcedPos = hasPermission(message) ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
         if (!forcedPos[0]) {
             forcedPos = null;
         }
@@ -202,11 +194,18 @@ class BattleRoyale {
 
         createPlayer(message.author, forcedPos).then(([ exists, player ]) => {
 
+            let text;
             if (exists) {
-                channel.send(`:thumbsup: ${message.author}, você já está no jogo!`);
+                text = `:thumbsup: ${message.author}, você já está no jogo!`;
             } else {
-                channel.send(`:inbox_tray: Usuário ${message.author} entrou no jogo!`);
+                text = `:inbox_tray: Usuário ${message.author} entrou no jogo!`;
                 console.log('ENTER', player);
+            }
+
+            responseChannel.send(text);
+            if (responseChannel.id !== channel.id) {
+                // anuncia tbm no canal do jogo
+                channel.send(text);
             }
 
         }).catch(error => {
@@ -223,13 +222,13 @@ class BattleRoyale {
     static royaleTeleportCommand(message, args) {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
-        const hasPermission = message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS);
+        const responseChannel = getResponseChannel(message);
 
         // vai pegar as sintaxes:
         // x y
         // x,y
         // x, y
-        let forcedPos = hasPermission ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
+        let forcedPos = hasPermission(message) ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
         if (!forcedPos[0]) {
             forcedPos = null;
         }
@@ -248,7 +247,13 @@ class BattleRoyale {
             ref.child(`player/${playerId}`).set(player);
             players[playerId] = player;
 
-            channel.send(`${tileEmojis.player} O jogador <@${playerId}> foi teleportado! Seu loot foi espalhado.`);
+            const text = `${tileEmojis.player} O jogador <@${playerId}> foi teleportado! Seu loot foi espalhado.`;
+
+            responseChannel.send(text);
+            if (responseChannel.id !== channel.id) {
+                // anuncia tbm no canal do jogo
+                channel.send(text);
+            }
 
 
         }).catch(error => {
@@ -266,6 +271,7 @@ class BattleRoyale {
     static royaleStatsCommand(message, args) {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
+        const responseChannel = getResponseChannel(message);
 
         getPlayer(message.author).then((player) => {
             const availableWalks = getWalksAvailable(player);
@@ -277,11 +283,11 @@ class BattleRoyale {
             emb.addField(':wavy_dash:', `${tileEmojis.player} __Informações__`, false);
             emb.addField(`Vitórias`, player.wins || 0, true);
             emb.addField(`Mortes`, player.deaths || 0, true);
-            emb.addField(`Total caminhado`, distanceName(player.walksUsed || 0), true);
+            emb.addField(`Total caminhado`, getDistanceName(player.walksUsed || 0), true);
             const rating = parseInt(((player.wins || 0) / Math.max(player.wins + player.deaths, 1)) * 100);
             emb.addField(`% Sucesso`, rating + '%', true);
 
-            let text = `${message.author}`;
+            let text = `${message.author}, `;
 
             text += `Você tem **${availableWalks}** passos disponíveis no momento.`;
             if (availableWalks <= 0) {
@@ -292,7 +298,7 @@ class BattleRoyale {
 
             text += "\n";
 
-            channel.send(text, {embed: emb});
+            responseChannel.send(text, {embed: emb});
         });
     }
 
@@ -305,6 +311,9 @@ class BattleRoyale {
     static royaleVisionCommand(message, args) {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
+        const responseChannel = getResponseChannel(message);
+
+        const _debug = isDebug(message, args);
 
         Promise.all([
             getMap(),
@@ -325,7 +334,7 @@ class BattleRoyale {
 
                 const vision = calcVision(map, player.pos[0], player.pos[1], coord, MAX_DISTANCE_OBJECTS_DETECT);
 
-                const renderedVision = renderVision(vision, coord, players, loots);
+                const renderedVision = renderVision(vision, coord, players, loots, _debug);
 
                 // encontrar proximidades
                 let textProximities = "";
@@ -341,7 +350,7 @@ class BattleRoyale {
 
                             if (!gone.includes('c:' + cityName)) {
                                 const distance = calcDistancePos(player.pos, tile.proxCity.origin) - city.radius;
-                                const distanceText = distanceName(distance);
+                                const distanceText = getDistanceName(distance);
 
                                 textProximities += `${tileEmojis.city} O local **${cityName}** está há ${distanceText}\n`;
 
@@ -357,7 +366,7 @@ class BattleRoyale {
 
                             if (!gone.includes('l:' + lootName)) {
                                 const distance = calcDistancePos(player.pos, tile.pos);
-                                const distanceText = distanceName(distance);
+                                const distanceText = getDistanceName(distance);
 
                                 textProximities += `${tileEmojis.loot} O drop **${lootName}** está há ${distanceText}\n`;
 
@@ -373,7 +382,7 @@ class BattleRoyale {
 
                             if (!gone.includes('p:' + playerId)) {
                                 const distance = calcDistancePos(player.pos, tile.pos);
-                                const distanceText = distanceName(distance);
+                                const distanceText = getDistanceName(distance);
 
                                 textProximities += `${tileEmojis.player} Um jogador está há ${distanceText}\n`;
 
@@ -387,7 +396,7 @@ class BattleRoyale {
                 player.lastCoord = coord;
                 ref.child(`player/${player.id}`).set(player);
 
-                message.reply(`**Visão:**\n${renderedVision}\n**Proximidades:**\n${textProximities}`);
+                utils.sendLongMessage(responseChannel, `${message.author}, **Visão:**\n${renderedVision}\n**Proximidades:**\n${textProximities || '*Nada muito próximo*'}`);
 
 
             }).catch(error => {
@@ -413,7 +422,10 @@ class BattleRoyale {
     static royaleWalkCommand(message, args) {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
+        const responseChannel = getResponseChannel(message);
         const helpMsgText = `:x: Digite a quantidade de passos para andar. Por exemplo \`+royale walk 4n 3l\`, você irá andar **7** tiles: **4** pro norte e **3** pro leste.`;
+
+        const _debug = isDebug(message, args);
 
         Promise.all([
             getMap(),
@@ -578,15 +590,18 @@ class BattleRoyale {
 
                 // mostra msg de resposta
                 const timeLeft = getTimeLeftForNextWalk(player);
-                const distanceWalkedName = distanceName(distanceWalked);
+                const distanceWalkedName = getDistanceName(distanceWalked);
                 const steppedByText = steppedBy.filter(sb => {
                     // tira todos os stepped by que SÃO o tile q vc ta pisando
                     return sb.pos[0] !== player.pos[0] || sb.pos[1] !== player.pos[1];
                 }).map(sb => {
-                    return `Você passou por um ${sb.emoji} **${sb.type}**, mas não ${sb.action} há uns ${distanceName(calcDistancePos(sb.pos, player.pos))}`;
+                    return `Você passou por um ${sb.emoji} **${sb.type}**, mas não ${sb.action} há uns ${getDistanceName(calcDistancePos(sb.pos, player.pos))}`;
                 }).map(n => `:small_blue_diamond: ${n}`).join("\n");
 
-                let text = `:white_check_mark: Você andou **${distanceWalkedName}**, `;
+                let text = `${message.author}, `;
+                let textShort = '';
+
+                text += `:white_check_mark: Você andou **${distanceWalkedName}**, `;
                 if (availableWalks === 0) {
                     text += `mas não tem mais passos disponíveis. Volte em **${timeLeft}** para mais passos.`;
                 } else {
@@ -601,27 +616,41 @@ class BattleRoyale {
 
                 if (wasBattle) {
                     text += `\n**Batalha!**\nVocê enfrentou ${tileEmojis.player} <@${wasBattle.enemy.id}> e...`;
+                    // resumo pra anunciar
+                    textShort += `\n**Batalha!**\n${tileEmojis.player} <@${player.id}> enfrentou ${tileEmojis.player} <@${wasBattle.enemy.id}> e...`;
 
                     if (wasBattle.winner) {
                         text += `**venceu!** O inimigo teve seu loot espalhado e foi respawnado em algum outro ponto do mapa.`;
+                        textShort += `**venceu!** O inimigo teve seu loot espalhado e foi respawnado em algum outro ponto do mapa.`;
                     } else {
                         text += `**perdeu!** Você teve seu loot todo espalhado e foi respawnado em algum outro ponto do mapa.`;
+                        textShort += `**perdeu!** Ele teve seu loot todo espalhado e foi respawnado em algum outro ponto do mapa.`;
                     }
                     text += "\n";
+                    textShort += "\n";
+
                 }
 
                 if (hasLootCollected) {
                     text += `\n**Drops coletados!**\nVocê coletou ${tileEmojis.loot} **${hasLootCollected.loot.name}**!`;
                     text += "\n";
+
+                    // resumo pra anunciar
+                    textShort += `\n**Drops coletados!**\n${tileEmojis.player} <@${player.id}> coletou ${tileEmojis.loot} **${hasLootCollected.loot.name}**!`;
+                    textShort += "\n";
                 }
 
-                message.reply(text);
-
                 const vision = calcVision(map, player.pos[0], player.pos[1], lastCoord, MAX_VISION);
-                const renderedVision = renderVision(vision, lastCoord, players, loots);
+                const renderedVision = renderVision(vision, lastCoord, players, loots, _debug);
 
-                message.reply(`\n**Visão:**\n${renderedVision}`);
+                text += `\n**Visão:**\n${renderedVision}`;
 
+                utils.sendLongMessage(responseChannel, text);
+
+                if (responseChannel.id !== channel.id) {
+                    // anuncia tbm no canal do jogo
+                    utils.sendLongMessage(channel, textShort);
+                }
 
             }).catch(error => {
                 console.error(error);
@@ -641,8 +670,7 @@ class BattleRoyale {
      * @param args
      */
     static generateMapCommand(message, args) {
-
-        if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
+        if (!hasPermission(message)) {
             message.reply(`:x: *Você não tem permissão de gerar um mapa novo.*`);
             return;
         }
@@ -879,7 +907,7 @@ class BattleRoyale {
      * @param args
      */
     static viewMapCommand(message, args) {
-        if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
+        if (!hasPermission(message)) {
             message.reply(`:x: *Você não tem permissão de usar esse comando.*`);
             return;
         }
@@ -887,50 +915,61 @@ class BattleRoyale {
         //const channel = getRoyaleChannel(message);
         const channel = message.channel;
 
+        const _debug = isDebug(message, args);
+
         Promise.all([
             getMap(),
             getPlayers(),
             getLoots()
         ]).then(([map, players, loots]) => {
-            const hasPermission = message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS);
+            const hasPerm = hasPermission(message);
 
             const quadrant = args.filter(a => {
                 return a.substr(0, 6) === '--quad';
             }).map(a => a.substr(7))[0];
 
-            const texts = renderMap(
+            let text = ":map: **Mapa** (escala 1/2)";
+            if (quadrant !== undefined) {
+                text += " - (quadrante " + (parseInt(quadrant) + 1) + ")";
+            }
+            text += "\nCada *1 tile real* equivale a *100m*\n";
+
+            text += renderMap(
                 map,
-                hasPermission && args.includes('--show-players') ? players : null,
-                hasPermission && args.includes('--show-loots') ? loots : null,
+                hasPerm && args.includes('--show-players') ? players : null,
+                hasPerm && args.includes('--show-loots') ? loots : null,
                 !args.includes('--no-city'),
-                quadrant
+                quadrant,
+                _debug
             );
 
-            channel.send(":map: **Mapa**\n*Aguarde, carregando...*")
-                .then(msgTitle => {
-                    function _sendMapPiece() {
-                        const mapText = texts.shift();
-                        return channel.send(mapText)
-                            .then(() => {
-                                if (texts.length) {
-                                    // continua enquanto tiver emoji pra mandar
-                                    return _sendMapPiece();
-                                }
-                                // acabou os emojis
-                                return true;
-                            }).catch(console.error);
-                    }
+            utils.sendLongMessage(channel, text);
 
-                    _sendMapPiece().then(() => {
-                        console.log('RENDERIZOU O MAPA');
-                        let text = ":map: **Mapa** (escala 1/2)";
-                        if (quadrant !== undefined) {
-                            text += " - (quadrante " + (parseInt(quadrant) + 1) + ")";
-                        }
-                        text += "\nCada *1 tile real* equivale a *100m*";
-                        msgTitle.edit(text);
-                    })
-                });
+            // channel.send(":map: **Mapa**\n*Aguarde, carregando...*")
+            //     .then(msgTitle => {
+            //         function _sendMapPiece() {
+            //             const mapText = texts.shift();
+            //             return channel.send(mapText)
+            //                 .then(() => {
+            //                     if (texts.length) {
+            //                         // continua enquanto tiver emoji pra mandar
+            //                         return _sendMapPiece();
+            //                     }
+            //                     // acabou os emojis
+            //                     return true;
+            //                 }).catch(console.error);
+            //         }
+            //
+            //         _sendMapPiece().then(() => {
+            //             console.log('RENDERIZOU O MAPA');
+            //             let text = ":map: **Mapa** (escala 1/2)";
+            //             if (quadrant !== undefined) {
+            //                 text += " - (quadrante " + (parseInt(quadrant) + 1) + ")";
+            //             }
+            //             text += "\nCada *1 tile real* equivale a *100m*";
+            //             msgTitle.edit(text);
+            //         })
+            //     });
 
         }).catch(error => {
             console.error(error);
@@ -945,20 +984,25 @@ class BattleRoyale {
      * @param args
      */
     static dropLootCommand(message, args) {
-        if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
+        if (!hasPermission(message)) {
             message.reply(`:x: *Você não tem permissão de dropar um loot.*`);
             return;
         }
 
         const lootName = args.shift();
+
+        if (!lootName) {
+            message.reply(`:x: Nome do drop obrigatório. Use \`+royale drop "nome do loot"\``);
+            return;
+        }
+
         const channel = getRoyaleChannel(message);
-        const hasPermission = message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS);
 
         // vai pegar as sintaxes:
         // x y
         // x,y
         // x, y
-        let forcedPos = hasPermission ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
+        let forcedPos = hasPermission(message) ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
         if (!forcedPos[0]) {
             forcedPos = null;
         }
@@ -1002,6 +1046,7 @@ class BattleRoyale {
     static lootListCommand(message, args) {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
+        const responseChannel = getResponseChannel(message);
 
         Promise.all([
             getMap(),
@@ -1058,7 +1103,7 @@ class BattleRoyale {
                 return `**${l.name}**` + (l.ownedBy ? ` (com: ${tileEmojis.player} <@${l.ownedBy}>)` : (l.closestCity ? ` (local mais próximo: ${tileEmojis.city} *${l.closestCity}*)` : ``));
             }).map(n => `:small_blue_diamond: ${n}`).join("\n");
 
-            channel.send(`${message.member}, ${tileEmojis.loot} **Lista de drops**\n${lootText}`);
+            responseChannel.send(`${message.member}, ${tileEmojis.loot} **Lista de drops**\n${lootText}`);
 
         }).catch(error => {
             console.error(error);
@@ -1075,6 +1120,7 @@ class BattleRoyale {
     static playersListCommand(message, args) {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
+        const responseChannel = getResponseChannel(message);
 
         Promise.all([
             getMap(),
@@ -1114,7 +1160,7 @@ class BattleRoyale {
                 return `<@${l.id}>` + (l.closestCity ? ` (local mais próximo: ${tileEmojis.city} *${l.closestCity}*)` : ``);
             }).map(n => `:small_blue_diamond: ${n}`).join("\n");
 
-            channel.send(`${message.member}, ${tileEmojis.player} **Lista de players jogando**\n${playerText}`);
+            responseChannel.send(`${message.member}, ${tileEmojis.player} **Lista de players jogando**\n${playerText}`);
 
         }).catch(error => {
             console.error(error);
@@ -1155,16 +1201,25 @@ class BattleRoyale {
 }
 
 function getRoyaleChannel(message) {
-    const ch = message.guild.channels.get('461224031123800101');
-    if (!ch) {
-        return message.channel;
+    const guild = message.guild || message.client.guilds.get('213797930937745409');
+    if (guild) {
+        const ch = guild.channels.get(ROYALE_CHANNEL_ID);
+        if (!ch) {
+            throw new Error("Channel do Battle Royale não encontrado. Alguém deletou.");
+        }
+        return ch;
     }
-    return ch;
+
+    throw new Error("Não foi possível encontrar o Café com Pão. Algo deu muito errado...");
+}
+
+function getResponseChannel(message) {
+    return message.channel;
 }
 
 function throwErrorIfNotInRoyaleChannel(message) {
-    if (message.channel.id !== '461224031123800101') {
-        message.reply(`:x: Só é permitido jogar o *Battle Royale* no canal <#461224031123800101>.`)
+    if (!(message.channel instanceof Discord.DMChannel) && message.channel.id !== '461224031123800101') {
+        message.reply(`:x: Só é permitido jogar o *Battle Royale* no canal <#461224031123800101> ou via DM.`)
             .then(m => {
                 // deleta a sua mensagem de comando
                 message.delete();
@@ -1180,32 +1235,41 @@ function throwErrorIfNotInRoyaleChannel(message) {
 /**
  * Retorna a letra daquele bioma
  */
-function renderTile(tile, players, loots) {
+function renderTile(tile, players, loots, _debug) {
     const tileSeed = tile.pos[0] + tile.pos[1];
+    let tileText;
     //return `[BIOME: ${tile.biome}, X: ${tile.pos[0]}, Y: ${tile.pos[1]}]`;
     let p = players ? getPlayerFromTile(tile, players) : null,
         l = loots ? getLootFromTile(tile, loots): null;
     if (p) {
-        return `${tileEmojis.player} (${p.pos[0]},${p.pos[1]})`;
+        tileText = tileEmojis.player;
     }
-    if (l) {
-        return `${tileEmojis.loot} (${l.pos[0]},${l.pos[1]})`;
+    else if (l) {
+        tileText = tileEmojis.loot;
     }
-    if (tile.biome === 'OCEAN') return tileEmojis.oceano; //return '▓';
-    if (tile.biome === 'BEACH') return tileEmojis.areia; //return '░';
-    if (tile.biome === 'TEMPERATE_RAIN_FOREST'
+    else if (tile.biome === 'OCEAN') tileText = tileEmojis.oceano; //return '▓';
+    else if (tile.biome === 'BEACH') tileText = tileEmojis.areia; //return '░';
+    else if (tile.biome === 'TEMPERATE_RAIN_FOREST'
         || tile.biome === 'TEMPERATE_DECIDUOUS_FOREST'
         || tile.biome === 'TROPICAL_RAIN_FOREST'
-        || tile.biome === 'TROPICAL_SEASONAL_FOREST') return utils.seededRandom(tileSeed) < 0.1 ? tileEmojis.arvore : tileEmojis.arvore2; //'▓';
-    if (tile.biome === 'LAKE'
+        || tile.biome === 'TROPICAL_SEASONAL_FOREST') tileText = utils.seededRandom(tileSeed) < 0.1 ? tileEmojis.arvore : tileEmojis.arvore2; //'▓';
+    else if (tile.biome === 'LAKE'
         || tile.biome === 'MARSH'
-        || tile.biome === 'ICE') return tileEmojis.rio;
-    if (tile.biome === 'TEMPERATE_DESERT'
+        || tile.biome === 'ICE') tileText = tileEmojis.rio;
+    else if (tile.biome === 'TEMPERATE_DESERT'
         || tile.biome === 'SUBTROPICAL_DESERT'
-        || tile.biome === 'SHRUBLAND') return tileEmojis.deserto; //return '▒';
-    if (tile.biome === 'GRASSLAND'
-        || tile.biome === 'TAIGA') return tileEmojis.grama; //return '▒';
-    return tileEmojis.empty;
+        || tile.biome === 'SHRUBLAND') tileText = tileEmojis.deserto; //return '▒';
+    else if (tile.biome === 'GRASSLAND'
+        || tile.biome === 'TAIGA') tileText = tileEmojis.grama; //return '▒';
+    else {
+        tileText = tileEmojis.empty;
+    }
+
+    if (_debug && (p || l)) {
+        tileText = `${tileText} (${p.pos[0]},${p.pos[1]})`;
+    }
+
+    return tileText;
 }
 
 function getPlayer(user) {
@@ -1339,11 +1403,13 @@ function exitPlayer(user) {
 
                 // deleta o usuario da lista
                 ref.child(`player/${user.id}`).set(null);
+                delete players[user.id];
 
                 resolve(`:outbox_tray: Usuário ${user} saiu do jogo e deixou os loots espalhados: **${droppedLoots.join('**, **')}**`);
             } else {
                 // não tem loot pra espalhar, entao simplesmente deleta o usuario
                 ref.child(`player/${user.id}`).set(null);
+                delete players[user.id];
 
                 resolve(`:outbox_tray: Usuário ${user} saiu do jogo!`);
             }
@@ -1449,17 +1515,26 @@ function calcDistance(xorig, yorig, xdest, ydest) {
     const dx = xorig - xdest,
         dy = yorig - ydest;
     const hipotenuse = dx*dx + dy*dy;
-    return Math.sqrt(hipotenuse);
+    return Math.abs(Math.sqrt(hipotenuse));
 }
 
 function calcDistancePos(posOrig, posDest) {
     return calcDistance(posOrig[0], posOrig[1], posDest[0], posDest[1]);
 }
 
-function distanceName(distance) {
+function getDistanceName(distance) {
     let value = parseInt(Math.round(distance * 100));
     return value + ' metro' + (value !== 1 ? 's' : '');
-    //return distance;
+
+    // const distances = [
+    //     { value: 0, name: 'aqui' },
+    //     { value: 1, name: 'muito perto' },
+    //     { value: 2, name: 'bem perto' },
+    //     { value: 4, name: 'perto' },
+    //     { value: 6, name: 'pouco longe' },
+    //     { value: 10, name: 'bem longe' },
+    //     { value: Infinity, name: 'muito longe' },
+    // ];
     // let distanceName = distances[0].name;
     // for (let i = 0; i < distances.length; i++) {
     //     if (distance >= distances[i].value) {
@@ -1510,7 +1585,7 @@ function calcVision(map, x, y, coord, distanceVision) {
 
 }
 
-function renderVision(vision, coord, players, loots) {
+function renderVision(vision, coord, players, loots, _debug) {
     const orientation = ['n', 's'].includes(coord) ? 'v' : 'h';
     const inverted = ['n', 'o'].includes(coord);
     let visionCopy = vision.slice(0, MAX_VISION);
@@ -1526,7 +1601,7 @@ function renderVision(vision, coord, players, loots) {
             if (!x) {
                 break;
             }
-            const row = x.map(y => renderTile(y, players, loots)).join('');
+            const row = x.map(y => renderTile(y, players, loots, _debug)).join('');
             const blanks = (1 + (2 * (MAX_VISION - 1))) - x.length;
             if (blanks < 0) continue; // segurança
             const midBlank = parseInt(blanks / 2);
@@ -1543,7 +1618,7 @@ function renderVision(vision, coord, players, loots) {
             if (!x) {
                 break;
             }
-            const row = x.map(y => renderTile(y, players, loots));
+            const row = x.map(y => renderTile(y, players, loots, _debug));
             const blanks = (1 + (2 * (MAX_VISION - 1))) - x.length;
             if (blanks < 0) continue; // segurança
             let midBlank = parseInt(blanks / 2);
@@ -1589,7 +1664,7 @@ function getPlayerFromTile(tile, players) {
     return null;
 }
 
-function renderMap(map, players, loots, showCities, detailsQuadrant) {
+function renderMap(map, players, loots, showCities, detailsQuadrant, _debug) {
     // primeiro eu tento diminuir uma escada do mapa, pra ele ficar pela metade
     function compareTiles(tile1, tile2) {
         if ((players && getPlayerFromTile(tile2, players)) || (loots && getLootFromTile(tile2, loots))) {
@@ -1626,7 +1701,7 @@ function renderMap(map, players, loots, showCities, detailsQuadrant) {
         }
     }
 
-    let textMap = [""], textIdx = 0;
+    let textMap = "";
     let obs = [], obsIdx = 1;
     newMap.map(ax => {
         let y = 0;
@@ -1634,7 +1709,7 @@ function renderMap(map, players, loots, showCities, detailsQuadrant) {
         while (y < ax.length) {
             const tile = ax[y];
 
-            textRow.push(renderTile(tile, players, loots));
+            textRow.push(renderTile(tile, players, loots, _debug));
 
             if (showCities && tile.city) {
                 // tira o ultimo inserido
@@ -1642,22 +1717,19 @@ function renderMap(map, players, loots, showCities, detailsQuadrant) {
 
                 // insere um numero no lugar
                 textRow.push('`[' + obsIdx + ']`');
-                obs.push('`[' + obsIdx + ']` **' + tile.city.name + '** (área: ' + distanceName(tile.city.radius * 2) + '²)');
+                obs.push('`[' + obsIdx + ']` **' + tile.city.name + '** (área: ' + getDistanceName(tile.city.radius * 2) + '²)');
                 obsIdx++;
             }
 
             y++;
         }
         textRow = textRow.join("");
-        if (textMap[textIdx].length + textRow.length > 1800) {
-            textIdx++;
-            textMap[textIdx] = "";
-        }
-        textMap[textIdx] += textRow + ".\n";
+
+        textMap += textRow + ".\n";
     });
 
     if (obs.length) {
-        textMap[++textIdx] = obs.join("\n");
+        textMap += obs.join("\n");
     }
 
     return textMap;
@@ -1671,20 +1743,26 @@ function walkSyntaxToWalks(syntax) {
     for (let i = 0; i < parts.length; i++) {
         const part = parts[i];
         let steps, coord;
-        // tenta a sintaxe padrão: 1n
-        let matchs = part.match(/^(\d+)([a-z]+)$/);
-        if (!matchs) {
-            // tenta o modo ao contrario: n1
-            matchs = part.match(/^([a-z]+)(\d+)$/);
-
-            if (!matchs) {
-                // se ainda assim nao der, desiste
-                break;
-            } else {
-                [, coord, steps] = matchs;
-            }
+        // tenta a sintaxe basica: n n l l s s
+        if (part.match(/^[a-z]$/)) {
+            steps = 1;
+            coord = part;
         } else {
-            [, steps, coord] = matchs;
+            // tenta a sintaxe padrão: 1n
+            let matchs = part.match(/^(\d+)([a-z]+)$/);
+            if (!matchs) {
+                // tenta o modo ao contrario: n1
+                matchs = part.match(/^([a-z]+)(\d+)$/);
+
+                if (!matchs) {
+                    // se ainda assim nao der, desiste
+                    break;
+                } else {
+                    [, coord, steps] = matchs;
+                }
+            } else {
+                [, steps, coord] = matchs;
+            }
         }
         if (steps && coord) {
             // limito os steps, pra evitar o exploit de uma direção, ex: 99999n
@@ -1817,6 +1895,25 @@ function findClosestCity(map, pos) {
     }
 
     return shortestCity;
+}
+
+function isDebug(message, args) {
+    if (args.includes('--debug')) {
+        if (message.channel instanceof Discord.DMChannel && message.author.id === '208028185584074763') {
+            return true;
+        }
+    }
+    return false;
+}
+
+function hasPermission(message) {
+    if (message.channel instanceof Discord.DMChannel) {
+        if (ADMIN_IDS.includes(message.author.id)) {
+            return true;
+        }
+        return false;
+    }
+    return message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS);
 }
 
 module.exports = BattleRoyale;
