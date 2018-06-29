@@ -50,8 +50,8 @@ const distances = [
 ];
 
 // padrão
-let MAP_WIDTH = 62;
-let MAP_HEIGHT = 28;
+let MAP_WIDTH = 54;
+let MAP_HEIGHT = 54;
 let MAX_VISION = 5;
 let MAX_DISTANCE_OBJECTS_DETECT = 15;
 
@@ -149,9 +149,15 @@ class BattleRoyale {
             case 'loots':
             case 'drops':
                 return BattleRoyale.lootListCommand(message, args);
+            case 'players':
+            case 'who':
+                return BattleRoyale.playersListCommand(message, args);
+            case 'teleport':
+            case 'tp':
+                return BattleRoyale.royaleTeleportCommand(message, args);
             default:
                 if (throwErrorIfNotInRoyaleChannel(message)) return;
-                message.reply(`:x: Comando inexistente.\nComandos disponíveis: \`enter\`, \`exit\`, \`info/stats\`, \`view/look\`, \`walk\`, \`drops/loots\``);
+                message.reply(`:x: Comando inexistente.\nComandos disponíveis: \`enter\`, \`exit\`, \`info/stats\`, \`view/look\`, \`walk\`, \`teleport/tp\`, \`drops/loots\`, \`players/who\``);
         }
     }
 
@@ -182,8 +188,19 @@ class BattleRoyale {
     static royaleEnterCommand(message, args) {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
+        const hasPermission = message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS);
 
-        createPlayer(message.author).then(([ exists, player ]) => {
+        // vai pegar as sintaxes:
+        // x y
+        // x,y
+        // x, y
+        let forcedPos = hasPermission ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
+        if (!forcedPos[0]) {
+            forcedPos = null;
+        }
+        console.log('FORCED POS', forcedPos);
+
+        createPlayer(message.author, forcedPos).then(([ exists, player ]) => {
 
             if (exists) {
                 channel.send(`:thumbsup: ${message.author}, você já está no jogo!`);
@@ -195,6 +212,49 @@ class BattleRoyale {
         }).catch(error => {
             message.reply(`:x: ${error}`);
         })
+    }
+
+    /**
+     * Faz o usuário teletransportar pra um lugar aleatorio.
+     *
+     * @param message
+     * @param args
+     */
+    static royaleTeleportCommand(message, args) {
+        if (throwErrorIfNotInRoyaleChannel(message)) return;
+        const channel = getRoyaleChannel(message);
+        const hasPermission = message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS);
+
+        // vai pegar as sintaxes:
+        // x y
+        // x,y
+        // x, y
+        let forcedPos = hasPermission ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
+        if (!forcedPos[0]) {
+            forcedPos = null;
+        }
+        console.log("FORCED POS", forcedPos);
+
+        Promise.all([
+            getMap(),
+            getPlayers(),
+            getLoots()
+        ]).then(([map, players, loots]) => {
+            const playerId = message.author.id;
+            let player = players[playerId];
+            [players, loots, player] = respawnPlayer(map, players, loots, player, false, forcedPos);
+
+            // salva o player
+            ref.child(`player/${playerId}`).set(player);
+            players[playerId] = player;
+
+            channel.send(`${tileEmojis.player} O jogador <@${playerId}> foi teleportado! Seu loot foi espalhado.`);
+
+
+        }).catch(error => {
+            console.error(error);
+            message.reply(`:x: ${error}`);
+        });
     }
 
     /**
@@ -387,7 +447,9 @@ class BattleRoyale {
 
                 // anda
                 let newPos = [ player.pos[0], player.pos[1] ];
+                let distanceWalked = 0, lastCoord;
                 for (let w = 0; w < walks.length; w++) {
+                    lastCoord = walks[w];
                     switch (walks[w]) {
                         case 'n':
                             newPos[0]--;
@@ -408,37 +470,55 @@ class BattleRoyale {
                     if (!tile.walkable) {
                         // se o tile não for andável, já para o andar e não altera nada
                         const terrain = renderTile(tile);
-                        message.reply(`:x: Ops! No passo **${w+1}** você encontrou ${terrain} e você não pode passar sobre. Você continua na mesma posição e pode tentar andar novamente.`);
-                        return;
+                        message.reply(`:x: Ops! No passo **${w+1}** você encontrou ${terrain} e você não pode passar sobre. Você anda **${distanceWalked}** passos e para de andar.`);
 
-                    } else {
-                        // registra alguns itens pelos quais o player passou
-                        // mas não interagiu. isso serve pro player ficar atento aos
-                        // drops e outros players por perto
-                        if (getPlayerFromTile(tile, players)) {
-                            steppedBy.push({
-                                type: 'player',
-                                emoji: tileEmojis.player,
-                                action: 'lutou',
-                                pos: tile.pos
-                            })
-                        } else if (getLootFromTile(tile, loots)) {
-                            steppedBy.push({
-                                type: 'loot',
-                                emoji: tileEmojis.loot,
-                                action: 'pegou',
-                                pos: tile.pos
-                            })
+                        // volta um passo
+                        switch (walks[w]) {
+                            case 'n':
+                                newPos[0]++;
+                                break;
+                            case 's':
+                                newPos[0]--;
+                                break;
+                            case 'l':
+                                newPos[1]--;
+                                break;
+                            case 'o':
+                                newPos[1]++;
+                                break;
                         }
+                        break;
+
                     }
+
+                    // registra alguns itens pelos quais o player passou
+                    // mas não interagiu. isso serve pro player ficar atento aos
+                    // drops e outros players por perto
+                    if (getPlayerFromTile(tile, players)) {
+                        steppedBy.push({
+                            type: 'player',
+                            emoji: tileEmojis.player,
+                            action: 'lutou',
+                            pos: tile.pos
+                        })
+                    } else if (getLootFromTile(tile, loots)) {
+                        steppedBy.push({
+                            type: 'loot',
+                            emoji: tileEmojis.loot,
+                            action: 'pegou',
+                            pos: tile.pos
+                        })
+                    }
+
+                    distanceWalked++;
                 }
 
                 // se deu certo andar, muda alguns
                 // stats e descarta os walks usados
-                player.walksUsed += walks.length;
-                availableWalks -= walks.length;
+                player.walksUsed += distanceWalked;
+                availableWalks -= distanceWalked;
                 if (!player.timestampWalks) player.timestampWalks = [];
-                for (let w = 0; w < walks.length; w++) {
+                for (let w = 0; w < distanceWalked; w++) {
                     player.timestampWalks.push((new Date()).getTime());
                 }
 
@@ -478,35 +558,35 @@ class BattleRoyale {
 
                     if (win) {
                         // se ganhou, pega todos os loots do outro player
-                        respawnPlayer(map, players, loots, playerEnemy, true);
+                        [players, loots, playerEnemy] = respawnPlayer(map, players, loots, playerEnemy, true);
                         player.wins++;
-
-
                     } else {
                         // se perdeu, vc morre e respawna
-                        respawnPlayer(map, players, loots, player, true);
+                        [players, loots, player] = respawnPlayer(map, players, loots, player, true);
                         playerEnemy.wins++;
-
-                        // e salva o player inimigo
-                        ref.child(`player/${playerEnemy.id}`).set(playerEnemy);
                     }
+                    // e salva o player inimigo
+                    ref.child(`player/${playerEnemy.id}`).set(playerEnemy);
+                    players[playerEnemy.id] = playerEnemy;
+
                     wasBattle = {winner: win, enemy: playerEnemy};
                 }
 
                 // salva o player
                 ref.child(`player/${player.id}`).set(player);
+                players[player.id] = player;
 
                 // mostra msg de resposta
                 const timeLeft = getTimeLeftForNextWalk(player);
-                const distanceWalked = distanceName(walks.length);
+                const distanceWalkedName = distanceName(distanceWalked);
                 const steppedByText = steppedBy.filter(sb => {
                     // tira todos os stepped by que SÃO o tile q vc ta pisando
-                    return sb.pos[0] !== player.pos[0] && sb.pos[1] !== player.pos[1];
+                    return sb.pos[0] !== player.pos[0] || sb.pos[1] !== player.pos[1];
                 }).map(sb => {
                     return `Você passou por um ${sb.emoji} **${sb.type}**, mas não ${sb.action} há uns ${distanceName(calcDistancePos(sb.pos, player.pos))}`;
                 }).map(n => `:small_blue_diamond: ${n}`).join("\n");
 
-                let text = `:white_check_mark: Você andou **${distanceWalked}**, `;
+                let text = `:white_check_mark: Você andou **${distanceWalkedName}**, `;
                 if (availableWalks === 0) {
                     text += `mas não tem mais passos disponíveis. Volte em **${timeLeft}** para mais passos.`;
                 } else {
@@ -515,9 +595,9 @@ class BattleRoyale {
                 text += "\n";
 
                 if (steppedByText) {
-                    text += `\n**Enquanto andava...\n${steppedByText}`;
+                    text += `\n**Enquanto andava...**\n${steppedByText}`;
+                    text += "\n";
                 }
-                text += "\n";
 
                 if (wasBattle) {
                     text += `\n**Batalha!**\nVocê enfrentou ${tileEmojis.player} <@${wasBattle.enemy.id}> e...`;
@@ -527,13 +607,20 @@ class BattleRoyale {
                     } else {
                         text += `**perdeu!** Você teve seu loot todo espalhado e foi respawnado em algum outro ponto do mapa.`;
                     }
+                    text += "\n";
                 }
 
                 if (hasLootCollected) {
                     text += `\n**Drops coletados!**\nVocê coletou ${tileEmojis.loot} **${hasLootCollected.loot.name}**!`;
+                    text += "\n";
                 }
 
                 message.reply(text);
+
+                const vision = calcVision(map, player.pos[0], player.pos[1], lastCoord, MAX_VISION);
+                const renderedVision = renderVision(vision, lastCoord, players, loots);
+
+                message.reply(`\n**Visão:**\n${renderedVision}`);
 
 
             }).catch(error => {
@@ -805,12 +892,18 @@ class BattleRoyale {
             getPlayers(),
             getLoots()
         ]).then(([map, players, loots]) => {
+            const hasPermission = message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS);
+
+            const quadrant = args.filter(a => {
+                return a.substr(0, 6) === '--quad';
+            }).map(a => a.substr(7))[0];
 
             const texts = renderMap(
                 map,
-                args.includes('--no-players') ? null : players,
-                args.includes('--no-loots') ? null : loots,
-                !args.includes('--no-city')
+                hasPermission && args.includes('--show-players') ? players : null,
+                hasPermission && args.includes('--show-loots') ? loots : null,
+                !args.includes('--no-city'),
+                quadrant
             );
 
             channel.send(":map: **Mapa**\n*Aguarde, carregando...*")
@@ -830,10 +923,18 @@ class BattleRoyale {
 
                     _sendMapPiece().then(() => {
                         console.log('RENDERIZOU O MAPA');
-                        msgTitle.edit(":map: **Mapa** (escala 1/2)\nCada *1 tile real* equivale a *100m*");
+                        let text = ":map: **Mapa** (escala 1/2)";
+                        if (quadrant !== undefined) {
+                            text += " - (quadrante " + (parseInt(quadrant) + 1) + ")";
+                        }
+                        text += "\nCada *1 tile real* equivale a *100m*";
+                        msgTitle.edit(text);
                     })
                 });
 
+        }).catch(error => {
+            console.error(error);
+            message.reply(`:x: ${error}`);
         });
     }
 
@@ -851,12 +952,17 @@ class BattleRoyale {
 
         const lootName = args.shift();
         const channel = getRoyaleChannel(message);
+        const hasPermission = message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS);
 
         // vai pegar as sintaxes:
         // x y
         // x,y
         // x, y
-        const forcedPos = args.join(',').split(/,+/).slice(0, 2);
+        let forcedPos = hasPermission ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
+        if (!forcedPos[0]) {
+            forcedPos = null;
+        }
+        console.log("FORCED POS", forcedPos);
 
         Promise.all([
             getMap(),
@@ -897,47 +1003,6 @@ class BattleRoyale {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
 
-        function findClosestCity(map, pos) {
-            const radius = parseInt(MAX_DISTANCE_OBJECTS_DETECT / 2);
-            let x0 = pos[0] - radius,
-                y0 = pos[1] - radius,
-                x1 = pos[0] + radius,
-                y1 = pos[1] + radius;
-
-            x0 = Math.max(Math.min(x0, MAP_HEIGHT - 1), 0);
-            y0 = Math.max(Math.min(y0, MAP_WIDTH - 1), 0);
-            x1 = Math.max(Math.min(x1, MAP_HEIGHT - 1), 0);
-            y1 = Math.max(Math.min(y1, MAP_WIDTH - 1), 0);
-
-            let shortestDistance = Infinity;
-            let shortestCity = null;
-
-            for (let x = x0; x <= x1; x++) {
-                for (let y = y0; y <= y1; y++) {
-                    let cityPos = null;
-                    if (map[x][y].proxCity) {
-                        const xc = map[x][y].proxCity.origin[0],
-                            yc = map[x][y].proxCity.origin[1];
-
-                        cityPos = [xc, yc];
-                    } else if (map[x][y].city) {
-                        cityPos = [x, y];
-                    }
-
-                    if (cityPos) {
-                        const distance = calcDistancePos(cityPos, pos);
-
-                        if (distance < shortestDistance) {
-                            shortestDistance = distance;
-                            shortestCity = map[cityPos[0]][cityPos[1]].city.name;
-                        }
-                    }
-                }
-            }
-
-            return shortestCity;
-        }
-
         Promise.all([
             getMap(),
             getPlayers(),
@@ -953,7 +1018,7 @@ class BattleRoyale {
                         name: loots[l].name,
                         pos: loots[l].pos,
                         ownedBy: null,
-                        closestCity: findClosestCity(map, loots[l].pos)
+                        closestCity: null //findClosestCity(map, loots[l].pos)
                     });
                 }
             }
@@ -968,7 +1033,7 @@ class BattleRoyale {
                                 name: pLoots[l].name,
                                 pos: pLoots[l].pos,
                                 ownedBy: players[p].id,
-                                closestCity: findClosestCity(map, pLoots[l].pos)
+                                closestCity: null //findClosestCity(map, pLoots[l].pos)
                             });
                         }
                     }
@@ -994,6 +1059,62 @@ class BattleRoyale {
             }).map(n => `:small_blue_diamond: ${n}`).join("\n");
 
             channel.send(`${message.member}, ${tileEmojis.loot} **Lista de drops**\n${lootText}`);
+
+        }).catch(error => {
+            console.error(error);
+            message.reply(`:x: ${error}`);
+        });
+    }
+
+    /**
+     * Lista os players do mapa
+     *
+     * @param message
+     * @param args
+     */
+    static playersListCommand(message, args) {
+        if (throwErrorIfNotInRoyaleChannel(message)) return;
+        const channel = getRoyaleChannel(message);
+
+        Promise.all([
+            getMap(),
+            getPlayers(),
+            getLoots()
+        ]).then(([map, players, loots]) => {
+
+            let orderedPlayers = [];
+
+            // se tem players, ver os loots deles
+            if (players) {
+                for (let p in players) {
+                    orderedPlayers.push({
+                        id: players[p].id,
+                        pos: players[p].pos,
+                        info: players[p],
+                        closestCity: null //findClosestCity(map, players[p].pos)
+                    });
+                }
+            }
+
+            orderedPlayers.sort(function (a, b) {
+                const nameA = a.id.toUpperCase(); // ignore upper and lowercase
+                const nameB = b.id.toUpperCase(); // ignore upper and lowercase
+                if (nameA < nameB) {
+                    return -1;
+                }
+                if (nameA > nameB) {
+                    return 1;
+                }
+
+                // names must be equal
+                return 0;
+            });
+
+            const playerText = orderedPlayers.map(l => {
+                return `<@${l.id}>` + (l.closestCity ? ` (local mais próximo: ${tileEmojis.city} *${l.closestCity}*)` : ``);
+            }).map(n => `:small_blue_diamond: ${n}`).join("\n");
+
+            channel.send(`${message.member}, ${tileEmojis.player} **Lista de players jogando**\n${playerText}`);
 
         }).catch(error => {
             console.error(error);
@@ -1065,10 +1186,10 @@ function renderTile(tile, players, loots) {
     let p = players ? getPlayerFromTile(tile, players) : null,
         l = loots ? getLootFromTile(tile, loots): null;
     if (p) {
-        return tileEmojis.player;
+        return `${tileEmojis.player} (${p.pos[0]},${p.pos[1]})`;
     }
     if (l) {
-        return tileEmojis.loot;
+        return `${tileEmojis.loot} (${l.pos[0]},${l.pos[1]})`;
     }
     if (tile.biome === 'OCEAN') return tileEmojis.oceano; //return '▓';
     if (tile.biome === 'BEACH') return tileEmojis.areia; //return '░';
@@ -1105,7 +1226,7 @@ function getPlayer(user) {
     });
 }
 
-function createPlayer(user) {
+function createPlayer(user, forcedPos) {
     return new Promise((resolve, reject) => {
         Promise.all([
             getMap(),
@@ -1117,7 +1238,7 @@ function createPlayer(user) {
                 let info = snapshot.val();
 
                 if (!info) {
-                    const randomPos = getRandomWalkablePos(map, players);
+                    const randomPos = getRandomWalkablePos(map, players, null, forcedPos);
 
                     info = {
                         id: user.id,
@@ -1142,8 +1263,8 @@ function createPlayer(user) {
     });
 }
 
-function respawnPlayer(map, players, loots, userOrPlayer, inBattle) {
-    const randomPos = getRandomWalkablePos(map, players);
+function respawnPlayer(map, players, loots, userOrPlayer, inBattle, forcedPos) {
+    const randomPos = getRandomWalkablePos(map, players, loots, forcedPos);
     const player = players[userOrPlayer.id];
 
     // seta novo tile pro player
@@ -1182,8 +1303,8 @@ function respawnPlayer(map, players, loots, userOrPlayer, inBattle) {
         // salva infos do loot
         ref.child(`loot`).set(loots);
     }
-    // salva o player
-    ref.child(`player/${userOrPlayer.id}`).set(player);
+    // retorna o player
+    return [ players, loots, player ];
 }
 
 function exitPlayer(user) {
@@ -1468,14 +1589,14 @@ function getPlayerFromTile(tile, players) {
     return null;
 }
 
-function renderMap(map, players, loots, showCities) {
+function renderMap(map, players, loots, showCities, detailsQuadrant) {
     // primeiro eu tento diminuir uma escada do mapa, pra ele ficar pela metade
     function compareTiles(tile1, tile2) {
         if ((players && getPlayerFromTile(tile2, players)) || (loots && getLootFromTile(tile2, loots))) {
             return tile2;
         } else if ((tile2.walkable && !tile1.walkable) || tile2.city) {
             return tile2;
-        } else if (tile2.biome !== 'BEACH' && tile2.biome !== 'OCEAN') {
+        } else if (tile2.biome !== 'BEACH' && tile2.biome !== 'OCEAN' && !tile1.city) {
             return tile2;
         }
 
@@ -1483,10 +1604,25 @@ function renderMap(map, players, loots, showCities) {
     }
 
     let newMap = [];
-    for (let x = 0; x < map.length; x+=2) {
-        newMap[x/2] = [];
-        for (let y = 0; y < map[x].length; y+=2) {
-            newMap[x/2][y/2] = compareTiles(compareTiles(map[x][y], map[x][y+1]), compareTiles(map[x+1][y], map[x+1][y+1]));
+    if (detailsQuadrant) {
+        if (detailsQuadrant > 3) {
+            throw new Error('Número de quadrante não suportado. Somente de 0 até 3.');
+        }
+        let quadrant = [ Math.floor(detailsQuadrant / 2), detailsQuadrant % 2 ];
+        quadrant[0] *= MAP_HEIGHT / 2;
+        quadrant[1] *= MAP_WIDTH / 2;
+        for (let x = quadrant[0]; x < quadrant[0] + MAP_HEIGHT / 2; x++) {
+            newMap[x - quadrant[0]] = [];
+            for (let y = quadrant[1]; y < quadrant[1] + MAP_WIDTH / 2; y++) {
+                newMap[x - quadrant[0]][y - quadrant[1]] = map[x][y];
+            }
+        }
+    } else {
+        for (let x = 0; x < map.length; x+=2) {
+            newMap[x/2] = [];
+            for (let y = 0; y < map[x].length; y+=2) {
+                newMap[x/2][y/2] = compareTiles(compareTiles(map[x][y], map[x][y+1]), compareTiles(map[x+1][y], map[x+1][y+1]));
+            }
         }
     }
 
@@ -1517,7 +1653,7 @@ function renderMap(map, players, loots, showCities) {
             textIdx++;
             textMap[textIdx] = "";
         }
-        textMap[textIdx] += textRow + "\n";
+        textMap[textIdx] += textRow + ".\n";
     });
 
     if (obs.length) {
@@ -1640,6 +1776,47 @@ function normalizeCoord(coord) {
             coord = 'o';
     }
     return coord;
+}
+
+function findClosestCity(map, pos) {
+    const radius = parseInt(MAX_DISTANCE_OBJECTS_DETECT / 2);
+    let x0 = pos[0] - radius,
+        y0 = pos[1] - radius,
+        x1 = pos[0] + radius,
+        y1 = pos[1] + radius;
+
+    x0 = Math.max(Math.min(x0, MAP_HEIGHT - 1), 0);
+    y0 = Math.max(Math.min(y0, MAP_WIDTH - 1), 0);
+    x1 = Math.max(Math.min(x1, MAP_HEIGHT - 1), 0);
+    y1 = Math.max(Math.min(y1, MAP_WIDTH - 1), 0);
+
+    let shortestDistance = Infinity;
+    let shortestCity = null;
+
+    for (let x = x0; x <= x1; x++) {
+        for (let y = y0; y <= y1; y++) {
+            let cityPos = null;
+            if (map[x][y].proxCity) {
+                const xc = map[x][y].proxCity.origin[0],
+                    yc = map[x][y].proxCity.origin[1];
+
+                cityPos = [xc, yc];
+            } else if (map[x][y].city) {
+                cityPos = [x, y];
+            }
+
+            if (cityPos) {
+                const distance = calcDistancePos(cityPos, pos);
+
+                if (distance < shortestDistance) {
+                    shortestDistance = distance;
+                    shortestCity = map[cityPos[0]][cityPos[1]].city.name;
+                }
+            }
+        }
+    }
+
+    return shortestCity;
 }
 
 module.exports = BattleRoyale;
