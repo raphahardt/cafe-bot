@@ -1000,9 +1000,11 @@ class BattleRoyale {
                 return a.substr(0, 6) === '--quad';
             }).map(a => a.substr(7))[0];
 
-            let text = ":map: **Mapa** (escala 1/2)";
+            let text = ":map: **Mapa** ";
             if (quadrant !== undefined) {
-                text += " - (quadrante " + (parseInt(quadrant) + 1) + ")";
+                text += "(escala 1/1, quadrante " + (parseInt(quadrant) + 1) + ")";
+            } else {
+                text += "(escala 1/2)";
             }
             text += "\nCada *1 tile real* equivale a *100m*\n";
 
