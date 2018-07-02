@@ -194,14 +194,14 @@ class BattleRoyale {
         const channel = getRoyaleChannel(message);
         const responseChannel = getResponseChannel(message);
 
-        let closeToCity = args.shift();
+        //let closeToCity = args.shift();
 
         // vai pegar as sintaxes:
         // x y
         // x,y
         // x, y
         let forcedPos = hasPermission(message) ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
-        if (!forcedPos[0]) {
+        if (forcedPos && !forcedPos[0]) {
             forcedPos = null;
         }
         console.log('FORCED POS', forcedPos);
@@ -243,7 +243,7 @@ class BattleRoyale {
         // x,y
         // x, y
         let forcedPos = hasPermission(message) ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
-        if (!forcedPos[0]) {
+        if (forcedPos && !forcedPos[0]) {
             forcedPos = null;
         }
         console.log("FORCED POS", forcedPos);
@@ -1084,7 +1084,7 @@ class BattleRoyale {
         // x,y
         // x, y
         let forcedPos = hasPermission(message) ? args.join(',').split(/,+/).slice(0, 2).map(f => parseInt(f)) : null;
-        if (!forcedPos[0]) {
+        if (forcedPos && !forcedPos[0]) {
             forcedPos = null;
         }
         console.log("FORCED POS", forcedPos);
