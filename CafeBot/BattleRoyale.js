@@ -26,17 +26,25 @@ let tileEmojis = {};
 
 const equips = [
     {
-        // por enquanto nada ainda, tenho q pensar em como implementar isso
-        // de forma facil e rapida
+        // por enquanto nada ainda, vai ficar pro rpg
     }
 ];
 
 const cities = [
-    { name: 'San Haj', radius: 5, biomes: true },
-    { name: 'Baía do glub', radius: 3, biomes: ['BEACH'] },
-    { name: 'Escola do ABC', radius: 2, biomes: true },
-    { name: 'Lago do grande mij', radius: 2, biomes: ['LAKE', 'MARSH', 'ICE'] },
-    { name: 'Floresta da decepção', radius: 3, biomes: ['TEMPERATE_RAIN_FOREST', 'TEMPERATE_DECIDUOUS_FOREST'] },
+    { name: 'San Haj', id: ['haj'], radius: 5, biomes: true },
+    { name: 'Baía do glub', id: ['glub', 'baia'], radius: 3, biomes: ['BEACH'] },
+    { name: 'Escola do ABC', id: ['escola', 'abc'], radius: 2, biomes: true },
+    { name: 'Lago do grande mij', id: ['lago', 'mij'], radius: 2, biomes: ['LAKE', 'MARSH', 'ICE'] },
+    { name: 'Floresta da decepção', id: ['floresta', 'decepção'], radius: 3, biomes: ['TEMPERATE_RAIN_FOREST', 'TEMPERATE_DECIDUOUS_FOREST'] },
+];
+
+const leveledRoles = [
+    '240282044209299457', // level 0
+    '240282632787591169', // level 1
+    '240287430874365962', // level 2
+    '240287655907164162', // level 3
+    '240287808864911363', // level 4
+    '316927077318393856', // level 5
 ];
 
 // padrão
@@ -47,6 +55,8 @@ let MAX_DISTANCE_OBJECTS_DETECT = 15;
 
 let MAX_WALKS = 30;
 let DELAY_WALKS = 10; // em minutos
+let MAX_TELEPORTS = 5;
+let DELAY_TELEPORTS = 240; // em minutos
 
 let ROYALE_CHANNEL_ID = '461224031123800101';
 let DEBUG = false;
@@ -136,6 +146,8 @@ class BattleRoyale {
             case 'loots':
             case 'drops':
                 return BattleRoyale.lootListCommand(message, args);
+            case 'remove-drop':
+                return BattleRoyale.removeDropLootCommand(message, args);
             case 'players':
             case 'who':
                 return BattleRoyale.playersListCommand(message, args);
@@ -181,6 +193,8 @@ class BattleRoyale {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
         const responseChannel = getResponseChannel(message);
+
+        let closeToCity = args.shift();
 
         // vai pegar as sintaxes:
         // x y
@@ -241,15 +255,32 @@ class BattleRoyale {
         ]).then(([map, players, loots]) => {
             const playerId = message.author.id;
             let player = players[playerId];
+
+            let availableTps = getTeleportsAvailable(player);
+
+            if (availableTps < 1) {
+                const timeLeft = getTimeLeftForNextTeleport(player);
+                message.reply(`:x: Você não tem teleportes suficientes. Volte em **${timeLeft}** para mais.`);
+                return;
+            }
+
+            // dá tp no player
             [players, loots, player] = respawnPlayer(map, players, loots, player, false, forcedPos);
+
+            if (!player.timestampTeleports) player.timestampTeleports = [];
+            player.timestampTeleports.push((new Date()).getTime());
+
+            player.teleports = (player.teleports || 0) + 1;
+            availableTps--;
 
             // salva o player
             ref.child(`player/${playerId}`).set(player);
             players[playerId] = player;
 
+            const timeLeft = getTimeLeftForNextTeleport(player);
             const text = `${tileEmojis.player} O jogador <@${playerId}> foi teleportado! Seu loot foi espalhado.`;
 
-            responseChannel.send(text);
+            responseChannel.send(text + (availableTps === 0 ? ` Volte em **${timeLeft}** para mais teleportes.` : ` Você ainda tem **${availableTps}** teleportes para usar.`));
             if (responseChannel.id !== channel.id) {
                 // anuncia tbm no canal do jogo
                 channel.send(text);
@@ -283,6 +314,7 @@ class BattleRoyale {
             emb.addField(':wavy_dash:', `${tileEmojis.player} __Informações__`, false);
             emb.addField(`Vitórias`, player.wins || 0, true);
             emb.addField(`Mortes`, player.deaths || 0, true);
+            emb.addField(`Teleportes`, player.teleports || 0, true);
             emb.addField(`Total caminhado`, getDistanceName(player.walksUsed || 0), true);
             const rating = parseInt(((player.wins || 0) / Math.max(player.wins + player.deaths, 1)) * 100);
             emb.addField(`% Sucesso`, rating + '%', true);
@@ -545,17 +577,40 @@ class BattleRoyale {
 
                 // se tem loot
                 let loot = getLootFromTile(newTile, loots);
-                let hasLootCollected = null;
+                let wasLootInteraction = null;
                 if (loot) {
-                    player.loot = player.loot || [];
+                    if (loot.creator === player.id) {
+                        // se a pessoa que pisou foi a mesma que criou,
+                        // não deixar ela pegar e espalhar o loot de novo
+                        const idxLoot = loots.indexOf(loot);
 
-                    // adiciona o loot pro player
-                    player.loot.push(loot);
+                        loot.pos = getRandomWalkablePos(map, players, loots);
+                        loots[idxLoot] = loot;
 
-                    // e tira ele da lista de loots no mapa
-                    loots.splice(loots.indexOf(loot), 1);
+                        wasLootInteraction = {loot: loot, action: 'CREATOR'};
 
-                    hasLootCollected = {loot: loot};
+                    } else if (!isLevelAboveLoot(message, player, loot)) {
+                        // se a pessoa não tem level suficiente pra pegar o loot,
+                        // não deixar ela pegar e espalhar o loot de novo
+                        const idxLoot = loots.indexOf(loot);
+
+                        loot.pos = getRandomWalkablePos(map, players, loots);
+                        loots[idxLoot] = loot;
+
+                        wasLootInteraction = {loot: loot, action: 'LEVEL'};
+
+                    } else {
+                        player.loot = player.loot || [];
+
+                        // adiciona o loot pro player
+                        // TODO: fazer o loot instataneo
+                        player.loot.push(loot);
+
+                        // e tira ele da lista de loots no mapa
+                        loots.splice(loots.indexOf(loot), 1);
+
+                        wasLootInteraction = {loot: loot, action: 'COLLECTED'};
+                    }
 
                     // salva os loots
                     ref.child(`loot`).set(loots);
@@ -563,7 +618,7 @@ class BattleRoyale {
 
                 // se tem player
                 let playerEnemy = getPlayerFromTile(newTile, players);
-                let wasBattle = null;
+                let wasBattleInteraction = null;
                 if (playerEnemy && playerEnemy.id !== player.id) {
                     // começa uma luta!
                     const win = (Math.random() * 2000) <= 1000;
@@ -581,7 +636,7 @@ class BattleRoyale {
                     ref.child(`player/${playerEnemy.id}`).set(playerEnemy);
                     players[playerEnemy.id] = playerEnemy;
 
-                    wasBattle = {winner: win, enemy: playerEnemy};
+                    wasBattleInteraction = {winner: win, enemy: playerEnemy};
                 }
 
                 // salva o player
@@ -614,30 +669,47 @@ class BattleRoyale {
                     text += "\n";
                 }
 
-                if (wasBattle) {
-                    text += `\n**Batalha!**\nVocê enfrentou ${tileEmojis.player} <@${wasBattle.enemy.id}> e...`;
+                if (wasBattleInteraction) {
+                    text += `\n**Batalha!**\nVocê enfrentou ${tileEmojis.player} <@${wasBattleInteraction.enemy.id}> e...`;
                     // resumo pra anunciar
-                    textShort += `\n**Batalha!**\n${tileEmojis.player} <@${player.id}> enfrentou ${tileEmojis.player} <@${wasBattle.enemy.id}> e...`;
+                    textShort += `\n**Batalha!**\n${tileEmojis.player} <@${player.id}> enfrentou ${tileEmojis.player} <@${wasBattleInteraction.enemy.id}> e...`;
 
-                    if (wasBattle.winner) {
+                    if (wasBattleInteraction.winner) {
                         text += `**venceu!** O inimigo teve seu loot espalhado e foi respawnado em algum outro ponto do mapa.`;
                         textShort += `**venceu!** O inimigo teve seu loot espalhado e foi respawnado em algum outro ponto do mapa.`;
                     } else {
-                        text += `**perdeu!** Você teve seu loot todo espalhado e foi respawnado em algum outro ponto do mapa.`;
-                        textShort += `**perdeu!** Ele teve seu loot todo espalhado e foi respawnado em algum outro ponto do mapa.`;
+                        text += `**perdeu!** Você teve seu loot todo espalhado e foi respawnado(a) em algum outro ponto do mapa.`;
+                        textShort += `**perdeu!** Ele(a) teve seu loot todo espalhado e foi respawnado(a) em algum outro ponto do mapa.`;
                     }
                     text += "\n";
                     textShort += "\n";
 
                 }
 
-                if (hasLootCollected) {
-                    text += `\n**Drops coletados!**\nVocê coletou ${tileEmojis.loot} **${hasLootCollected.loot.name}**!`;
-                    text += "\n";
-
+                if (wasLootInteraction) {
+                    text += `\n**Loot!**\n`;
                     // resumo pra anunciar
-                    textShort += `\n**Drops coletados!**\n${tileEmojis.player} <@${player.id}> coletou ${tileEmojis.loot} **${hasLootCollected.loot.name}**!`;
+                    textShort += `\n**Loot!**\n`;
+
+                    switch (wasLootInteraction.action) {
+                        case 'CREATOR':
+                            text += `Você achou ${tileEmojis.loot} **${wasLootInteraction.loot.name}**, só que lembrou que foi você mesmo(a) que botou lá... então chutou o drop pra longe!`;
+                            textShort += `${tileEmojis.player} <@${player.id}> achou  ${tileEmojis.loot} **${wasLootInteraction.loot.name}**, só que lembrou que foi ele(a) mesmo(a) que botou lá... então chutou o drop pra longe!`;
+                            break;
+                        case 'LEVEL':
+                            const minimumLevel = message.guild.roles.get(leveledRoles[wasLootInteraction.loot.levelMin-1]);
+                            text += `Você encontrou ${tileEmojis.loot} **${wasLootInteraction.loot.name}**, foi coletar só que... o drop era muito pesado pra você (precisava do level **${minimumLevel.name}**). Com raiva, você chutou o drop pra longe!`;
+                            textShort += `${tileEmojis.player} <@${player.id}> encontrou  ${tileEmojis.loot} **${wasLootInteraction.loot.name}**, foi coletar só que... o drop era muito pesado pra ele(a) (precisava do level **${minimumLevel.name}**). Com raiva, ele(a) chutou o drop pra longe!`;
+                            break;
+                        case 'COLLECTED':
+                        default:
+                            text += `Você coletou ${tileEmojis.loot} **${wasLootInteraction.loot.name}**!`;
+                            textShort += `${tileEmojis.player} <@${player.id}> coletou ${tileEmojis.loot} **${wasLootInteraction.loot.name}**!`;
+                    }
+
+                    text += "\n";
                     textShort += "\n";
+
                 }
 
                 const vision = calcVision(map, player.pos[0], player.pos[1], lastCoord, MAX_VISION);
@@ -990,13 +1062,20 @@ class BattleRoyale {
         }
 
         const lootName = args.shift();
+        const lootLevelMin = parseInt(args.shift()) || 0;
 
         if (!lootName) {
-            message.reply(`:x: Nome do drop obrigatório. Use \`+royale drop "nome do loot"\``);
+            message.reply(`:x: Nome do drop obrigatório. Use \`+royale drop "nome do loot" [level minimo do drop]\``);
+            return;
+        }
+
+        if (lootLevelMin > leveledRoles.length) {
+            message.reply(`:x: O level mínimo do drop deve ser um número de 1 até ${leveledRoles.length}. Use \`+royale drop "nome do loot" [level minimo do drop]\``);
             return;
         }
 
         const channel = getRoyaleChannel(message);
+        const responseChannel = getResponseChannel(message);
 
         // vai pegar as sintaxes:
         // x y
@@ -1016,8 +1095,11 @@ class BattleRoyale {
             const pos = getRandomWalkablePos(map, players, loots, forcedPos);
 
             loots.push({
+                id: String((new Date()).getTime()).substr(4, 6),
                 name: lootName,
                 pos: pos,
+                creator: message.author.id,
+                levelMin: lootLevelMin,
                 ts: (new Date()).getTime()
             });
 
@@ -1038,6 +1120,89 @@ class BattleRoyale {
     }
 
     /**
+     * Dropa um loot que nós admins quisermos
+     *
+     * @param message
+     * @param args
+     */
+    static removeDropLootCommand(message, args) {
+        if (!hasPermission(message)) {
+            message.reply(`:x: *Você não tem permissão para esse comando.*`);
+            return;
+        }
+
+        const lootId = args.shift();
+
+        if (!lootId) {
+            message.reply(`:x: Id do drop obrigatório. Use \`+royale remove-drop id\``);
+            return;
+        }
+
+        const channel = getRoyaleChannel(message);
+        const responseChannel = getResponseChannel(message);
+
+        Promise.all([
+            getPlayers(),
+            getLoots()
+        ]).then(([players, loots]) => {
+
+            const successCallback = function (error) {
+                if (error) {
+                    throw error;
+                }
+
+                channel.send(`:white_check_mark: Drop **${foundLoot.name}** foi removido com sucesso.`);
+            };
+
+            let foundLoot = loots.filter(l => {
+                return (l.id === lootId || l.name === lootId);
+            });
+
+            if (!foundLoot.length) {
+                // se não encontrou, tenta ver se esse loot ta na mão de alguem
+                let foundPlayer;
+                for (var p in players) {
+                    foundLoot = players[p].loot.filter(l => {
+                        return (l.id === lootId || l.name === lootId);
+                    });
+
+                    if (foundLoot.length) {
+                        // se encontrou, já para
+                        foundPlayer = players[p];
+                        break;
+                    }
+                }
+
+                if (!foundLoot.length) {
+                    // se mesmo assim não encontrou, dar erro
+                    message.reply(`:x: Drop com id **${lootId}** não encontrado.`);
+                    return;
+                }
+
+                // se encontrou no player, tira da lista dele
+                foundLoot = foundLoot[0];
+                foundPlayer.loot.splice(foundPlayer.loot.indexOf(foundLoot), 1);
+
+                // salva o novo array de loots
+                ref.child(`player/${foundPlayer.id}`).set(foundPlayer, successCallback);
+                return;
+            }
+
+            // se encontrou, tira esse loot da lista
+            foundLoot = foundLoot[0];
+            loots.splice(loots.indexOf(foundLoot), 1);
+
+            // salva o novo array de loots
+            ref.child(`loot`).set(loots, successCallback);
+
+
+        }).catch(error => {
+            console.error(error);
+            message.reply(`:x: ${error}`);
+        });
+    }
+
+    /**
      * Lista os loots do mapa
      *
      * @param message
@@ -1047,6 +1212,9 @@ class BattleRoyale {
         if (throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
         const responseChannel = getResponseChannel(message);
+
+        const showIds = hasPermission(message) ? args.includes('--id') : null;
+        const showLevels = hasPermission(message) ? args.includes('--level') : null;
 
         Promise.all([
             getMap(),
@@ -1060,8 +1228,10 @@ class BattleRoyale {
             if (loots.length) {
                 for (let l = 0; l < loots.length; l++) {
                     orderedLoots.push({
+                        id: loots[l].id,
                         name: loots[l].name,
                         pos: loots[l].pos,
+                        levelMin: loots[l].levelMin,
                         ownedBy: null,
                         closestCity: null //findClosestCity(map, loots[l].pos)
                     });
@@ -1075,8 +1245,10 @@ class BattleRoyale {
                         const pLoots = players[p].loot;
                         for (let l = 0; l < pLoots.length; l++) {
                             orderedLoots.push({
+                                id: pLoots[l].id,
                                 name: pLoots[l].name,
                                 pos: pLoots[l].pos,
+                                levelMin: pLoots[l].levelMin,
                                 ownedBy: players[p].id,
                                 closestCity: null //findClosestCity(map, pLoots[l].pos)
                             });
@@ -1085,25 +1257,46 @@ class BattleRoyale {
                 }
             }
 
-            orderedLoots.sort(function (a, b) {
-                const nameA = a.name.toUpperCase(); // ignore upper and lowercase
-                const nameB = b.name.toUpperCase(); // ignore upper and lowercase
-                if (nameA < nameB) {
-                    return -1;
-                }
-                if (nameA > nameB) {
-                    return 1;
-                }
+            if (orderedLoots.length) {
+                orderedLoots.sort(function (a, b) {
+                    const nameA = a.name.toUpperCase(); // ignore upper and lowercase
+                    const nameB = b.name.toUpperCase(); // ignore upper and lowercase
+                    if (nameA < nameB) {
+                        return -1;
+                    }
+                    if (nameA > nameB) {
+                        return 1;
+                    }
 
-                // names must be equal
-                return 0;
-            });
+                    // names must be equal
+                    return 0;
+                });
 
-            const lootText = orderedLoots.map(l => {
-                return `**${l.name}**` + (l.ownedBy ? ` (com: ${tileEmojis.player} <@${l.ownedBy}>)` : (l.closestCity ? ` (local mais próximo: ${tileEmojis.city} *${l.closestCity}*)` : ``));
-            }).map(n => `:small_blue_diamond: ${n}`).join("\n");
+                const lootText = orderedLoots.map(l => {
+                    return `**${l.name}**`
+                        + (l.ownedBy
+                            ? ` (com: ${tileEmojis.player} <@${l.ownedBy}>)`
+                            : (l.closestCity
+                                ? ` (local mais próximo: ${tileEmojis.city} *${l.closestCity}*)`
+                                : ''
+                            )
+                        )
+                        + (showIds
+                            ? ` *[id: ${l.id}]*`
+                            : ''
+                        )
+                        + (showLevels
+                                ? ` *[level min: ${l.levelMin}]*`
+                                : ''
+                        )
+                        ;
+                }).map(n => `:small_blue_diamond: ${n}`).join("\n");
 
-            responseChannel.send(`${message.member}, ${tileEmojis.loot} **Lista de drops**\n${lootText}`);
+                responseChannel.send(`${message.member}, ${tileEmojis.loot} **Lista de drops**\n${lootText}`);
+
+            } else {
+                responseChannel.send(`${message.member}, ${tileEmojis.loot} **Lista de drops**\n*Nenhum drop no momento. Aguarde os admins droparem itens!*`);
+            }
 
         }).catch(error => {
             console.error(error);
@@ -1218,8 +1411,8 @@ function getResponseChannel(message) {
 }
 
 function throwErrorIfNotInRoyaleChannel(message) {
-    if (!(message.channel instanceof Discord.DMChannel) && message.channel.id !== '461224031123800101') {
-        message.reply(`:x: Só é permitido jogar o *Battle Royale* no canal <#461224031123800101> ou via DM.`)
+    if (!(message.channel instanceof Discord.DMChannel) && message.channel.id !== ROYALE_CHANNEL_ID) {
+        message.reply(`:x: Só é permitido jogar o *Battle Royale* no canal <#${ROYALE_CHANNEL_ID}> ou via DM.`)
             .then(m => {
                 // deleta a sua mensagem de comando
                 message.delete();
@@ -1283,6 +1476,7 @@ function getPlayer(user) {
                 reject('Usuário não está jogando. Use `+royale enter` pra participar.');
             } else {
                 player.timestampWalks = player.timestampWalks || [];
+                player.timestampTeleports = player.timestampTeleports || [];
                 player.loot = player.loot || [];
                 resolve(player);
             }
@@ -1310,6 +1504,7 @@ function createPlayer(user, forcedPos) {
                         wins: 0,
                         loot: [],
                         timestampWalks: [],
+                        timestampTeleports: [],
                         walksUsed: 0,
                         pos: randomPos
                     };
@@ -1356,8 +1551,11 @@ function respawnPlayer(map, players, loots, userOrPlayer, inBattle, forcedPos) {
                   randomPos = getRandomWalkablePos(map, players, loots);
 
             loots.push({
+                id: loot.id,
                 name: loot.name,
                 pos: randomPos,
+                creator: loot.creator,
+                levelMin: loot.levelMin,
                 ts: (new Date()).getTime()
             });
 
@@ -1390,8 +1588,11 @@ function exitPlayer(user) {
                           randomPos = getRandomWalkablePos(map, players, loots);
 
                     loots.push({
+                        id: loot.id,
                         name: loot.name,
                         pos: randomPos,
+                        creator: loot.creator,
+                        levelMin: loot.levelMin,
                         ts: (new Date()).getTime()
                     });
 
@@ -1430,6 +1631,7 @@ function getPlayers() {
             } else {
                 for (var p in players) {
                     players[p].timestampWalks = players[p].timestampWalks || [];
+                    players[p].timestampTeleports = players[p].timestampTeleports || [];
                     players[p].loot = players[p].loot || [];
                 }
                 resolve(players);
@@ -1809,6 +2011,32 @@ function getTimeLeftForNextWalk(player) {
     return formatTime(diffSeconds);
 }
 
+function getTeleportsAvailable(player) {
+    let tpsAvailable = 0;
+    for (let i = 0; i < MAX_TELEPORTS; i++) {
+        const time = (player.timestampTeleports || [])[i];
+
+        // se nao tem horario, entao ele tem slot
+        if (!time) {
+            tpsAvailable++;
+        }
+        // se o horario que foi feito o walk + x minutos foi
+        // antes do horario atual, entao ele tem walk
+        else if (time + (DELAY_TELEPORTS * 60000) < (new Date()).getTime()) {
+            tpsAvailable++;
+        }
+    }
+
+    return tpsAvailable;
+}
+
+function getTimeLeftForNextTeleport(player) {
+    const oldestTimestampTp = player.timestampTeleports.slice().sort();
+    let diffSeconds = (DELAY_TELEPORTS * 60) - ((new Date()).getTime() - oldestTimestampTp[0]) / 1000;
+
+    return formatTime(diffSeconds);
+}
+
 function formatTime(seconds) {
     if (seconds > 3600) {
         const minutes = parseInt((seconds % 3600) / 60);
@@ -1895,6 +2123,15 @@ function findClosestCity(map, pos) {
     }
 
     return shortestCity;
+}
+
+function isLevelAboveLoot(message, player, loot) {
+    if (loot.levelMin > 0) {
+        return message.member.id === player.id
+            && message.member.roles.some(r => leveledRoles[loot.levelMin-1] === r.id);
+    }
+
+    return true;
 }
 
 function isDebug(message, args) {
