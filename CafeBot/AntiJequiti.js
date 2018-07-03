@@ -30,7 +30,7 @@ class AntiJequiti {
             return;
         }
 
-        if (utils.verifyUserIsBot(message.member)) return;
+        if (message.author.bot) return;
 
         if (isInPermittedChannel(message.channel)) {
             if (verifyIsCafeBot(message.author)) {
@@ -49,7 +49,7 @@ class AntiJequiti {
      * @param {Discord.Message} newMessage A mensagem depois da edição
      */
     static onMessageUpdate(message, newMessage) {
-        if (utils.verifyUserIsBot(message.member)) return;
+        if (message.author.bot) return;
 
         if (isInPermittedChannel(message.channel)) {
             if (verifyIsCafeBot(message.author)) {

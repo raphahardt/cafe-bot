@@ -75,7 +75,7 @@ class Perolas {
         if (perolasChannel === messageReaction.message.channel) return;
 
         // ignora mensagens de bot também
-        if (utils.verifyUserIsBot(messageReaction.message.member)) return;
+        if (messageReaction.message.author.bot) return;
 
         let reactCount = messageReaction.count;
         messageReaction.fetchUsers()

@@ -47,6 +47,15 @@ const leveledRoles = [
     '316927077318393856', // level 5
 ];
 
+// role de avisar a todos
+const ROLE_ID = '463685861469454360';
+
+const weatherCondition = {
+    NEVOA: 'Só pode jogar através de DM com o bot, ninguém pode ver os passos um do outro.',
+    CHUVA: 'Cada passo custa o dobro.',
+    VENTO: 'Você anda o dobro em cada direção.'
+};
+
 // padrão
 let MAP_WIDTH = 54;
 let MAP_HEIGHT = 54;
@@ -172,7 +181,7 @@ class BattleRoyale {
         const channel = getRoyaleChannel(message);
         const responseChannel = getResponseChannel(message);
 
-        exitPlayer(message.author).then(successMsg => {
+        exitPlayer(message.member).then(successMsg => {
             responseChannel.send(successMsg);
             if (responseChannel.id !== channel.id) {
                 // anuncia tbm no canal do jogo
@@ -206,7 +215,7 @@ class BattleRoyale {
         }
         console.log('FORCED POS', forcedPos);
 
-        createPlayer(message.author, forcedPos).then(([ exists, player ]) => {
+        createPlayer(message.member, forcedPos).then(([ exists, player ]) => {
 
             let text;
             if (exists) {
@@ -270,6 +279,12 @@ class BattleRoyale {
             if (!player.timestampTeleports) player.timestampTeleports = [];
             player.timestampTeleports.push((new Date()).getTime());
 
+            // verifica se ultrapassou o limite
+            while (player.timestampTeleports.length > MAX_TELEPORTS) {
+                // vai tirando o cast mais antigo
+                player.timestampTeleports.shift();
+            }
+
             player.teleports = (player.teleports || 0) + 1;
             availableTps--;
 
@@ -278,7 +293,7 @@ class BattleRoyale {
             players[playerId] = player;
 
             const timeLeft = getTimeLeftForNextTeleport(player);
-            const text = `${tileEmojis.player} O jogador <@${playerId}> foi teleportado! Seu loot foi espalhado.`;
+            const text = `${tileEmojis.player} O(A) player <@${playerId}> foi teleportado(a)! Um loot aleatório dele(a) foi espalhado.`;
 
             responseChannel.send(text + (availableTps === 0 ? ` Volte em **${timeLeft}** para mais teleportes.` : ` Você ainda tem **${availableTps}** teleportes para usar.`));
             if (responseChannel.id !== channel.id) {
@@ -322,11 +337,11 @@ class BattleRoyale {
             let text = `${message.author}, `;
 
             text += `Você tem **${availableWalks}** passos disponíveis no momento.`;
-            if (availableWalks <= 0) {
-                const timeLeft = getTimeLeftForNextWalk(player);
-                text += ` Volte em **${timeLeft}** para mais passos.`;
-                return;
-            }
+            // if (availableWalks <= 0) {
+            //     const timeLeft = getTimeLeftForNextWalk(player);
+            //     text += ` Volte em **${timeLeft}** para mais passos.`;
+            //     return;
+            // }
 
             text += "\n";
 
@@ -381,10 +396,14 @@ class BattleRoyale {
                             const cityName = city.name;
 
                             if (!gone.includes('c:' + cityName)) {
-                                const distance = calcDistancePos(player.pos, tile.proxCity.origin) - city.radius;
+                                const distance = Math.max(0, calcDistancePos(player.pos, tile.proxCity.origin) - city.radius);
                                 const distanceText = getDistanceName(distance);
 
-                                textProximities += `${tileEmojis.city} O local **${cityName}** está há ${distanceText}\n`;
+                                if (distance <= 0) {
+                                    textProximities += `${tileEmojis.city} Você está em **${cityName}** (${getDistanceName(calcDistancePos(player.pos, tile.proxCity.origin))} do centro do local)\n`;
+                                } else {
+                                    textProximities += `${tileEmojis.city} O local **${cityName}** está há ${distanceText}\n`;
+                                }
 
                                 gone.push('c:' + cityName);
                             }
@@ -538,7 +557,8 @@ class BattleRoyale {
                     // registra alguns itens pelos quais o player passou
                     // mas não interagiu. isso serve pro player ficar atento aos
                     // drops e outros players por perto
-                    if (getPlayerFromTile(tile, players)) {
+                    const steppedByPlayer = getPlayerFromTile(tile, players);
+                    if (steppedByPlayer && steppedByPlayer.id !== player.id) {
                         steppedBy.push({
                             type: 'player',
                             emoji: tileEmojis.player,
@@ -564,6 +584,12 @@ class BattleRoyale {
                 if (!player.timestampWalks) player.timestampWalks = [];
                 for (let w = 0; w < distanceWalked; w++) {
                     player.timestampWalks.push((new Date()).getTime());
+                }
+
+                // verifica se ultrapassou o limite
+                while (player.timestampWalks.length > MAX_WALKS) {
+                    // vai tirando o cast mais antigo
+                    player.timestampWalks.shift();
                 }
 
                 // coloca o player na nova posição
@@ -704,7 +730,7 @@ class BattleRoyale {
                         case 'COLLECTED':
                         default:
                             text += `Você coletou ${tileEmojis.loot} **${wasLootInteraction.loot.name}**!`;
-                            textShort += `${tileEmojis.player} <@${player.id}> coletou ${tileEmojis.loot} **${wasLootInteraction.loot.name}**!`;
+                            textShort += `${tileEmojis.player} <@${player.id}> coletou ${tileEmojis.loot} **${wasLootInteraction.loot.name}** <@&${ROLE_ID}>!`;
                     }
 
                     text += "\n";
@@ -1111,7 +1137,7 @@ class BattleRoyale {
                     throw error;
                 }
 
-                channel.send(`${tileEmojis.loot} **Atenção!** Um drop caiu na ilha! O loot é **${lootName}**!`);
+                channel.send(`<@&${ROLE_ID}>: ${tileEmojis.loot} **Atenção!** Um drop caiu na ilha! O loot é **${lootName}**!`);
             });
 
 
@@ -1211,7 +1237,7 @@ class BattleRoyale {
      * @param args
      */
     static lootListCommand(message, args) {
-        if (throwErrorIfNotInRoyaleChannel(message)) return;
+        if (!hasPermission(message) && throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
         const responseChannel = getResponseChannel(message);
 
@@ -1313,7 +1339,7 @@ class BattleRoyale {
      * @param args
      */
     static playersListCommand(message, args) {
-        if (throwErrorIfNotInRoyaleChannel(message)) return;
+        if (!hasPermission(message) && throwErrorIfNotInRoyaleChannel(message)) return;
         const channel = getRoyaleChannel(message);
         const responseChannel = getResponseChannel(message);
 
@@ -1369,9 +1395,7 @@ class BattleRoyale {
      * @param member
      */
     static onGuildMemberRemove(member) {
-        const user = member.user;
-
-        exitPlayer(user).then(successMsg => {
+        exitPlayer(member).then(successMsg => {
             const channel = getRoyaleChannel(message);
             channel.send(successMsg);
         }).catch(error => {
@@ -1486,7 +1510,8 @@ function getPlayer(user) {
     });
 }
 
-function createPlayer(user, forcedPos) {
+function createPlayer(member, forcedPos) {
+    const user = member.user;
     return new Promise((resolve, reject) => {
         Promise.all([
             getMap(),
@@ -1514,7 +1539,12 @@ function createPlayer(user, forcedPos) {
                     // salva o que foi definido
                     playerRef.set(info);
 
-                    resolve([false, info]);
+                    // adiciona a role de aviso
+                    member.addRole(ROLE_ID, 'Entrou no jogo Café Royale')
+                        .then(memb => {
+                            resolve([false, info]);
+                        }).catch(reject);
+
                 } else {
                     resolve([true, info]);
                 }
@@ -1571,7 +1601,8 @@ function respawnPlayer(map, players, loots, userOrPlayer, inBattle, forcedPos) {
     return [ players, loots, player ];
 }
 
-function exitPlayer(user) {
+function exitPlayer(member) {
+    const user = member.user;
     return new Promise((resolve, reject) => {
         Promise.all([
             getMap(),
@@ -1608,13 +1639,21 @@ function exitPlayer(user) {
                 ref.child(`player/${user.id}`).set(null);
                 delete players[user.id];
 
-                resolve(`:outbox_tray: Usuário ${user} saiu do jogo e deixou os loots espalhados: **${droppedLoots.join('**, **')}**`);
+                // adiciona a role de aviso
+                member.removeRole(ROLE_ID, 'Saiu do jogo Café Royale')
+                    .then(memb => {
+                        resolve(`:outbox_tray: Usuário ${user} saiu do jogo e deixou os loots espalhados: **${droppedLoots.join('**, **')}**`);
+                    }).catch(reject);
+
             } else {
                 // não tem loot pra espalhar, entao simplesmente deleta o usuario
                 ref.child(`player/${user.id}`).set(null);
                 delete players[user.id];
 
-                resolve(`:outbox_tray: Usuário ${user} saiu do jogo!`);
+                member.removeRole(ROLE_ID, 'Saiu do jogo Café Royale')
+                    .then(memb => {
+                        resolve(`:outbox_tray: Usuário ${user} saiu do jogo!`);
+                    }).catch(reject);
             }
 
         }).catch(reject);
