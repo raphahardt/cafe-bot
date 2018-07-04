@@ -1320,10 +1320,10 @@ class BattleRoyale {
                         ;
                 }).map(n => `:small_blue_diamond: ${n}`).join("\n");
 
-                responseChannel.send(`${message.member}, ${tileEmojis.loot} **Lista de drops**\n${lootText}`);
+                message.reply(`${tileEmojis.loot} **Lista de drops**\n${lootText}`);
 
             } else {
-                responseChannel.send(`${message.member}, ${tileEmojis.loot} **Lista de drops**\n*Nenhum drop no momento. Aguarde os admins droparem itens!*`);
+                message.reply(`${tileEmojis.loot} **Lista de drops**\n*Nenhum drop no momento. Aguarde os admins droparem itens!*`);
             }
 
         }).catch(error => {
