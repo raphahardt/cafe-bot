@@ -31,12 +31,27 @@ class Counter {
         utils.sendLongMessage(message.channel, m);
     }
 
+    /*static async asyncTestCommand(message, args) {
+        const text = await asyncFunc(message.client, message.content);
+
+        message.reply(text);
+    }*/
+
     static commands() {
         return {
             'count': Counter.countCommand,
-            'msgtest': Counter.messageTestCommand
+            'msgtest': Counter.messageTestCommand/*,
+            'async': Counter.asyncTestCommand*/
         }
     }
 }
+
+// function asyncFunc(client, text) {
+//     return new Promise(resolve => {
+//         client.setTimeout(function () {
+//             resolve(`Teste asyncrono: ${text}`);
+//         }, 3000);
+//     });
+// }
 
 module.exports = Counter;

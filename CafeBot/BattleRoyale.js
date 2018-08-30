@@ -2168,8 +2168,22 @@ function findClosestCity(map, pos) {
 
 function isLevelAboveLoot(message, player, loot) {
     if (loot.levelMin > 0) {
-        return message.member.id === player.id
-            && message.member.roles.some(r => leveledRoles[loot.levelMin-1] === r.id);
+        let member;
+        if (message.channel instanceof Discord.DMChannel) {
+            const guild = message.guild || message.client.guilds.get('213797930937745409');
+            if (!guild) {
+                throw new Error("Não foi possível encontrar o Café com Pão. Algo deu muito errado...");
+            }
+
+            member = guild.members.get(message.author.id);
+            if (!member) {
+                throw new Error("Este usuário não foi encontrado no servidor Café com Pão. Provavelmente só não está no cache do bot: tente jogar por algumas mensagens no canal do jogo para que seu usuário fique no cache e tente novamente por DM.");
+            }
+        } else {
+            member = message.member;
+        }
+        return member.id === player.id
+            && member.roles.some(r => leveledRoles[loot.levelMin-1] === r.id);
     }
 
     return true;
