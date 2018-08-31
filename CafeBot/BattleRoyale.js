@@ -647,7 +647,7 @@ class BattleRoyale {
                 let wasBattleInteraction = null;
                 if (playerEnemy && playerEnemy.id !== player.id) {
                     // começa uma luta!
-                    const win = (Math.random() * 2000) <= 1000;
+                    const win = (Math.random() * 2000) <= 1600;
 
                     if (win) {
                         // se ganhou, pega todos os loots do outro player
