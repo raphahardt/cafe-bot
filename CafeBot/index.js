@@ -17,6 +17,44 @@ module.exports = {
             modules.modulesInstalled[listener.name] = listener;
         }
 
+        discordClient.setInterval(() => {
+            const dateNow = new Date();
+
+            // invocando os eventos
+            for (let i = 0; i < listeners.length; i++) {
+                const listener = listeners[i];
+                const timers = listener.timers ? listener.timers() : {};
+
+                for (let timer in timers) {
+                    if (!timers.hasOwnProperty(timer)) continue;
+
+                    /*console.log('timer registrado ' + timer, [
+                        dateNow.getSeconds(),
+                        dateNow.getMinutes(),
+                        dateNow.getHours(),
+                        dateNow.getDate(),
+                        dateNow.getMonth() + 1,
+                        dateNow.getDay(),
+                        dateNow.getFullYear()
+                    ]);*/
+
+                    // executa o evento de fato
+                    timers[timer].apply(listener, [
+                        discordClient,
+                        dateNow.getSeconds(),
+                        dateNow.getMinutes(),
+                        dateNow.getHours(),
+                        dateNow.getDate(),
+                        dateNow.getMonth() + 1,
+                        dateNow.getDay(),
+                        dateNow.getFullYear(),
+                        dateNow
+                    ]);
+                }
+            }
+
+        }, 60000);
+
         discordClient.on('message', message => {
             if (message.author.bot) return;
 
