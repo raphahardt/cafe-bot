@@ -408,12 +408,12 @@ class Gacha {
                     // 1x pull do gacha
                     for (let t = 0; t < pullTimes; t++) {
                         const maxShuffle = 10000;
-                        const luckyNumber = parseInt(Math.random() * maxShuffle);
+                        const luckyNumber = Math.random() * maxShuffle;
 
                         // encontra qual tipo de item você vai ganhar primeiro
                         let rarityWon;
                         for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
-                            const rarityFactor = parseInt(maxShuffle * GACHA_RARITIES[r].chance);
+                            const rarityFactor = maxShuffle * GACHA_RARITIES[r].chance;
 
                             if (luckyNumber <= rarityFactor) {
                                 rarityWon = r;
