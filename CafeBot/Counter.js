@@ -31,6 +31,19 @@ class Counter {
         utils.sendLongMessage(message.channel, m);
     }
 
+    static broomCommand(message, args) {
+        try {
+
+            const days = parseInt(args.shift());
+
+            message.reply(`:white_check_mark: ${kicked} membro(s) foram kickados com sucesso.`);
+
+        } catch (error) {
+            console.error(error);
+            message.reply(`:x: ${error.message}`);
+        }
+    }
+
     /*static async asyncTestCommand(message, args) {
         const text = await asyncFunc(message.client, message.content);
 
@@ -40,6 +53,7 @@ class Counter {
     static commands() {
         return {
             'count': Counter.countCommand,
+            'vassoura': Counter.broomCommand,
             'msgtest': Counter.messageTestCommand/*,
             'async': Counter.asyncTestCommand*/
         }

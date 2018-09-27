@@ -1,7 +1,10 @@
 /*! cafe-bot by Raphael Hardt */
 
 const Discord = require("discord.js");
-const client = new Discord.Client();
+const client = new Discord.Client({
+    // ver: https://discord.js.org/#/docs/main/stable/typedef/ClientOptions?scrollTo=disabledEvents
+    disabledEvents: ['TYPING_START']
+});
 const utils = require('./utils');
 
 const packageCfg = require("./package.json");
@@ -62,6 +65,7 @@ CafeBot.registerDiscordEvents(client, activator, [
     require('./CafeBot/BattleRoyale'),
     require('./CafeBot/Nsfw'),
     require('./CafeBot/RemindMe'),
+    require('./CafeBot/Gacha'),
 ]);
 
 // conecta o bot
