@@ -2,6 +2,9 @@
 const utils = require('../utils');
 let insideCount = {};
 
+const Cafebase = require('./Cafebase');
+const db = new Cafebase('teste');
+
 class Counter {
     constructor () {}
 
@@ -44,6 +47,71 @@ class Counter {
         }
     }
 
+    static dbTestCommand(message, args) {
+        try {
+            const action = args.shift();
+
+            switch (action) {
+                case 'list':
+                    db.getArray(args[0]).then(list => {
+                        const text = list.map(i => `> ${JSON.stringify(i)}`).join("\n");
+                        message.reply(text);
+                    }).catch(err => {
+                        console.error(err);
+                        message.reply(`:x: ${err}`);
+                    });
+                    break;
+                case 'find':
+                    db.findAll(args[0], f => f.name === args[1]).then(found => {
+                        return found;
+                    }).then(list => {
+                        const text = list.map(i => `> ${JSON.stringify(i)}`).join("\n");
+                        message.reply(text);
+                    }).catch(err => {
+                        console.error(err);
+                        message.reply(`:x: ${err}`);
+                    });
+                    break;
+                case 'findone':
+                    db.findOne(args[0], f => f.name === args[1]).then(found => {
+                        return found;
+                    }).then(found => {
+                        message.reply(JSON.stringify(found));
+                    }).catch(err => {
+                        console.error(err);
+                        message.reply(`:x: ${err}`);
+                    });
+                    break;
+                case 'insert':
+                    db.insert(args[0], { name: args[1] }).then(inserted => {
+                        return db.getArray(args[0]);
+                    }).then(list => {
+                        const text = list.map(i => `> ${JSON.stringify(i)}`).join("\n");
+                        message.reply(text);
+                    }).catch(err => {
+                        console.error(err);
+                        message.reply(`:x: ${err}`);
+                    });
+                    break;
+                case 'clear':
+                    db.save(args[0], null).then(saved => {
+                        return db.getArray(args[0]);
+                    }).then(list => {
+                        const text = list.map(i => `> ${JSON.stringify(i)}`).join("\n");
+                        message.reply(text);
+                    }).catch(err => {
+                        console.error(err);
+                        message.reply(`:x: ${err}`);
+                    });
+                    break;
+            }
+
+        } catch (error) {
+            console.error(error);
+            message.reply(`:x: ${error.message}`);
+        }
+    }
+
     /*static async asyncTestCommand(message, args) {
         const text = await asyncFunc(message.client, message.content);
 
@@ -54,6 +122,7 @@ class Counter {
         return {
             'count': Counter.countCommand,
             'vassoura': Counter.broomCommand,
+            'db': Counter.dbTestCommand,
             'msgtest': Counter.messageTestCommand/*,
             'async': Counter.asyncTestCommand*/
         }
