@@ -221,7 +221,7 @@ class Cafebase {
      */
     getLive(path, callback, defaultValue) {
         const fn = this.ref.child(path).on('value', snapshot => {
-            const value = snapshot.val() || defaultValue;
+            const value = snapshot.exists() ? snapshot.val() : defaultValue;
 
             callback(value);
         });
