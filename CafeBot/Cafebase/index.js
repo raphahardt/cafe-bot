@@ -33,6 +33,17 @@ class Cafebase {
         });
     }
 
+    saveAll(pathsAndValues) {
+        let promises = [];
+        for (let i = 0; i < pathsAndValues.length; i++) {
+            const path = pathsAndValues[i][0];
+            const value = pathsAndValues[i][1];
+            promises.push(this.save(path, value));
+        }
+
+        return Promise.all(promises);
+    }
+
     delete(path) {
         return this.getOne(path)
             .then(oldValue => {

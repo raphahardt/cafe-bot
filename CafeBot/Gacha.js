@@ -8,10 +8,19 @@ const GIFEncoder = require('gifencoder');
 const Cafebase = require('./Cafebase');
 const db = new Cafebase('gacha');
 
+const InterativePrompt = require('./Util/InterativePrompt');
+
+const GACHA_TYPES = {
+    ROLE: 0,
+    ICON: 1,
+    TROLL: 2,
+    GAME: 3
+};
 const GACHA_ITEM_TYPES = [
-    { type: 'role', name: 'Role (cor)' },
-    { type: 'icon', name: 'Ícone no nickname' },
-    { type: 'troll', name: 'Troll (item sem valor)' },
+    { type: 'role', name: 'Role (cor)', limited: false, canEquip: true, mustHaveAmount: 1 },
+    { type: 'icon', name: 'Ícone no nickname', limited: false, canEquip: true, mustHaveAmount: 1 },
+    { type: 'troll', name: 'Troll (item sem valor)', limited: false, canEquip: false, mustHaveAmount: 0 },
+    { type: 'game', name: 'Jogo', limited: true, canEquip: false, mustHaveAmount: 0 },
 ];
 
 const GACHA_RARITIES = [
@@ -21,19 +30,19 @@ const GACHA_RARITIES = [
     { letter: 'S', emojiLetter: ':regional_indicator_s:', chance: 0.006, exchange: 50 },
 ];
 
-const GACHA_PULL_COST = 100;
+let GACHA_PULL_COST = 100;
 const GACHA_MAX_PULLS = 10;
-const GACHA_INITIAL_TOKENS = 200;
-const GACHA_EXTRA_CHANCE_MULTIPLIER = 1;
+let GACHA_INITIAL_TOKENS = 200;
+let GACHA_EXTRA_CHANCE_MULTIPLIER = 1;
 
 // 7 dias
 const GACHA_MAX_TIMESTAMP_IN_SECS = 7 * 24 * 60 * 60000;
 
-const GACHA_EXTRA_TOKENS_CHANNEL = '346798009050333184';
-const GACHA_EXTRA_TOKENS_PRIZE = 100;
-const GACHA_EXTRA_TOKENS_REACT_GIVEN = 10;
-const GACHA_EXTRA_TOKENS_REACT_RECEIVED = 6;
-const GACHA_EXTRA_TOKENS_MAX_REACTS = 5;
+let GACHA_EXTRA_TOKENS_CHANNEL = '346798009050333184';
+let GACHA_EXTRA_TOKENS_PRIZE = 100;
+let GACHA_EXTRA_TOKENS_REACT_GIVEN = 10;
+let GACHA_EXTRA_TOKENS_REACT_RECEIVED = 6;
+let GACHA_EXTRA_TOKENS_MAX_REACTS = 5;
 
 const GACHA_VALID_CHANNELS = [
     '213797930937745409', // mesa
@@ -41,6 +50,10 @@ const GACHA_VALID_CHANNELS = [
     '346798009050333184', // desenhos
     '414209945576275968', // selfie
 ];
+
+db.getLive('config', config => {
+
+});
 
 class Gacha {
     constructor () {}
@@ -96,7 +109,6 @@ class Gacha {
             const member = getCafeComPaoMember(guild, message);
 
             const channel = message.channel;
-            let oldMsg = null;
 
             let typesText = '';
             for (let t = 0; t < GACHA_ITEM_TYPES.length; t++) {
@@ -118,165 +130,119 @@ class Gacha {
 
             let itemSelected = {};
 
-            // type msg
-            channel.send(`:game_die: **Criando um novo item** :new:\n\nEscolha o tipo de item a ser criado:${typesText}\n\nDigite o número da opção ou \`cancel\` para cancelar.`)
-                .then(msg => {
-                    // type
-                    oldMsg = msg;
-                    return channel.awaitMessages(m => {
-                        if (m.content === 'cancel') {
-                            return true;
-                        }
-                        const v = parseInt(m.content);
+            const prompt = InterativePrompt.create(channel, `:game_die: **Criando um novo item** :new:`, 30000)
+                .addPrompt(
+                    'prompt-type',
+                    `Escolha o tipo de item a ser criado:${typesText}`,
+                    `Digite o número da opção`,
+                    response => {
+                        const v = parseInt(response);
                         return v >= 1 && v <= GACHA_ITEM_TYPES.length;
-                    }, { max: 1, time: 30000, errors: ['time'] })
-                })
-                .then(collected => {
-                    // escolhendo type
-                    if (oldMsg) {
-                        oldMsg.delete();
-                        oldMsg = null;
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('type', parseInt(choice) - 1);
+                        prompt.setNext('prompt-rarity');
                     }
-                    const response = collected.first().content;
-
-                    if (response === 'cancel') {
-                        return Promise.reject(collected);
-                    }
-
-                    itemSelected.type = parseInt(response) - 1;
-
-                    // rarity msg
-                    return channel.send(`:game_die: **Criando um novo item** :new:\n\nEscolha qual vai ser a raridade desse item:${raritiesText}\n\nDigite o número da opção ou \`cancel\` para cancelar.`);
-                })
-                .then(msg => {
-                    // rarity
-                    oldMsg = msg;
-                    return channel.awaitMessages(m => {
-                        if (m.content === 'cancel') {
-                            return true;
-                        }
-                        const v = parseInt(m.content);
+                )
+                .addPrompt(
+                    'prompt-rarity',
+                    `Escolha qual vai ser a raridade desse item:${raritiesText}`,
+                    `Digite o número da opção`,
+                    response => {
+                        const v = parseInt(response);
                         return v >= 1 && v <= GACHA_RARITIES.length;
-                    }, { max: 1, time: 30000, errors: ['time'] })
-                })
-                .then(collected => {
-                    // escolhendo rarity
-                    if (oldMsg) {
-                        oldMsg.delete();
-                        oldMsg = null;
-                    }
-                    const response = collected.first().content;
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('rarity', parseInt(choice) - 1);
 
-                    if (response === 'cancel') {
-                        return Promise.reject(collected);
-                    }
-
-                    itemSelected.rarity = parseInt(response) - 1;
-
-                    // color/icon msg
-                    switch (itemSelected.type) {
-                        case 0: // role
-                            return channel.send(`:game_die: **Criando um novo item** :new:\n\nDigite uma cor, em hexadecimal, que a role vai ter.\n\nDigite a cor (exemplo: \`#fc0000\`) ou \`cancel\` para cancelar.`);
-                        case 1: // icon
-                            return channel.send(`:game_die: **Criando um novo item** :new:\n\nDigite um emoji para ser o ícone. Deve ser um emoji default, não pode ser um emoji personalizado.\n\nDigite o emoji (exemplo: :smiley:) ou \`cancel\` para cancelar.`);
-                        case 2: // troll
-                            return channel.send(`:game_die: **Criando um novo item** :new:\n\nDigite um emoji para ser o ícone. Pode ser um emoji default ou emoji personalizado, desde que seja DESTE server.\n\nDigite o emoji (exemplo: :dance:) ou \`cancel\` para cancelar.`);
-                    }
-                })
-                .then(msg => {
-                    // color/icon
-                    oldMsg = msg;
-                    return channel.awaitMessages(m => {
-                        if (m.content === 'cancel') {
-                            return true;
+                        switch (prompt.getChoice('type')) {
+                            case GACHA_TYPES.ROLE:
+                                prompt.setNext('prompt-color');
+                                break;
+                            case GACHA_TYPES.ICON:
+                                prompt.setNext('prompt-icon-default');
+                                break;
+                            case GACHA_TYPES.TROLL:
+                                prompt.setNext('prompt-icon');
+                                break;
+                            case GACHA_TYPES.GAME:
+                                prompt.setChoice('emoji', '🎮');
+                                prompt.setNext('prompt-name');
+                                break;
                         }
-                        switch (itemSelected.type) {
-                            case 0: // role
-                                return m.content.match(/^#[0-9a-fA-F]{6}$/);
-                            case 1: // icon
-                                return m.content.match(/^[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]$/u);
-                            case 2: // troll
-                                return m.content.match(/^<:[^:]+:\d+>$/) || m.content.match(/^[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]$/u);
-                        }
-                    }, { max: 1, time: 30000, errors: ['time'] })
-                })
-                .then(collected => {
-                    // escolhendo cor/icon
-                    if (oldMsg) {
-                        oldMsg.delete();
-                        oldMsg = null;
                     }
-                    const response = collected.first().content;
-
-                    if (response === 'cancel') {
-                        return Promise.reject(collected);
+                )
+                .addPrompt(
+                    'prompt-color',
+                    `Digite uma cor, em hexadecimal, que a role vai ter.\nExemplo: **#fc00a3**`,
+                    `Digite o emoji`,
+                    response => {
+                        return response.match(/^#[0-9a-fA-F]{6}$/);
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('color', choice);
+                        prompt.setNext('prompt-name');
                     }
-
-                    switch (itemSelected.type) {
-                        case 0: // role
-                            itemSelected.color = response;
-                            break;
-                        case 1: // icon
-                            itemSelected.icon = response;
-                            break;
-                        case 2: // troll
-                            break;
+                )
+                .addPrompt(
+                    'prompt-icon-default',
+                    `Digite um emoji para ser o ícone. Deve ser um emoji default, não pode ser um emoji personalizado.\nExemplo: :smiley:`,
+                    `Digite o emoji`,
+                    response => {
+                        return response.match(/^[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]$/u);
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('emoji', choice);
+                        prompt.setNext('prompt-name');
                     }
-
-                    // texto msg
-                    return channel.send(`:game_die: **Criando um novo item** :new:\n\nDigite o nome desse item. Exemplos:\n **Marrom-cocô** (se for uma role)\n **Murro na poc** (se for um icone tipo :left_facing_fist:)\n **Um avatar da polly** (se for um item troll)\n\nDigite o nome do item ou \`cancel\` para cancelar.`);
-                })
-                .then(msg => {
-                    // texto
-                    oldMsg = msg;
-                    return channel.awaitMessages(m => {
-                        // if (m.content === 'cancel') {
-                        //     return true;
-                        // }
+                )
+                .addPrompt(
+                    'prompt-icon',
+                    `Digite um emoji para ser o ícone. Pode ser um emoji default ou emoji personalizado, desde que seja DESTE server.\nExemplo: :dance:`,
+                    `Digite o emoji`,
+                    response => {
+                        return response.match(/^<:[^:]+:\d+>$/) || response.match(/^[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]$/u);;
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('emoji', choice);
+                        prompt.setNext('prompt-name');
+                    }
+                )
+                .addPrompt(
+                    'prompt-name',
+                    `Digite o nome desse item. Exemplos:
+ **Marrom-cocô** (se for uma role)
+ **Murro na poc** (se for um icone tipo :left_facing_fist:)
+ **Um avatar da polly** (se for um item troll)`,
+                    `Digite o nome`,
+                    response => {
                         return true;
-                    }, { max: 1, time: 30000, errors: ['time'] })
-                })
-                .then(collected => {
-                    // escolhendo cor/icon
-                    if (oldMsg) {
-                        oldMsg.delete();
-                        oldMsg = null;
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('name', choice);
                     }
-                    const response = collected.first().content;
+                )
+            ;
 
-                    if (response === 'cancel') {
-                        return Promise.reject(collected);
-                    }
-
-                    itemSelected.name = response;
-
-                    // concluido, criar
-                    return Promise.resolve(itemSelected);
-                })
-                .then(item => {
+            // começa o prompt
+            prompt.start('prompt-type')
+                .then(itemSelected => {
+                    console.log('CHEGOU FINISH', itemSelected);
                     switch (itemSelected.type) {
-                        case 0: // role
-                            return createRole(guild, member, item.color, item.rarity, item.name);
-                        case 1: // icon
-                            return Promise.reject(`Ainda não terminei.`);
-                        case 2: // troll
-                            return Promise.reject(`Ainda não terminei.`);
+                        case GACHA_TYPES.ROLE: // role
+                            return createRole(guild, member, itemSelected.color, itemSelected.rarity, itemSelected.name);
+                        case GACHA_TYPES.ICON: // icon
+                        case GACHA_TYPES.TROLL: // troll
+                        case GACHA_TYPES.GAME: // troll
+                            return createItem(guild, member, itemSelected);
                     }
                 })
                 .then(item => {
                     return message.reply(`:white_check_mark: Item ${formatItem(guild, item)} criado com sucesso.`);
                 })
                 .catch(error => {
-                    if (oldMsg) {
-                        oldMsg.delete();
-                        oldMsg = null;
-                    }
-                    if (error instanceof Map) {
-                        message.reply(`:x: Cancelado.`);
-                    } else {
-                        console.error(error);
-                        message.reply(`:x: ${error}`);
-                    }
+                    console.error(error);
+                    message.reply(`:x: ${error}`);
                 })
             ;
 
@@ -376,11 +342,18 @@ class Gacha {
                 .then(items => {
                     let foundItems = '';
 
+                    items.sort((a, b) => {
+                        return b.rarity - a.rarity;
+                    });
+
                     items.forEach(item => {
-                        foundItems += `\n:small_blue_diamond: `
-                            + (isDebug ? `(<@${item.author}>) ` : '')
-                            + formatItem(guild, item)
-                        ;
+                        if (isDebug || !item.owner) {
+                            foundItems += `\n:small_blue_diamond: `
+                                + (isDebug ? `(criado: <@${item.author}>) ` : '')
+                                + (isDebug && item.owner ? `(dono: <@${item.owner}>) ` : '')
+                                + formatItem(guild, item)
+                            ;
+                        }
                     });
 
                     if (!foundItems) {
@@ -437,12 +410,14 @@ class Gacha {
 
                             items.forEach(item => {
                                 foundItems += `\n:small_blue_diamond: `
-                                    + `\`[${itemIndex}]\` `
+                                    + (GACHA_ITEM_TYPES[item.type].canEquip ? `\`[${itemIndex}]\` ` : `\`[ ]\` `)
                                     + `${info.roles[item.id]}x `
                                     + formatItem(guild, item, false, info.equip === item.id)
                                     + (info.equip === item.id ? ' *[Equipado]*' : '');
 
-                                itemIndex++;
+                                if (GACHA_ITEM_TYPES[item.type].canEquip) {
+                                    itemIndex++;
+                                }
                             });
 
                             if (!foundItems) {
@@ -498,7 +473,7 @@ class Gacha {
                     const filter = (item, id) => {
                         // vê se .roles[id] for maior do que zero
                         // .roles[id] é o numero de itens possuídos pelo usuario
-                        return info.roles[item.id];
+                        return info.roles[item.id] && GACHA_ITEM_TYPES[item.type].canEquip;
                     };
 
                     db.findAll('roles', filter)
@@ -534,16 +509,38 @@ class Gacha {
                             // muda a role do usuario
                             let equipPromise;
                             const isEquip = (!oldEquip || (newEquip.id !== oldEquip.id));
+
+                            let unequipFunction = (equipItem) => {
+                                switch (equipItem.type) {
+                                    case GACHA_TYPES.ROLE:
+                                        return member.removeRole(equipItem.role);
+                                    case GACHA_TYPES.ICON:
+                                        return removeEmojiToNickname(member, equipItem.emoji);
+                                    default:
+                                        return Promise.resolve();
+                                }
+                            };
+
+                            let equipFunction = (equipItem) => {
+                                switch (equipItem.type) {
+                                    case GACHA_TYPES.ROLE:
+                                        return member.addRole(equipItem.role);
+                                    case GACHA_TYPES.ICON:
+                                        return addEmojiToNickname(member, equipItem.emoji);
+                                    default:
+                                        return Promise.resolve();
+                                }
+                            };
+
                             if (!isEquip) {
                                 // desequipar
-                                equipPromise = member.removeRole(newEquip.role);
+                                equipPromise = unequipFunction(newEquip);
                             } else {
                                 // equipar e tirar a antiga, se tiver
-                                equipPromise = member
-                                    .addRole(newEquip.role)
+                                equipPromise = equipFunction(newEquip)
                                     .then(() => {
                                         if (oldEquip) {
-                                            return member.removeRole(oldEquip.role);
+                                            return unequipFunction(oldEquip);
                                         }
                                         return Promise.resolve();
                                     });
@@ -673,7 +670,7 @@ class Gacha {
                                 // na raridade que você tirou
                                 let possibleItems = [];
                                 items.forEach(item => {
-                                    if (item.rarity === rarityWon) {
+                                    if (item.rarity === rarityWon && !item.owner) {
                                         possibleItems.push(item);
                                     }
                                 });
@@ -707,17 +704,32 @@ class Gacha {
 
                             console.log('WON', itemsWon);
 
+                            let itemsToSave = [];
+
                             // adiciona os itens ganhos no seu inventario
                             for (let i = 0; i < itemsWon.length; i++) {
                                 const item = itemsWon[i];
+
+                                // cria o item no inventario do usuario, caso não tenha
                                 info.roles[item.id] = info.roles[item.id] || 0;
+
+                                // indica se é um item novo pro usuario
                                 news.push(info.roles[item.id] === 0);
+
+                                // adiciona +1
                                 info.roles[item.id]++;
+
+                                if (GACHA_ITEM_TYPES[item.type].limited) {
+                                    // se o item é um do tipo limitado, marcar o dono do item nele
+                                    item.owner = member.id;
+                                    itemsToSave.push(['roles/' + item.id, item])
+                                }
                             }
 
                             // salva e mostra os ganhos do gacha
-                            db.save('info/' + member.id, info)
-                                .then(newInfo => {
+                            console.log('TO SAVE', [['info/' + member.id, info]].concat(itemsToSave));
+                            db.saveAll([['info/' + member.id, info]].concat(itemsToSave))
+                                .then((newInfo, ...newItems) => {
 
                                     let skip = false;
                                     // vai ficar escutando esse valor no db,
@@ -759,7 +771,7 @@ class Gacha {
                                                 }
                                                 message.client.setTimeout(() => {
                                                     _open(msg, countOpened - 1);
-                                                }, 1700);
+                                                }, 2000);
                                             } else {
                                                 // quando termina a animação de open do gacha
                                                 // não precisa mais ter o listen lá de cima.
@@ -773,8 +785,7 @@ class Gacha {
                                         });
                                     }
 
-                                    message.reply(`\n:slot_machine: Resultado do seu pull:
-\n:game_die: Carregando resultados :game_die:`)
+                                    message.reply(`\n:slot_machine: Resultado do seu pull:\n:game_die: Carregando resultados :game_die:`)
                                         .then(msg => {
                                             if (maxRarityWon >= 2) {
                                                 // se for A pra cima, dar uma dica do que vem
@@ -856,11 +867,25 @@ class Gacha {
                             // let itemIndex = 1;
 
                             items.forEach(item => {
-                                if (info.roles[item.id] > 1) {
+                                // quantidade minima que deve sobrar no inventario.
+                                // se 0, significa que não vai sobrar nenhum no seu inventario
+                                // exemplo: itens trolls servem somente pra trocar por dinheiro
+                                let mustHaveAmount = GACHA_ITEM_TYPES[item.type].mustHaveAmount;
+                                if (info.roles[item.id] > mustHaveAmount) {
 
                                     // pega só os itens repetidos e deixa apenas um
-                                    const itemCountToExchange = info.roles[item.id] - 1;
-                                    info.roles[item.id] = 1;
+                                    const itemCountToExchange = info.roles[item.id] - mustHaveAmount;
+                                    if (mustHaveAmount > 0) {
+                                        info.roles[item.id] = mustHaveAmount;
+                                    } else {
+                                        info.roles[item.id] = null; // deleta
+                                    }
+
+                                    if (item.type === GACHA_TYPES.GAME && item.owner === member.id) {
+                                        // se for do tipo jogo, dar direto pro usuario
+                                        exchanges['games'] = exchanges['games'] || [];
+                                        exchanges['games'].push(item);
+                                    }
 
                                     exchanges[item.rarity] += itemCountToExchange;
                                     foundItemsCount++;
@@ -888,6 +913,15 @@ class Gacha {
                             }
 
                             text += `\n   *Total* = **${sumTokensExchange}**`;
+
+                            if (exchanges['games']) {
+                                text += `\n**Jogo(s) resgatado(s):**`;
+                                exchanges['games'].forEach(gameItem => {
+                                    text += `\n  `
+                                        + formatItem(guild, gameItem)
+                                    ;
+                                })
+                            }
 
                             // soma os tokens novos
                             info.tokens += sumTokensExchange;
@@ -1045,6 +1079,33 @@ class Gacha {
     }
 }
 
+function createItem(guild, user, props) {
+    return new Promise((resolve, reject) => {
+        if (!GACHA_ITEM_TYPES[props.type]) {
+            reject(new Error('Item do tipo ' + props.type + ' não existe.'))
+            return;
+        }
+
+        //const emoji = props.emoji instanceof Discord.Emoji ? props.emoji : guild.emojis.get(props.emoji);
+        // salva item no db
+        const item = {
+            type: props.type,
+            emoji: props.emoji,
+            author: user.id,
+            rarity: props.rarity,
+            name: props.name,
+            limited: GACHA_ITEM_TYPES[props.type].limited
+        };
+
+        db.insert('roles', item)
+            .then(item => {
+                resolve(item);
+            })
+            .catch(reject)
+        ;
+    });
+}
+
 function createRole(guild, user, color, rarity, name) {
     return new Promise((resolve, reject) => {
         const colorNumber = Jimp.cssColorToHex(color);
@@ -1104,14 +1165,15 @@ function createRole(guild, user, color, rarity, name) {
                             guild.createEmoji(base64String, emojiName).then(emoji => {
                                 // salva tudo no db
                                 const item = {
-                                    type: GACHA_ITEM_TYPES[0].type,
+                                    type: GACHA_TYPES.ROLE,
                                     role: role.id,
                                     emoji: emoji.id,
                                     author: user.id,
                                     rarity: rarity,
                                     color: color,
                                     colorDecimal: colorNumber,
-                                    name: name
+                                    name: name,
+                                    limited: false
                                 };
 
                                 db.insert('roles', item)
@@ -1177,7 +1239,7 @@ function findByColor(color) {
 function deleteItem(guild, user, item) {
     const reason = `Excluído por comando gacha por @${user.username}`;
     return new Promise((resolve, reject) => {
-        if (item.type === 'role') {
+        if (!item.type || item.type === GACHA_TYPES.ROLE) {
             guild.deleteEmoji(item.emoji, reason)
                 .then(() => {
                     // deletou emoji
@@ -1207,7 +1269,7 @@ function emojifyName(name) {
 }
 
 function formatItem(guild, item, isNew) {
-    const emoji = guild.emojis.get(item.emoji);
+    const emoji = item.emoji.match(/^\d+$/) ? guild.emojis.get(item.emoji) : item.emoji;
     return `${emoji}${GACHA_RARITIES[item.rarity].emojiLetter} **${item.name}**`
         + (isNew ? ` :sparkles:` : '');
 }
@@ -1219,6 +1281,34 @@ function rarityLetterToNumber(letter) {
         }
     }
     return false;
+}
+
+function addEmojiToNickname(member, emoji) {
+    return new Promise((resolve, reject) => {
+        let newNickname = member.nickname || member.user.username;
+        newNickname = emoji + ' ' + newNickname;
+
+        console.log('NICK A', newNickname);
+
+        member.setNickname(newNickname.trim())
+            .then(resolve)
+            .catch(reject)
+        ;
+    })
+}
+
+function removeEmojiToNickname(member, emoji) {
+    return new Promise((resolve, reject) => {
+        let newNickname = member.nickname || member.user.username;
+        newNickname = newNickname.replace(new RegExp(emoji, 'g'), '');
+
+        console.log('NICK R', newNickname);
+
+        member.setNickname(newNickname.trim())
+            .then(resolve)
+            .catch(reject)
+        ;
+    })
 }
 
 function formatFutureDate(now, future) {
