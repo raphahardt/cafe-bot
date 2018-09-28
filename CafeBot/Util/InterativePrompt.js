@@ -2,8 +2,9 @@
 const Discord = require("discord.js");
 
 class InterativePrompt {
-    constructor(channel, title, timeout) {
+    constructor(channel, member, title, timeout) {
         this.channel = channel;
+        this.member = member;
         this.title = title;
         this.timeout = timeout;
         this.choices = {};
@@ -11,8 +12,8 @@ class InterativePrompt {
         this.next = null;
     }
 
-    static create(channel, title, timeout) {
-        return new InterativePrompt(channel, title, timeout);
+    static create(channel, member, title, timeout) {
+        return new InterativePrompt(channel, member, title, timeout);
     }
 
     setChoice(key, value) {
@@ -29,11 +30,12 @@ class InterativePrompt {
         return this;
     }
 
-    addPrompt(id, description, footer, filterResponses, cbChoice) {
+    addPrompt(id, description, footer, filterResponses, cbChoice, maxChoices) {
         this.prompts[id] = {
             id,
             description,
             footer,
+            max: maxChoices > 0 ? maxChoices : 1,
             filter: filterResponses,
             callback: cbChoice
         };
@@ -64,18 +66,35 @@ class InterativePrompt {
                 }).then(msg => {
                     if (msg) {
                         oldMsg = msg;
+
+                        const prompt = this.prompts[this.next];
+                        if (!prompt) {
+                            reject(new Error('Id de prompt `' + this.next + '` não existe.'));
+                            return;
+                        }
+
                         return this.channel.awaitMessages(m => {
                             if (m.content === 'cancel') {
                                 return true;
                             }
-                            const prompt = this.prompts[this.next];
-                            if (!prompt) {
-                                reject(new Error('Id de prompt `' + this.next + '` não existe.'));
-                                return;
+                            const filterResponse = (
+                                this.member.id === m.author.id
+                                && prompt.filter.apply(null, [m.content, that])
+                            );
+
+                            if (!filterResponse && this.member.id === m.author.id) {
+                                this.channel.send(`:x: Resposta inválida. Tente novamente ou \`cancel\` para cancelar.`)
+                                    .then(mi => {
+                                        this.channel.client.setTimeout(() => {
+                                            mi.delete();
+                                        }, 3000);
+                                    })
+                                ;
                             }
-                            return prompt.filter.apply(null, [m.content, that]);
+
+                            return filterResponse;
                         }, {
-                            max: 1,
+                            max: prompt.max,
                             time: this.timeout,
                             errors: ['time']
                         })

@@ -178,7 +178,7 @@ class Cafebase {
     findAll(pathParent, filterCb, defaultValueIfNull) {
         return this.getAll(pathParent, defaultValueIfNull)
             .then(value => {
-                if (value === null) {
+                if (value === null || value === undefined) {
                     return [];
                 }
                 let founds = [];
@@ -188,7 +188,7 @@ class Cafebase {
                             founds.push(value[i]);
                         }
                     }
-                } else {
+                } else if (typeof value === 'object') {
                     for (let key in value) {
                         if (!value.hasOwnProperty(key)) continue;
 
