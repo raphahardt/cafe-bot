@@ -40,15 +40,16 @@ let GACHA_EXTRA_CHANCE_MULTIPLIER = 1;
 const GACHA_MAX_TIMESTAMP_IN_SECS = 7 * 24 * 60 * 60000;
 
 let GACHA_EXTRA_TOKENS_CHANNEL = '346798009050333184';
-let GACHA_EXTRA_TOKENS_PRIZE = 100;
-let GACHA_EXTRA_TOKENS_REACT_GIVEN = 10;
-let GACHA_EXTRA_TOKENS_REACT_RECEIVED = 6;
+let GACHA_EXTRA_TOKENS_PRIZE = 600;
+let GACHA_EXTRA_TOKENS_REACT_GIVE = 20;
+let GACHA_EXTRA_TOKENS_REACT_RECEIVED = 11;
 let GACHA_EXTRA_TOKENS_MAX_REACTS = 5;
 
 let GACHA_TIER_C_CHANNEL = '495237582012022794';
 let GACHA_TIER_B_CHANNEL = '495237607836352532';
 let GACHA_TIER_A_CHANNEL = '495237633560150057';
 let GACHA_TIER_S_CHANNEL = '495237654544121857';
+let GACHA_LOG_CHANNEL = '495576950891610118';
 
 const GACHA_VALID_CHANNELS_EARN_TOKENS = [
     '213797930937745409', // mesa
@@ -57,10 +58,28 @@ const GACHA_VALID_CHANNELS_EARN_TOKENS = [
     '414209945576275968', // selfie
 ];
 
+// cache pra saber se tal pessoa está mudando o nick ou não, pro evento não ser disparado em loop infinito
 let GACHA_CHANGING_NICK = {};
 
-db.getLive('config', config => {
+// cache pra saber quem ta tirando pull no momento, pra evitar race condition e exploitar tokens infinitos, por ex.
+let GACHA_ONGOING_PULL = {};
 
+db.refreshConfig(config => {
+    GACHA_PULL_COST = config.pullCost || 100;
+    GACHA_INITIAL_TOKENS = config.initialTokens || 200;
+    GACHA_EXTRA_CHANCE_MULTIPLIER = config.extraChanceMultiplier || 1;
+
+    GACHA_EXTRA_TOKENS_CHANNEL = config.extraTokensChannel || '346798009050333184';
+    GACHA_EXTRA_TOKENS_PRIZE = config.extraTokensPrize || 600;
+    GACHA_EXTRA_TOKENS_REACT_GIVE = config.extraTokensReactGive || 20;
+    GACHA_EXTRA_TOKENS_REACT_RECEIVED = config.extraTokensReactReceived || 11;
+    GACHA_EXTRA_TOKENS_MAX_REACTS = config.extraTokensMaxReacts || 5;
+
+    GACHA_TIER_C_CHANNEL = config.tierCChannel || '495237582012022794';
+    GACHA_TIER_B_CHANNEL = config.tierBChannel || '495237607836352532';
+    GACHA_TIER_A_CHANNEL = config.tierAChannel || '495237633560150057';
+    GACHA_TIER_S_CHANNEL = config.tierSChannel || '495237654544121857';
+    GACHA_LOG_CHANNEL = config.logChannel || '495576950891610118';
 });
 
 class Gacha {
@@ -92,12 +111,22 @@ class Gacha {
             case 'roll':
             case 'p':
                 return Gacha.gachaPullCommand(message, args);
+            case 'testdm':
+                return Gacha.gachaTestDMCommand(message, args);
+            case 'draw':
+                return Gacha.gachaDrawCommand(message, args);
+            case 'punish':
+                return Gacha.gachaPunishCommand(message, args);
             case 'help':
-                message.reply("Ainda não fiz :3");
-                break;
+                return Gacha.gachaHelpCommand(message, args);
+            case 'refreshreacts':
+                const isDebug = args.includes('--debug') && hasPermission(message);
+                updateExtraTokensReacts(message.client, isDebug);
+                return;
             default:
-                const commands = ['create', 'delete', 'info', 'list', 'equip', 'exchange', 'pull'].map(c => `\`${c}\``).join(', ');
-                message.reply(":x: Comando inexistente.\nComandos disponíveis: ${commands} ou `help` para mais detalhes.");
+                const adminCommands = hasPermission(message) ? ['create', 'delete', 'draw', 'punish'] : [];
+                const commands = adminCommands.concat(['info', 'list', 'equip', 'exchange', 'pull', 'testdm']).map(c => `\`${c}\``).join(', ');
+                message.reply(`:x: Comando inexistente.\nComandos disponíveis: ${commands} ou \`help\` para mais detalhes.`);
         }
     }
 
@@ -194,7 +223,7 @@ class Gacha {
                 .addPrompt(
                     'prompt-game-link',
                     `Digite o link (com \\<\\> em volta) que resgata o jogo, ou se o jogo for gift pela Steam, digite o link pro seu usuário. Se for uma key (Origin, Uplay, outros), digite a key. \nExemplo:\n **\\<<https://www.humblebundle.com/gift?key=ABCDE>\\>** (se for link do Humble Bundle)\n**\\<<https://steamcommunity.com/id/ABCDE>\\>** (se for gift no seu inventário da steam)`,
-                    `Digite um link`,
+                    `Digite um link ou key`,
                     response => {
                         return !response.startsWith(utils.prefix);
                     },
@@ -304,16 +333,145 @@ class Gacha {
                     return;
                 }
 
-                deleteItem(guild, member, item).then((oldItem) => {
-                    return message.reply(`:white_check_mark: Item \`${oldItem.name}\` excluído com sucesso.`);
-                }).catch(error => {
-                    console.error(error);
-                    message.reply(`:x: ${error}`);
-                });
+                const confirmationCode = parseInt((Math.random() * 8000) + 1000);
+                const prompt = InterativePrompt.create(message.channel, member, null, 30000)
+                    .addPrompt(
+                        'prompt-confirmation',
+                        `:wastebasket: Tem certeza que quer deletar o item ${formatItem(guild, item)}?`,
+                        `Digite \`${confirmationCode}\` para confirmar`,
+                        response => {
+                            return parseInt(response) === confirmationCode;
+                        },
+                        (choice, prompt) => {
+                            prompt.setChoice('code', parseInt(choice));
+                        }
+                    );
+
+                prompt.start('prompt-confirmation')
+                    .then(choices => {
+                        if (choices.code === confirmationCode) {
+                            return deleteItem(guild, member, item);
+                        }
+                    })
+                    .then((oldItem) => {
+                        return message.reply(`:white_check_mark: Item \`${oldItem.name}\` excluído com sucesso.`);
+                    })
+                    .catch(error => {
+                        console.error(error);
+                        message.reply(`:x: ${error}`);
+                    })
+                ;
+
             }).catch(error => {
                 console.error(error);
                 message.reply(`:x: ${error}`);
             });
+
+        } catch (error) {
+            console.error(error);
+            message.reply(`:x: ${error.message}`);
+        }
+    }
+
+    static gachaDrawCommand(message, args) {
+        try {
+            if (!hasPermission(message)) {
+                message.reply(`:x: *Você não tem permissão de usar esse comando.*`);
+                return;
+            }
+            const guild = getCafeComPaoGuild(message);
+            const member = getCafeComPaoMember(guild, message);
+            const channel = guild.channels.get(GACHA_EXTRA_TOKENS_CHANNEL);
+
+            const messageId = args.shift();
+
+            if (!messageId) {
+                message.reply(`:x: Digite um ID de mensagem.`);
+                return;
+            }
+
+            channel.fetchMessage(messageId)
+                .then(foundMessage => {
+                    const draw = {
+                        message: foundMessage.id,
+                        channel: channel.id,
+                        reacts: {}
+                    };
+                    db.insert('drawings', draw)
+                        .then(draw => {
+                            const memberPrizeId = foundMessage.author.id;
+                            return modifyInfo(memberPrizeId, info => {
+                                console.log('DRAW PRIZE TOKEN', memberPrizeId, info.tokens);
+                                info.tokens += GACHA_EXTRA_TOKENS_PRIZE;
+                                return info;
+                            });
+                        })
+                        .then(() => {
+                            return message.reply(`:white_check_mark: Mensagem marcada como desenho com sucesso.`);
+                        })
+                        .catch(error => {
+                            console.error(error);
+                            message.reply(`:x: ${error}`);
+                        })
+                    ;
+                })
+                .catch(error => {
+                    message.reply(`:x: ${error}`);
+                })
+            ;
+
+        } catch (error) {
+            console.error(error);
+            message.reply(`:x: ${error.message}`);
+        }
+    }
+
+    /**
+     * Pune um usuário em uma quantidade de tokens.
+     *
+     * @param message
+     * @param args
+     */
+    static gachaPunishCommand(message, args) {
+        try {
+            if (!hasPermission(message)) {
+                message.reply(`:x: *Você não tem permissão de usar esse comando.*`);
+                return;
+            }
+            const guild = getCafeComPaoGuild(message);
+            const member = getCafeComPaoMember(guild, message);
+
+            const userId = args.shift();
+            const punishAmount = parseInt(args.shift());
+
+            if (!userId) {
+                message.reply(`:x: Comando incorreto. Use \`+gacha punish (id usuário) (quantidade tokens)\``);
+                return;
+            }
+
+            if (punishAmount < 0 || punishAmount > 9999) {
+                message.reply(`:x: KKKKKKKK. Não. :slight_smile:`);
+                return;
+            }
+
+            const modifyFn = info => {
+                console.log('PUNISH TOKEN', userId, info.tokens);
+                info.tokens -= punishAmount;
+                return info;
+            };
+
+            modifyInfo(userId, modifyFn)
+                .then((info) => {
+                    try {
+                        guild.channels.get(GACHA_LOG_CHANNEL).send(`**Punição**\nUsuário <@${userId}> foi punido em ${punishAmount} token(s).`).catch(console.log);
+                    } catch (e) { console.log(e) }
+                    return message.reply(`:white_check_mark: Usuário <@${userId}> foi punido em ${punishAmount} token(s) com sucesso. Novo saldo: **${info.tokens}**`);
+                })
+                .catch(error => {
+                    console.error(error);
+                    message.reply(`:x: ${error}`);
+                })
+            ;
 
         } catch (error) {
             console.error(error);
@@ -333,13 +491,50 @@ class Gacha {
             const guild = getCafeComPaoGuild(message);
             const member = getCafeComPaoMember(guild, message);
 
+            const only = args.shift();
+
             db.getArray('roles')
                 .then(items => {
                     let foundItems = '';
 
                     items.sort((a, b) => {
-                        return b.rarity - a.rarity;
+                        if (b.rarity - a.rarity === 0) {
+                            return a.name.localeCompare(b.name);
+                        }
+                        return (b.rarity - a.rarity);
                     });
+
+                    if (only) {
+                        let filter;
+                        switch (only) {
+                            case 'cores':
+                            case 'colors':
+                            case 'c':
+                            case 'roles':
+                                filter = (i) => {
+                                    return i.type === GACHA_TYPES.ROLE;
+                                };
+                                break;
+                            case 'icones':
+                            case 'emojis':
+                            case 'i':
+                            case 'icons':
+                                filter = (i) => {
+                                    return i.type === GACHA_TYPES.ICON;
+                                };
+                                break;
+                            case 'games':
+                            case 'jogos':
+                            case 'g':
+                            case 'j':
+                                filter = (i) => {
+                                    return i.type === GACHA_TYPES.GAME;
+                                };
+                                break;
+                        }
+
+                        items = items.filter(filter);
+                    }
 
                     items.forEach(item => {
                         if (isDebug || !item.owner) {
@@ -352,7 +547,11 @@ class Gacha {
                     });
 
                     if (!foundItems) {
-                        message.reply(`:x: Nenhum item de gacha registrado. Aguarde os admins criarem novos itens.`);
+                        if (only) {
+                            message.reply(`:x: Nenhum item de gacha deste tipo no momento.`);
+                        } else {
+                            message.reply(`:x: Nenhum item de gacha registrado. Aguarde os admins criarem novos itens.`);
+                        }
                         return;
                     }
 
@@ -586,6 +785,11 @@ class Gacha {
             const guild = getCafeComPaoGuild(message);
             const member = getCafeComPaoMember(guild, message);
 
+            if (GACHA_ONGOING_PULL[member.id]) {
+                message.reply(`:x: Pull em andamento. Aguarde alguns segundos antes de mandar outro.`);
+                return;
+            }
+
             // limita
             pullTimes = Math.min(GACHA_MAX_PULLS, Math.max(1, pullTimes));
 
@@ -601,10 +805,15 @@ class Gacha {
                     // tira qualquer skip que ficou de outros comandos
                     db.delete('skip/' + member.id);
 
+                    // transaction do pull começa aqui ---
+                    GACHA_ONGOING_PULL[member.id] = true;
+
                     getInfo(member)
                         .then(info => {
                             if (info.tokens < pullCostTotal && !isDebug) {
                                 message.reply(`:x: Você não tem token suficiente. Seus tokens: **${info.tokens}**. Você precisa: **${pullCostTotal}**.`);
+                                // transaction do pull termina toda vez que há um termino repentino ---
+                                delete GACHA_ONGOING_PULL[member.id];
                                 return;
                             }
 
@@ -666,14 +875,6 @@ class Gacha {
                                                 possibleItems.push(item);
                                             }
                                         });
-                                        // for (let id in items) {
-                                        //     if (!items.hasOwnProperty(id)) continue;
-                                        //     const item = items[id];
-                                        //
-                                        //     if (item.rarity === rarityWon) {
-                                        //         possibleItems.push(item);
-                                        //     }
-                                        // }
 
                                         console.log('POSSIBLE ITEMS', possibleItems);
 
@@ -719,9 +920,12 @@ class Gacha {
                                     }
 
                                     // salva e mostra os ganhos do gacha
-                                    console.log('TO SAVE', [['info/' + member.id, info]].concat(itemsToSave));
+                                    //console.log('TO SAVE', [['info/' + member.id, info]].concat(itemsToSave));
                                     db.saveAll([['info/' + member.id, info]].concat(itemsToSave))
                                         .then(([newInfo, ...newItems]) => {
+
+                                            // tá salvo, transaction pode terminar tranquilo a partir daqui ---
+                                            delete GACHA_ONGOING_PULL[member.id];
 
                                             let skip = false;
                                             // vai ficar escutando esse valor no db,
@@ -793,12 +997,16 @@ class Gacha {
                                         .catch(error => {
                                             console.error(error);
                                             message.reply(`:x: ${error}`);
+                                            // transaction do pull termina toda vez que há um termino repentino ---
+                                            delete GACHA_ONGOING_PULL[member.id];
                                         })
                                     ;
                                 })
                                 .catch(error => {
                                     console.error(error);
                                     message.reply(`:x: Não foi possível sortear seus prêmios. Tente novamente. ${error}`);
+                                    // transaction do pull termina toda vez que há um termino repentino ---
+                                    delete GACHA_ONGOING_PULL[member.id];
                                 })
                             ;
 
@@ -806,18 +1014,26 @@ class Gacha {
                         .catch(error => {
                             console.error(error);
                             message.reply(`:x: ${error}`);
+                            // transaction do pull termina toda vez que há um termino repentino ---
+                            delete GACHA_ONGOING_PULL[member.id];
                         })
                     ;
                 })
                 .catch(error => {
                     console.error(error);
                     message.reply(`:x: ${error}`);
+
+                    // transaction do pull termina toda vez que há um termino repentino ---
+                    delete GACHA_ONGOING_PULL[member.id];
                 })
             ;
 
         } catch (error) {
             console.error(error);
             message.reply(`:x: ${error.message}`);
+
+            // transaction do pull termina toda vez que há um termino repentino ---
+            delete GACHA_ONGOING_PULL[member.id];
         }
 
     }
@@ -842,6 +1058,7 @@ class Gacha {
                     for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
                         exchanges[r] = 0;
                     }
+                    exchanges['games'] = [];
 
                     const filter = (item, id) => {
                         // vê se .roles[id] for maior do que zero
@@ -876,11 +1093,12 @@ class Gacha {
 
                                     if (item.type === GACHA_TYPES.GAME && item.owner === member.id) {
                                         // se for do tipo jogo, dar direto pro usuario
-                                        exchanges['games'] = exchanges['games'] || [];
                                         exchanges['games'].push(item);
+                                    } else {
+                                        // só vira token o que não for jogo
+                                        exchanges[item.rarity] += itemCountToExchange;
                                     }
 
-                                    exchanges[item.rarity] += itemCountToExchange;
                                     foundItemsCount++;
                                 }
                             });
@@ -907,10 +1125,11 @@ class Gacha {
 
                             text += `\n   *Total* = **${sumTokensExchange}**`;
 
-                            if (exchanges['games']) {
-                                text += `\n**Jogo(s) resgatado(s):**`;
+                            if (exchanges['games'].length) {
+                                text += `\n\n**Jogo(s) resgatado(s):**`;
                                 exchanges['games'].forEach(gameItem => {
-                                    text += `\n  `
+                                    text += `\n`
+                                        + ':small_blue_diamond: '
                                         + formatItem(guild, gameItem)
                                     ;
                                 })
@@ -921,16 +1140,75 @@ class Gacha {
 
                             text += `\n\nSeu novo saldo de tokens: **${info.tokens}**`;
 
-                            // salva e mostra os tokens ganhos
-                            db.save('info/' + member.id, info)
-                                .then(newInfo => {
-                                    message.reply(text);
-                                })
-                                .catch(error => {
-                                    console.error(error);
-                                    message.reply(`:x: ${error}`);
-                                })
-                            ;
+                            let beforeSavePromise;
+                            if (exchanges['games'].length) {
+                                // se teve jogo, tentar enviar via DM pra ele primeiro
+                                beforeSavePromise = new Promise(resolve => {
+                                    const p = member.createDM()
+                                        .then(dm => {
+                                            function formatLinkGame(item, code) {
+                                                if (item.link.match(/steam/)) {
+                                                    return `O jogo é um gift da Steam. Faça amizade com esta pessoa (${item.link}) e informe este código para ela: \`[${code}]\``;
+                                                }
+                                                return `${item.link} (caso tenha problemas em resgatar, avise algum dos admins informando esse código: \`[${code}]\``;
+                                            }
+
+                                            let giftText = ':gift: Jogos resgatados do gacha Café com Pão!';
+                                            let logText = `**Resgate de jogos**\n${member} está resgatando os seguintes jogos:`;
+                                            exchanges['games'].forEach(gameItem => {
+                                                const code = parseInt((Math.random() * 8000) + 1000);
+                                                giftText += `\n\n  `
+                                                    + formatItem(guild, gameItem)
+                                                    + "\n"
+                                                    + formatLinkGame(gameItem, code)
+                                                ;
+
+                                                logText += `\n  `
+                                                    + formatItem(guild, gameItem)
+                                                    + ` - Criado por <@${gameItem.author}> - Código de segurança \`[${code}]\``
+                                                ;
+                                            });
+
+                                            giftText += `\n\nSiga as instruções de cada jogo pra resgatar. Dúvidas, falar com algum dos admins para te ajudar.`;
+
+                                            return dm.send(giftText).then(() => {
+                                                try {
+                                                    guild.channels.get(GACHA_LOG_CHANNEL).send(logText).catch(console.log);
+                                                } catch (e) { console.log(e) }
+                                            });
+                                        })
+                                    ;
+
+                                    p.then(() => {
+                                        // deu tudo certo, continua no save info
+                                        resolve();
+                                    }).catch(() => {
+                                        // deu algum erro, provavelmente de privacidade que o usuario não aceita DM
+                                        // do bot. então deixar avisado, mas tirar os jogos do info como ganhos e avisar
+                                        text += `\n\n:exclamation: **Atenção**: o(s) jogo(s) não foi(ram) resgatados. Digite \`+gacha testdm\` e veja se o bot consegue enviar DM para você. Caso não, verifique suas configurações de privacidade.`;
+                                        // volta os items pro inventario do usuario
+                                        exchanges['games'].forEach(gameItem => {
+                                            info.roles[gameItem.id] = 1;
+                                        });
+                                        resolve();
+                                    })
+                                });
+                            } else {
+                                beforeSavePromise = Promise.resolve();
+                            }
+
+                            beforeSavePromise.then(() => {
+                                // salva e mostra os tokens ganhos
+                                db.save('info/' + member.id, info)
+                                    .then(newInfo => {
+                                        message.reply(text);
+                                    })
+                                    .catch(error => {
+                                        console.error(error);
+                                        message.reply(`:x: ${error}`);
+                                    })
+                                ;
+                            });
 
                         })
                         .catch(error => {
@@ -953,6 +1231,31 @@ class Gacha {
 
     }
 
+    static gachaTestDMCommand(message, args) {
+        try {
+            const isDebug = args.includes('--debug') && hasPermission(message);
+            const guild = getCafeComPaoGuild(message);
+            const member = getCafeComPaoMember(guild, message);
+
+            member.createDM()
+                .then(dm => {
+                    return dm.send(':white_check_mark: Teste de DM com sucesso. Está mensagem se apagará automaticamente em alguns segundos.')
+                        .then(m => {
+                            message.client.setTimeout(() => { m.delete() }, 10000);
+                        });
+                })
+                .catch(err => {
+                    //console.error(err);
+                    message.reply(`:x: Não foi possível criar uma DM com você. Verifique as suas configurações de privacidade para permitir que o bot mande mensagens diretas para você.`);
+                })
+            ;
+
+        } catch (error) {
+            console.error(error);
+            message.reply(`:x: ${error.message}`);
+        }
+    }
+
 
     /**
      * Timer que roda a cada 1 minuto automaticamente.
@@ -971,8 +1274,14 @@ class Gacha {
         try {
             const guild = client.guilds.get('213797930937745409');
 
-            // a cada 20 minutos
-            if (minutes % 20 === 0) {
+            // a cada 15 minutos, só que no minuto segunte (16, 31, 46, 1)
+            if ((minutes - 1) % 15 === 0) {
+                updateExtraTokensReacts(client);
+                return;
+            }
+
+            // a cada 15 minutos
+            if (minutes % 15 === 0) {
 
                 guild.fetchMembers()
                     .then(() => {
@@ -985,7 +1294,7 @@ class Gacha {
                             }*/
                             const lastMessage = member.lastMessage;
 
-                            console.log('MEMBER', member.id, (lastMessage || {}).createdTimestamp);
+                            console.log('MEMBER', member.id, date.getTime(), (lastMessage || {}).createdTimestamp);
 
                             if (lastMessage) {
                                 const diff = date.getTime() - lastMessage.createdTimestamp;
@@ -1023,25 +1332,25 @@ class Gacha {
     }
 
     static onReactionAdd(messageReaction, user) {
-        let reactCount = messageReaction.count;
-        messageReaction.fetchUsers()
-            .then(users => {
-                if (users && !users.some(u => adminsIds.includes(u.id))) {
-                    // ignora quem não for admin
-                    return;
-                }
-
-                if (reactCount > 0 && messageReaction.emoji.name === '🔞') {
-                    // marcar essa mensagem como nsfw
-                    return messageReaction.message.delete();
-                }
-            })
-            .then(msg => {
-                if (msg) {
-                    return createNsfwAlert(msg, true);
-                }
-            })
-            .catch(console.error);
+        // let reactCount = messageReaction.count;
+        // messageReaction.fetchUsers()
+        //     .then(users => {
+        //         if (users && !users.some(u => adminsIds.includes(u.id))) {
+        //             // ignora quem não for admin
+        //             return;
+        //         }
+        //
+        //         if (reactCount > 0 && messageReaction.emoji.name === '🔞') {
+        //             // marcar essa mensagem como nsfw
+        //             return messageReaction.message.delete();
+        //         }
+        //     })
+        //     .then(msg => {
+        //         if (msg) {
+        //             return createNsfwAlert(msg, true);
+        //         }
+        //     })
+        //     .catch(console.error);
     }
 
     /**
@@ -1094,6 +1403,42 @@ class Gacha {
                 }, console.error)
             ;
         }
+    }
+
+    static onReady(client) {
+        // db.getLiveCollection('drawings', (event, draw) => {
+        //     try {
+        //         if (event === 'changed') {
+        //             const guild = getCafeComPaoGuild(client);
+        //             const channel = guild.channels.get(draw.channel || GACHA_EXTRA_TOKENS_CHANNEL);
+        //
+        //             channel.fetchMessage(messageId)
+        //                 .then(foundMsg => {
+        //                     const draw = {
+        //                         message: foundMsg.id,
+        //                         channel: channel.id,
+        //                         reacts: {}
+        //                     };
+        //                     db.save('drawings', draw)
+        //                         .then(draw => {
+        //                             message.reply(`:white_check_mark: Mensagem marcada como desenho com sucesso.`);
+        //                         })
+        //                         .catch(error => {
+        //                             console.error(error);
+        //                             message.reply(`:x: ${error}`);
+        //                         })
+        //                     ;
+        //                 })
+        //                 .catch(error => {
+        //                     message.reply(`:x: ${error}`);
+        //                 })
+        //             ;
+        //         }
+        //     } catch (e) {
+        //         console.error(e);
+        //     }
+        // });
+
     }
 
     static onMessage(message) {
@@ -1295,10 +1640,67 @@ class Gacha {
         return {
             //'messageReactionAdd': Gacha.onReactionAdd,
             'message': Gacha.onMessage,
+            'ready': Gacha.onReady,
             'messageDelete': Gacha.onMessageDelete,
             'messageUpdate': Gacha.onMessageUpdate,
             'guildMemberUpdate': Gacha.onGuildMemberUpdate
         }
+    }
+
+    static gachaHelpCommand(message, args) {
+        let text = '__*Comandos disponíveis*__:\n';
+
+        if (hasPermission(message)) {
+            // comandos de admin
+            text += ''
+                + `\`+gacha create\`\n`
+                + `Abre um menu interativo pra criação de um item de gacha.\n`
+                + `\n`
+                + `\`+gacha delete (nome do item)\`\n`
+                + `Excluí um item de gacha pelo nome. O nome deve ser exatamente o mesmo, incluindo acentos e letras maiúsculas.\n`
+                + `Por exemplo, se o nome de um item é "iTeM De GáCHa", o comando deve ser \`+gacha delete iTeM De GáCHa\`\n`
+                + `\n`
+                + `\`+gacha draw (id da mensagem)\`\n`
+                + `Marca a mensagem do membro como *válido* para receber seus ${GACHA_EXTRA_TOKENS_PRIZE} tokens `
+                + `de recompensa por ter participado de um request de desenhos.\n`
+                + `Exemplo de uso: \`+gacha draw 495929392275390466\`\n`
+                + `\n`
+                + `\`+gacha punish (user id) (quantidade)\`\n`
+                + `Pune um usuário numa quantidade de tokens.\n`
+                + `\n`
+            ;
+        }
+
+        text += ''
+            + `\`+gacha info\` ou \`+gacha stats\`\n`
+            + `Informa seus tokens e items adquiridos.\n`
+            + `\n`
+            + `\`+gacha list\`\n`
+            + `Mostra uma lista com todos os itens disponíveis do gacha.\n`
+            + `\n`
+            + `\`+gacha equip (número do item)\`\n`
+            + `Equipa um dos seus items adquiridos. Você pode equipar uma *cor* e um *emoji* simultaneamente, `
+            + `mas nunca duas *cores* ou dois *itens*.\n`
+            + `\n`
+            + `\`+gacha exchange\`\n`
+            + `Troca seus itens repetidos por tokens extras (e também dá claim nos jogos que você tiver)\n`
+            + `Cada item tem um valor de acordo com a raridade dele.\n`
+            + `Os itens considerados lixos (maioria dos ${GACHA_RARITIES[0].emojiLetter}) serão *todos* descartados no exchange.\n`
+            + `\n`
+            + `\`+gacha pull (número)\` ou \`+gacha roll (número)\`\n`
+            + `Rola um gacha.\n`
+            + `Cada pull dá direito a um item, e cada item custa ${GACHA_PULL_COST} tokens. Você pode multiplicar `
+            + `o número de pulls colocando uma quantidade na frente, aumentando também o custo proporcionalmente.\n`
+            + `Se você rolar 10 itens de uma vez, você tem uma garantia de pelo menos ${GACHA_EXTRA_CHANCE_MULTIPLIER} ${GACHA_RARITIES[1].emojiLetter}+).\n`
+            + `\n`
+            + `\`+gacha testdm\`\n`
+            + `Verifica se o bot consegue mandar DM direto pra você. Isso é necessário para claim de jogos do gacha. `
+            + `Use esse teste para conferir se você consegue receber DM dele normalmente. Se der algum erro, `
+            + `verifique suas configurações de privacidade. Caso não deseje liberar essa configuração, você `
+            + `tem esse direito, porém não poderá dar claim em jogos.\n`
+        ;
+
+        message.reply(text);
     }
 }
 
@@ -1309,24 +1711,32 @@ function createItem(guild, user, props) {
             return;
         }
 
-        //const emoji = props.emoji instanceof Discord.Emoji ? props.emoji : guild.emojis.get(props.emoji);
-        // salva item no db
-        const item = {
-            type: props.type,
-            emoji: props.emoji,
-            author: user.id,
-            rarity: props.rarity,
-            name: props.name,
-            limited: GACHA_ITEM_TYPES[props.type].limited,
-            byMessage: props.messageId || null
-        };
+        findByFilter((item) => item.name === props.name).then((found) => {
+            if (found) {
+                reject(`O item ${formatItem(guild, found)} já existe.`);
+            } else {
+                //const emoji = props.emoji instanceof Discord.Emoji ? props.emoji : guild.emojis.get(props.emoji);
+                // salva item no db
+                const item = {
+                    type: props.type,
+                    emoji: props.emoji,
+                    author: user.id,
+                    rarity: props.rarity,
+                    name: props.name,
+                    link: props.link || null,
+                    limited: GACHA_ITEM_TYPES[props.type].limited,
+                    byMessage: props.messageId || null
+                };
 
-        db.insert('roles', item)
-            .then(item => {
-                resolve(item);
-            })
-            .catch(reject)
-        ;
+                db.insert('roles', item)
+                    .then(item => {
+                        resolve(item);
+                    })
+                    .catch(reject)
+                ;
+            }
+        }).catch(reject);
+
     });
 }
 
@@ -1447,18 +1857,7 @@ function findByFilter(filter) {
 }
 
 function findByColor(color) {
-    return new Promise((resolve, reject) => {
-        db.findOne('roles', (item) => item.color === color)
-            .then(item => {
-                if (item !== null) {
-                    resolve(item);
-                } else {
-                    resolve(null);
-                }
-            })
-            .catch(reject)
-        ;
-    });
+    return findByFilter((item) => item.color === color);
 }
 
 function deleteItem(guild, user, item) {
@@ -1490,6 +1889,7 @@ function deleteItem(guild, user, item) {
 }
 
 function getInfo(member) {
+    const id = typeof(member) === 'string' ? member : member.id;
     let defaultInfo = {
         roles: {},
         tokens: GACHA_INITIAL_TOKENS,
@@ -1503,7 +1903,18 @@ function getInfo(member) {
     //     }
     // }
 
-    return db.getOne('info/' + member.id, defaultInfo);
+    return db.getOne('info/' + id, defaultInfo);
+}
+
+function modifyInfo(member, fn) {
+    const id = typeof(member) === 'string' ? member : member.id;
+    let defaultInfo = {
+        roles: {},
+        tokens: GACHA_INITIAL_TOKENS,
+        equip: {}
+    };
+
+    return db.transactionOne('info/' + id, fn, defaultInfo);
 }
 
 function emojifyName(name) {
@@ -1557,6 +1968,146 @@ function removeEmojiToNickname(member, emoji) {
     })
 }
 
+function fetchReactsFromMessage(message, oldReacts, maxReacts, _debug) {
+    let reacts = {};
+    return new Promise(resolve => {
+        let fetchPromises = [];
+
+        message.reactions.forEach(reaction => {
+            fetchPromises.push(reaction.fetchUsers());
+        });
+
+        Promise.all(fetchPromises)
+            .then(reactionsUsers => {
+                let i = 0;
+                message.reactions.forEach(reaction => {
+                    reactionsUsers[i++].forEach(user => {
+                        // o if evita contabilizar auto-reacts
+                        console.log('A', user.id !== message.author.id, user.bot);
+                        if (_debug || (user.id !== message.author.id && !user.bot)) {
+                            reacts[user.id] = reacts[user.id] || 0;
+                            reacts[user.id]++;
+
+                            // limita o numero de reacts
+                            reacts[user.id] = Math.min(maxReacts, reacts[user.id]);
+
+                            // adiciona no old tbm pq a iteração vai ser sobre o old,
+                            // assim os users que são novos vão ser considerados tbm
+                            oldReacts[user.id] = oldReacts[user.id] || 0;
+                        }
+                    });
+                });
+
+                resolve({ reacts: reacts, oldReacts: oldReacts });
+            })
+        ;
+    });
+}
+
+function updateExtraTokensReacts(client, _debug) {
+    db.getArray('drawings')
+        .then(draws => {
+            const guild = getCafeComPaoGuild(client);
+
+            draws.forEach(draw => {
+                const channel = guild.channels.get(draw.channel || GACHA_EXTRA_TOKENS_CHANNEL);
+
+                channel.fetchMessage(draw.message)
+                    .then(message => {
+                        const authorUser = message.author;
+
+                        // pega a contagem que estava
+                        let oldReacts = draw.reacts || {};
+
+                        fetchReactsFromMessage(message, oldReacts, GACHA_EXTRA_TOKENS_MAX_REACTS, _debug)
+                            .then(o => {
+                                let newReacts = o.reacts;
+                                oldReacts = o.oldReacts;
+
+                                console.log('DRAW OLD REACTS', oldReacts);
+                                console.log('DRAW NEW REACTS', newReacts);
+
+                                // verifica agora usuario por usuario as diferenças de react]
+                                let tokensToAdd = {};
+                                for (let userId in oldReacts) {
+                                    let diff;
+                                    if (!newReacts[userId]) {
+                                        // se não tem mais no new, é pq user tirou todas suas reacts, entao tirar os tokens
+                                        diff = -oldReacts[userId];
+                                    } else {
+                                        diff = newReacts[userId] - oldReacts[userId];
+                                    }
+
+                                    console.log('diff', diff);
+
+                                    // o if evita o auto-like
+                                    if (_debug || authorUser.id !== userId) {
+                                        // para o usuario received (que fez o desenho)
+                                        const tokensToAddReceived = GACHA_EXTRA_TOKENS_REACT_RECEIVED * diff;
+                                        tokensToAdd[authorUser.id] = tokensToAdd[authorUser.id] || 0;
+                                        tokensToAdd[authorUser.id] += tokensToAddReceived;
+
+                                        // para o usuario give
+                                        const tokensToAddGive = GACHA_EXTRA_TOKENS_REACT_GIVE * diff;
+                                        tokensToAdd[userId] = tokensToAdd[userId] || 0;
+                                        tokensToAdd[userId] += tokensToAddGive;
+                                    }
+                                }
+
+                                console.log("TOKENS TO MODIFY", tokensToAdd);
+
+                                // altera info por info
+                                let modified = false;
+                                for (let userId in tokensToAdd) {
+                                    if (tokensToAdd[userId] !== 0) {
+                                        modified = true;
+                                        modifyInfo(userId, info => {
+                                            console.log('DRAW MODIFY TOKEN', userId, info.tokens, tokensToAdd[userId]);
+                                            info.tokens += tokensToAdd[userId];
+                                            return info;
+                                        }).catch(console.error);
+                                    }
+                                }
+
+                                if (modified) {
+                                    // salva os novos reacts
+                                    draw.reacts = newReacts;
+                                    db.save('drawings/' + draw.id, draw)
+                                        .then(draw => {
+                                            console.log('DRAW SAVED', draw)
+                                            //message.reply(`:white_check_mark: Mensagem marcada como desenho com sucesso.`);
+                                        })
+                                        .catch(console.error)
+                                    ;
+                                }
+                            })
+                        ;
+
+                        // // conta quantas reacts cada usuario deu atualmente
+                        // let newReacts = {};
+                        // reactions.forEach(reaction => {
+                        //     console.log('REACTIONS', reaction.users.size);
+                        //     reaction.users.forEach(user => {
+                        //         newReacts[user.id] = newReacts[user.id] || 0;
+                        //         newReacts[user.id]++;
+                        //
+                        //         // adiciona no old tbm pq a iteração vai ser sobre o old,
+                        //         // assim os users que são novos vão ser considerados tbm
+                        //         oldReacts[user.id] = oldReacts[user.id] || 0;
+                        //     });
+                        // });
+
+
+                    })
+                    .catch(error => {
+                        console.error(error);
+                    })
+                ;
+            });
+        })
+    ;
+}
+
 function formatFutureDate(now, future) {
     const diff = parseInt((future instanceof Date ? future.getTime() : future) / 1000)
         - parseInt((now instanceof Date ? now.getTime() : now) / 1000);
@@ -1598,10 +2149,18 @@ function hasPermission(message) {
     return message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_ROLES);
 }
 
-function getCafeComPaoGuild(message) {
-    const guild = message.guild || message.client.guilds.get('213797930937745409');
+function getCafeComPaoGuild(messageOrClient) {
+    let guild;
+    if (messageOrClient instanceof Discord.Client) {
+        guild = messageOrClient.guilds.get('213797930937745409');
+    } else {
+        guild = messageOrClient.guild || messageOrClient.client.guilds.get('213797930937745409');
+    }
     if (!guild) {
         throw new Error("Não foi possível encontrar o Café com Pão. Algo deu muito errado...");
+    }
+    if (!guild.available) {
+        throw new Error("Server está com outrage. Tente novamente mais tarde.");
     }
     return guild;
 }

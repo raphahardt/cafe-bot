@@ -12,6 +12,8 @@ const fbDb = fbApp.database();
 class Cafebase {
     constructor(ref) {
         this.ref = fbDb.ref(ref);
+        this.lives = {};
+        this.livesCollections = {};
     }
 
     save(path, value) {
@@ -39,6 +41,53 @@ class Cafebase {
             const path = pathsAndValues[i][0];
             const value = pathsAndValues[i][1];
             promises.push(this.save(path, value));
+        }
+
+        return Promise.all(promises);
+    }
+
+    transation(path, actionFn, applyLocally) {
+        if (applyLocally === undefined) applyLocally = true;
+        return new Promise((resolve, reject) => {
+            this.ref.child(path).transaction(actionFn, (err, commited, snapshot) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+
+                const value = snapshot.exists() ? snapshot.val() : null;
+                resolve(value);
+
+            }, applyLocally);
+        });
+    }
+
+    transactionOne(path, actionFn, defaultObject, applyLocally) {
+        return this.transation(path, (value) => {
+            if (defaultObject !== undefined) {
+                if (value === null) {
+                    value = {};
+                }
+                for (let key in defaultObject) {
+                    if (!defaultObject.hasOwnProperty(key)) continue;
+
+                    if (value[key] === undefined || value[key] === null) {
+                        value[key] = defaultObject[key];
+                    }
+                }
+            }
+
+            return actionFn(value);
+        }, applyLocally);
+    }
+
+    transationAll(pathsAndActionsFn, applyLocally) {
+        if (applyLocally === undefined) applyLocally = true;
+        let promises = [];
+        for (let i = 0; i < pathsAndActionsFn.length; i++) {
+            const path = pathsAndActionsFn[i][0];
+            const actionFn = pathsAndActionsFn[i][1];
+            promises.push(this.transation(path, actionFn, applyLocally));
         }
 
         return Promise.all(promises);
@@ -231,17 +280,72 @@ class Cafebase {
      * @return {function} Função que cancela se for chamado.
      */
     getLive(path, callback, defaultValue) {
+        if (this.lives[path]) {
+            return this.lives[path];
+        }
+
         const fn = this.ref.child(path).on('value', snapshot => {
             const value = snapshot.exists() ? snapshot.val() : defaultValue;
 
             callback(value);
         });
 
-        return (function (db, path, fn) {
+        return this.lives[path] = (function (db, path, fn) {
             return function() {
                 db.ref.child(path).off('value', fn);
             }
         }(this, path, fn));
+    }
+
+    cancelLive(path) {
+        if (this.lives[path]) {
+            this.lives[path]();
+        }
+    }
+
+    getLiveCollection(path, callback, defaultValue) {
+        if (this.livesCollections[path]) {
+            return this.livesCollections[path];
+        }
+
+        const fnAdded = this.ref.child(path).on('child_added', snapshot => {
+            const value = snapshot.exists() ? snapshot.val() : defaultValue;
+
+            callback('added', value);
+        });
+        const fnChanged = this.ref.child(path).on('child_changed', snapshot => {
+            const value = snapshot.exists() ? snapshot.val() : defaultValue;
+
+            callback('changed', value);
+        });
+        const fnRemoved = this.ref.child(path).on('child_removed', snapshot => {
+            const value = snapshot.exists() ? snapshot.val() : defaultValue;
+
+            callback('removed', value);
+        });
+
+        return this.livesCollections[path] = (function (db, path, fnA, fnC, fnR) {
+            return function() {
+                db.ref.child(path).off('child_added', fnA);
+                db.ref.child(path).off('child_changed', fnC);
+                db.ref.child(path).off('child_removed', fnR);
+            }
+        }(this, path, fnAdded, fnChanged, fnRemoved));
+    }
+
+    cancelLiveCollection(path) {
+        if (this.livesCollections[path]) {
+            this.livesCollections[path]();
+        }
+    }
+
+    refreshConfig(callback) {
+        return this.getLive('config', callback, {});
+    }
+
+    // todo
+    setConfig(variable, configValue) {
+
     }
 }
 

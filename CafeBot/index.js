@@ -124,6 +124,12 @@ module.exports = {
                         return;
                     }
 
+                    // só em alguns eventos, mandar o client nos argumentos, pra facilitar
+                    // minha vida na hora de pegar o client do discord
+                    if (event === 'ready') {
+                        args = [discordClient].concat(args);
+                    }
+
                     // executa o evento de fato
                     events[event].apply(listener, args);
                 });

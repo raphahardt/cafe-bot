@@ -65,7 +65,7 @@ CafeBot.registerDiscordEvents(client, activator, [
     require('./CafeBot/BattleRoyale'),
     require('./CafeBot/Nsfw'),
     require('./CafeBot/RemindMe'),
-    require('./CafeBot/Gacha'),
+    //require('./CafeBot/Gacha'),
 ]);
 
 // conecta o bot

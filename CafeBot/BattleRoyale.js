@@ -70,11 +70,15 @@ let DELAY_TELEPORTS = 240; // em minutos
 let ROYALE_CHANNEL_ID = '461224031123800101';
 let DEBUG = false;
 
+// cache da ultima vez q foi usado um comando, pra evitar spam de comandos
+let BR_LAST_USED = {};
+
 ref.child('config').on('value', snapshot => {
     let config = snapshot.val();
 
     if (config) {
         ROYALE_CHANNEL_ID = config.channelId || ROYALE_CHANNEL_ID;
+        DELAY_WALKS = config.delayWalks || DELAY_WALKS;
         DEBUG = config.debug || false;
     }
 });
@@ -97,6 +101,14 @@ class BattleRoyale {
 
     static royaleCommand(message, args) {
         //console.log('ROLES', message.guild.roles.array().map(r => `${r.id}: ${r.name}`));
+        const now = new Date();
+        if (BR_LAST_USED[message.author.id]) {
+            if (now.getTime() - BR_LAST_USED[message.author.id] < 20000) {
+                message.reply(`:x: Aguarde 2 segundos entre um comando e outro...`).then(m => m.delete(2000));
+                return;
+            }
+        }
+        BR_LAST_USED[message.author.id] = now.getTime();
 
         const client = message.client;
         tileEmojis = {
@@ -181,7 +193,10 @@ class BattleRoyale {
         const channel = getRoyaleChannel(message);
         const responseChannel = getResponseChannel(message);
 
-        exitPlayer(message.member).then(successMsg => {
+        const guild = getCafeComPaoGuild(message);
+        const member = getCafeComPaoMember(guild, message);
+
+        exitPlayer(member).then(successMsg => {
             responseChannel.send(successMsg);
             if (responseChannel.id !== channel.id) {
                 // anuncia tbm no canal do jogo
@@ -203,6 +218,9 @@ class BattleRoyale {
         const channel = getRoyaleChannel(message);
         const responseChannel = getResponseChannel(message);
 
+        const guild = getCafeComPaoGuild(message);
+        const member = getCafeComPaoMember(guild, message);
+
         //let closeToCity = args.shift();
 
         // vai pegar as sintaxes:
@@ -213,9 +231,9 @@ class BattleRoyale {
         if (forcedPos && !forcedPos[0]) {
             forcedPos = null;
         }
-        console.log('FORCED POS', forcedPos);
+        //console.log('FORCED POS', forcedPos);
 
-        createPlayer(message.member, forcedPos).then(([ exists, player ]) => {
+        createPlayer(member, forcedPos).then(([ exists, player ]) => {
 
             let text;
             if (exists) {
@@ -255,7 +273,7 @@ class BattleRoyale {
         if (forcedPos && !forcedPos[0]) {
             forcedPos = null;
         }
-        console.log("FORCED POS", forcedPos);
+        //console.log("FORCED POS", forcedPos);
 
         Promise.all([
             getMap(),
@@ -412,7 +430,7 @@ class BattleRoyale {
                         // se tem loot
                         let loot = getLootFromTile(tile, loots);
                         if (loot) {
-                            console.log('LOOT', loot);
+                            //console.log('LOOT', loot);
                             const lootName = loot.name;
 
                             if (!gone.includes('l:' + lootName)) {
@@ -428,7 +446,7 @@ class BattleRoyale {
                         // se tem player
                         let playerFound = getPlayerFromTile(tile, players);
                         if (playerFound && playerFound.id !== player.id) {
-                            console.log('PLAYER', playerFound);
+                            //console.log('PLAYER', playerFound);
                             const playerId = playerFound.id;
 
                             if (!gone.includes('p:' + playerId)) {
@@ -912,7 +930,7 @@ class BattleRoyale {
 
                         if (testBiome(city, arrayMap[xa][ya].biome)) {
                             arrayMap[xa][ya].city = city;
-                            console.log('CITY' + city.name + ' IN ', xa, ya);
+                            //console.log('CITY' + city.name + ' IN ', xa, ya);
 
                             // coloca os pontos adjacentes
                             const startx = Math.max(xa - city.radius, 0),
@@ -1113,7 +1131,7 @@ class BattleRoyale {
         if (forcedPos && !forcedPos[0]) {
             forcedPos = null;
         }
-        console.log("FORCED POS", forcedPos);
+        //console.log("FORCED POS", forcedPos);
 
         Promise.all([
             getMap(),
@@ -1803,7 +1821,7 @@ function calcVision(map, x, y, coord, distanceVision) {
         origBounds[2] = Math.max(Math.min(origBounds[2], MAP_WIDTH - 1), 0);
         origBounds[3] = Math.max(Math.min(origBounds[3], MAP_WIDTH - 1), 0);
 
-        console.log('BOUNDS', origBounds);
+        //console.log('BOUNDS', origBounds);
 
         if (orientation === 'h') {
             let yo = origBounds[2];
@@ -2021,7 +2039,7 @@ function walkSyntaxToWalks(syntax) {
     // no fim, ainda limito o resultado tbm, pq pode ter o exploit de fazer 999n 999l 999s ...
     walks = walks.slice(0, MAX_WALKS + 1);
 
-    console.log('WALKS CALCULATED', walks);
+    //console.log('WALKS CALCULATED', walks);
 
     return walks;
 }
@@ -2206,6 +2224,30 @@ function hasPermission(message) {
         return false;
     }
     return message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS);
+}
+
+function getCafeComPaoGuild(messageOrClient) {
+    let guild;
+    if (messageOrClient instanceof Discord.Client) {
+        guild = messageOrClient.guilds.get('213797930937745409');
+    } else {
+        guild = messageOrClient.guild || messageOrClient.client.guilds.get('213797930937745409');
+    }
+    if (!guild) {
+        throw new Error("Não foi possível encontrar o Café com Pão. Algo deu muito errado...");
+    }
+    if (!guild.available) {
+        throw new Error("Server está com outrage. Tente novamente mais tarde.");
+    }
+    return guild;
+}
+
+function getCafeComPaoMember(guild, message) {
+    const member = guild.member(message.author);
+    if (!member) {
+        throw new Error("Você não é um membro do Café com Pão.");
+    }
+    return member;
 }
 
 module.exports = BattleRoyale;

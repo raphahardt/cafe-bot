@@ -62,7 +62,8 @@ class InterativePrompt {
                         reject(new Error('Id de prompt `' + this.next + '` não existe.'));
                         return;
                     }
-                    return this.channel.send(`${this.title}\n\n${prompt.description}\n\n${prompt.footer} ou \`cancel\` para cancelar.`);
+                    const text = (this.title ? this.title + "\n\n" : "") + (prompt.description ? prompt.description + "\n\n" : "");
+                    return this.channel.send(`${text}${prompt.footer} ou \`cancel\` para cancelar.`);
                 }).then(msg => {
                     if (msg) {
                         oldMsg = msg;
