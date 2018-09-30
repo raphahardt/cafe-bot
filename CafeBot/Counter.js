@@ -5,12 +5,25 @@ let insideCount = {};
 const Cafebase = require('./Cafebase');
 const db = new Cafebase('teste');
 
+// cache da ultima vez q foi usado um comando, pra evitar spam de comandos
+let LAST_USED = {};
+
 class Counter {
     constructor () {}
 
     static get name() { return 'counter' }
 
     static countCommand(message, args) {
+        const now = new Date();
+        if (LAST_USED[message.author.id]) {
+            console.log('LAST', now.getTime() - LAST_USED[message.author.id]);
+            if (now.getTime() - LAST_USED[message.author.id] < 3000) {
+                message.reply(`:x: Aguarde 3 segundos entre um comando e outro...`).then(m => m.delete(3000));
+                return;
+            }
+        }
+        LAST_USED[message.author.id] = now.getTime();
+
         if (!insideCount[message.author.id]) {
             insideCount[message.author.id] = 0;
         }

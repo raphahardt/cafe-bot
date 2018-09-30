@@ -103,8 +103,8 @@ class BattleRoyale {
         //console.log('ROLES', message.guild.roles.array().map(r => `${r.id}: ${r.name}`));
         const now = new Date();
         if (BR_LAST_USED[message.author.id]) {
-            if (now.getTime() - BR_LAST_USED[message.author.id] < 20000) {
-                message.reply(`:x: Aguarde 2 segundos entre um comando e outro...`).then(m => m.delete(2000));
+            if (now.getTime() - BR_LAST_USED[message.author.id] < 3000) {
+                message.reply(`:x: Aguarde 2 segundos entre um comando e outro...`).then(m => m.delete(3000));
                 return;
             }
         }
