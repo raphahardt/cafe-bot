@@ -38,12 +38,12 @@ let GACHA_EXTRA_CHANCE_MULTIPLIER = 1;
 
 let GACHA_DAILY_TOKENS = 80;
 let GACHA_DAILY_DAY = 24 * 60 * 60; // 1 dia
-let GACHA_DAILY_BONUS_UNTIL = 10; // em dias
-let GACHA_DAILY_BONUS_AMOUNT = 300;
+let GACHA_DAILY_BONUS_STREAK = 10; // em dias
+let GACHA_DAILY_BONUS_STREAK_TOKENS = 300;
 
 let GACHA_TOKEN_DROP_FREQUENCY = 5; // em minutos
-let GACHA_TOKEN_DROP_AMOUNT_MIN = 4;
-let GACHA_TOKEN_DROP_AMOUNT = 15;
+let GACHA_TOKEN_DROP_AMOUNT_MIN = 3;
+let GACHA_TOKEN_DROP_AMOUNT = 12;
 let GACHA_TOKEN_DROP_AMOUNT_MULTIPLIER = 1;
 let GACHA_TOKEN_DROP_MAX_TIMESTAMP = 7 * 24 * 60 * 60000; // em milissegundos
 
@@ -79,12 +79,12 @@ db.refreshConfig(config => {
 
     GACHA_DAILY_TOKENS = config.dailyTokens || 80;
     GACHA_DAILY_DAY = config.dailyOneDay || (24 * 60 * 60); // 1 dia
-    GACHA_DAILY_BONUS_UNTIL = config.dailyBonusUntil || 10; // em dias
-    GACHA_DAILY_BONUS_AMOUNT = config.dailyBonusAmount || 300;
+    GACHA_DAILY_BONUS_STREAK = config.dailyBonusStreak || 10; // em dias
+    GACHA_DAILY_BONUS_STREAK_TOKENS = config.dailyBonusStreakTokens || 300;
 
     GACHA_TOKEN_DROP_FREQUENCY = config.tokenDropFrequency || 5; // em minutos
-    GACHA_TOKEN_DROP_AMOUNT_MIN = config.tokenDropAmountMin || 4;
-    GACHA_TOKEN_DROP_AMOUNT = config.tokenDropAmount || 15;
+    GACHA_TOKEN_DROP_AMOUNT_MIN = config.tokenDropAmountMin || 3;
+    GACHA_TOKEN_DROP_AMOUNT = config.tokenDropAmount || 12;
     GACHA_TOKEN_DROP_AMOUNT_MULTIPLIER = config.tokenDropAmountMultiplier || 1;
     GACHA_TOKEN_DROP_MAX_TIMESTAMP = config.tokenDropMaxTimestampDecay || (7 * 24 * 60 * 60000); // em milissegundos
 
@@ -108,6 +108,7 @@ class Gacha {
 
     static gachaCommand(message, args) {
         const arg = args.shift();
+        const isDebug = args.includes('--debug') && hasPermission(message);
         switch (arg) {
             case 'create':
             case 'c':
@@ -128,6 +129,7 @@ class Gacha {
                 return Gacha.gachaEquipCommand(message, args);
             case 'exchange':
                 return Gacha.gachaExchangeCommand(message, args);
+            case 'bonus':
             case 'daily':
             case 'd':
                 return Gacha.gachaDailyCommand(message, args);
@@ -144,12 +146,13 @@ class Gacha {
             case 'help':
                 return Gacha.gachaHelpCommand(message, args);
             case 'refreshreacts':
-                const isDebug = args.includes('--debug') && hasPermission(message);
                 updateExtraTokensReacts(message.client, isDebug);
                 return;
+            case 'refreshnicks':
+                return Gacha.gachaRefreshNicknamesCommand(message, args);
             default:
                 const adminCommands = hasPermission(message) ? ['create', 'delete', 'draw', 'punish'] : [];
-                const commands = adminCommands.concat(['info', 'list', 'equip', 'exchange', 'pull', 'testdm']).map(c => `\`${c}\``).join(', ');
+                const commands = adminCommands.concat(['info', 'list', 'equip', 'exchange', 'pull', 'bonus', 'testdm']).map(c => `\`${c}\``).join(', ');
                 message.reply(`:x: Comando inexistente.\nComandos disponíveis: ${commands} ou \`help\` para mais detalhes.`);
         }
     }
@@ -424,26 +427,33 @@ class Gacha {
 
             channel.fetchMessage(messageId)
                 .then(foundMessage => {
-                    const draw = {
-                        message: foundMessage.id,
-                        channel: channel.id,
-                        reacts: {}
-                    };
-                    db.insert('drawings', draw)
-                        .then(draw => {
-                            const memberPrizeId = foundMessage.author.id;
-                            return modifyInfo(memberPrizeId, info => {
-                                console.log('DRAW PRIZE TOKEN', memberPrizeId, info.tokens);
-                                info.tokens += GACHA_EXTRA_TOKENS_PRIZE;
-                                return info;
-                            });
-                        })
-                        .then(() => {
-                            return message.reply(`:white_check_mark: Mensagem marcada como desenho com sucesso.`);
-                        })
-                        .catch(error => {
-                            console.error(error);
-                            message.reply(`:x: ${error}`);
+                    db.findOne('drawings', d => d.message === foundMessage.id)
+                        .then(foundDraw => {
+                            if (foundDraw) {
+                                return message.reply(`:x: Mensagem já está marcada como desenho.`);
+                            }
+                            const draw = {
+                                message: foundMessage.id,
+                                channel: channel.id,
+                                reacts: {}
+                            };
+                            db.insert('drawings', draw)
+                                .then(draw => {
+                                    const memberPrizeId = foundMessage.author.id;
+                                    return modifyInfo(memberPrizeId, info => {
+                                        console.log('DRAW PRIZE TOKEN', memberPrizeId, info.tokens);
+                                        info.tokens += GACHA_EXTRA_TOKENS_PRIZE;
+                                        return info;
+                                    });
+                                })
+                                .then(() => {
+                                    return message.reply(`:white_check_mark: Mensagem marcada como desenho com sucesso.`);
+                                })
+                                .catch(error => {
+                                    console.error(error);
+                                    message.reply(`:x: ${error}`);
+                                })
+                            ;
                         })
                     ;
                 })
@@ -1312,32 +1322,32 @@ class Gacha {
                     const remainingSecs = parseInt((now.getTime() - info.daily.lastTs) / 1000);
                     if (remainingSecs < GACHA_DAILY_DAY) {
                         const remainingText = formatTime(GACHA_DAILY_DAY - remainingSecs);
-                        message.reply(`:x: Você já resgatou seu daily hoje. Aguarde **${remainingText}** para o próximo.`);
+                        message.reply(`:x: Você já resgatou seu bônus. Aguarde **${remainingText}** para o próximo.`);
                         return;
                     }
 
                     // verifica se ainda tá dentro de menos de 2 dias.
                     // se passou de 2 dias, reseta o bonus
                     if (remainingSecs >= (GACHA_DAILY_DAY * 2)) {
-                        info.daily.bonusCount = 0;
+                        info.daily.streak = 0;
                     }
                 }
 
-                if (!info.daily.bonusCount || info.daily.bonusCount >= GACHA_DAILY_BONUS_UNTIL) {
-                    info.daily.bonusCount = 0;
+                if (!info.daily.streak || info.daily.streak >= GACHA_DAILY_BONUS_STREAK) {
+                    info.daily.streak = 0;
                 }
 
                 // guarda a ultima vez q fez daily
                 info.daily.lastTs = now.getTime();
-                info.daily.bonusCount++;
+                info.daily.streak++;
 
                 console.log('DAILY TOKEN', member.id, info.tokens, GACHA_DAILY_TOKENS);
                 info.tokens += GACHA_DAILY_TOKENS;
 
                 // bonus!
-                if (info.daily.bonusCount >= GACHA_DAILY_BONUS_UNTIL) {
-                    console.log('DAILY BONUS TOKEN', member.id, info.tokens, GACHA_DAILY_BONUS_AMOUNT);
-                    info.tokens += GACHA_DAILY_BONUS_AMOUNT;
+                if (info.daily.streak >= GACHA_DAILY_BONUS_STREAK) {
+                    console.log('DAILY BONUS TOKEN', member.id, info.tokens, GACHA_DAILY_BONUS_STREAK_TOKENS);
+                    info.tokens += GACHA_DAILY_BONUS_STREAK_TOKENS;
                 }
 
                 console.log('INFO END', info);
@@ -1349,18 +1359,18 @@ class Gacha {
                     if (info) {
                         let bonusText = '';
                         let firstRowText = '', secondRowText = '';
-                        for (let i = 1; i <= GACHA_DAILY_BONUS_UNTIL; i++) {
-                            firstRowText += (i === GACHA_DAILY_BONUS_UNTIL) ? `🎉` : `<:r0:461676744185741322>`;
-                            secondRowText += (i <= info.bonusCount) ? `🆗` : `⬛`;
+                        for (let i = 1; i <= GACHA_DAILY_BONUS_STREAK; i++) {
+                            firstRowText += (i === GACHA_DAILY_BONUS_STREAK) ? `🎉` : `<:r0:461676744185741322>`;
+                            secondRowText += (i <= info.daily.streak) ? `🆗` : `⬛`;
                         }
                         bonusText += ``
                             + firstRowText
                             + "\n"
                             + secondRowText
-                            + (info.bonusCount === GACHA_DAILY_BONUS_UNTIL ? ` **BÔNUS!**` : '')
+                            + (info.daily.streak === GACHA_DAILY_BONUS_STREAK ? ` **BÔNUS!**` : '')
                             + "\n"
                         ;
-                        return message.reply(`:white_check_mark: Você coletou seu bônus diário!\n${bonusText}\nVolte amanhã para mais um bônus.\nNovo saldo: **${info.tokens}**`);
+                        return message.reply(`:white_check_mark: Você coletou seu bônus!\n${bonusText}\nVolte em ${formatTime(GACHA_DAILY_DAY)} para mais um bônus.\nNovo saldo: **${info.tokens}**`);
                     }
                 })
                 .catch(error => {
@@ -1399,6 +1409,78 @@ class Gacha {
                     message.reply(`:x: Não foi possível criar uma DM com você. Verifique as suas configurações de privacidade para permitir que o bot mande mensagens diretas para você.`);
                 })
             ;
+
+        } catch (error) {
+            console.error(error);
+            message.reply(`:x: ${error.message}`);
+        }
+    }
+
+    /**
+     * Tira o icone de todos os usuários que não tem o icone equipado.
+     *
+     * @param message
+     * @param args
+     */
+    static gachaRefreshNicknamesCommand(message, args) {
+        try {
+            const isDebug = args.includes('--debug') && hasPermission(message);
+            const guild = getCafeComPaoGuild(message);
+            const member = getCafeComPaoMember(guild, message);
+
+            guild.members.forEach(guildMember => {
+                getInfo(guildMember)
+                    .then(info => {
+                        let oldNickname = guildMember.nickname || guildMember.user.username;
+                        let newNickname = oldNickname;
+                        const equip = info.equip[GACHA_TYPES.ICON];
+
+                        db.findAll('roles', item => item.type === GACHA_TYPES.ICON)
+                            .then(items => {
+                                let itemToEquip = null;
+                                items.forEach(item => {
+                                    // tira qualquer icone que o usuario tiver
+                                    newNickname = newNickname.replace(new RegExp(item.emoji, 'g'), '');
+
+                                    if (item.id === equip) {
+                                        itemToEquip = item;
+                                    }
+                                });
+
+                                newNickname = newNickname.trim();
+
+                                // se o nick ficar vazio, usar o username
+                                if (!newNickname) {
+                                    newNickname = guildMember.user.username;
+                                }
+
+                                // depois coloca emoji, se tiver equipado
+                                if (itemToEquip) {
+                                    newNickname = itemToEquip.emoji + ' ' + newNickname;
+                                }
+
+                                if (newNickname !== oldNickname) {
+                                    console.log('REFRESH NICK ALTER', newNickname);
+
+                                    // marca que tá sendo alterado o nick, para não disparar o evento de mudança de nick
+                                    console.log('->', guildMember.user.username, oldNickname, newNickname);
+                                    GACHA_CHANGING_NICK[guildMember.id] = true;
+                                    guildMember.setNickname(newNickname, 'Automático anti-exploit do +gacha')
+                                        .then(() => {
+                                            delete GACHA_CHANGING_NICK[guildMember.id];
+                                        })
+                                        .catch((error) => {
+                                            delete GACHA_CHANGING_NICK[guildMember.id];
+                                            console.error(error);
+                                        })
+                                    ;
+                                }
+
+                            }, console.error)
+                        ;
+                    }, console.error)
+                ;
+            })
 
         } catch (error) {
             console.error(error);
@@ -1562,11 +1644,14 @@ class Gacha {
 
                                 // marca que tá sendo alterado o nick, para não disparar o evento de mudança de nick
                                 GACHA_CHANGING_NICK[newMember.id] = true;
-                                newMember.setNickname(newNickname)
-                                    .finally(() => {
+                                newMember.setNickname(newNickname, 'Automático anti-exploit do +gacha')
+                                    .then(() => {
                                         delete GACHA_CHANGING_NICK[newMember.id];
                                     })
-                                    .catch(console.error)
+                                    .catch((error) => {
+                                        delete GACHA_CHANGING_NICK[newMember.id];
+                                        console.error(error);
+                                    })
                                 ;
                             }
 
@@ -1859,6 +1944,10 @@ class Gacha {
             + `Cada item tem um valor de acordo com a raridade dele.\n`
             + `Os itens considerados lixos (maioria dos ${GACHA_RARITIES[0].emojiLetter}) serão *todos* descartados no exchange.\n`
             + `\n`
+            + `\`+gacha bonus\`\n`
+            + `Ganha um bônus de ${GACHA_DAILY_TOKENS} tokens a cada ${formatTime(GACHA_DAILY_DAY)}.\n`
+            + `Se você manter um streak por ${GACHA_DAILY_BONUS_STREAK} bônus, você ganha um prêmio extra de ${GACHA_DAILY_BONUS_STREAK_TOKENS} tokens.\n`
+            + `\n`
             + `\`+gacha pull (número)\` ou \`+gacha roll (número)\`\n`
             + `Rola um gacha.\n`
             + `Cada pull dá direito a um item, e cada item custa ${GACHA_PULL_COST} tokens. Você pode multiplicar `
@@ -1872,7 +1961,7 @@ class Gacha {
             + `tem esse direito, porém não poderá dar claim em jogos.\n`
         ;
 
-        message.reply(text);
+        utils.sendLongMessage(message.channel, text);
     }
 }
 
@@ -2176,6 +2265,10 @@ function fetchReactsFromMessage(message, oldReacts, maxReacts, _debug) {
             })
         ;
     });
+}
+
+function updateNickname(member, _debug) {
+
 }
 
 function updateExtraTokensReacts(client, _debug) {

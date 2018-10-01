@@ -3,8 +3,8 @@ const utils = require('../utils');
 let insideCount = {};
 
 const Cafebase = require('./Cafebase');
-const db = new Cafebase('gacha');
-const Gacha = require('./Gacha');
+const db = new Cafebase('teste');
+//const Gacha = require('./Gacha');
 
 // cache da ultima vez q foi usado um comando, pra evitar spam de comandos
 let LAST_USED = {};
@@ -149,8 +149,10 @@ class Counter {
     static commands() {
         return {
             'count': Counter.countCommand,
-            'gggd': Gacha.gachaDailyCommand,
-            'gggt': Gacha.gachaInfoTokensCommand,
+            // 'gggd': Gacha.gachaDailyCommand,
+            // 'gggh': Gacha.gachaHelpCommand,
+            // 'gggr': Gacha.gachaRefreshNicknamesCommand,
+            // 'gggt': Gacha.gachaInfoTokensCommand,
             //'nick': Counter.nickCommand,
             'vassoura': Counter.broomCommand,
             'db': Counter.dbTestCommand,
