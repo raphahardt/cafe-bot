@@ -55,7 +55,7 @@ class Cafebase {
                     return;
                 }
 
-                const value = snapshot.exists() ? snapshot.val() : null;
+                const value = commited && snapshot.exists() ? snapshot.val() : null;
                 resolve(value);
 
             }, applyLocally);
@@ -64,10 +64,21 @@ class Cafebase {
 
     transactionOne(path, actionFn, defaultObject, applyLocally) {
         return this.transation(path, (value) => {
-            if (defaultObject !== undefined) {
-                if (value === null) {
+            console.log('transationOne', value);
+            if (typeof(defaultObject) === 'object') {
+                if (!value) {
                     value = {};
+                    for (let key in defaultObject) {
+                        if (!defaultObject.hasOwnProperty(key)) continue;
+
+                        if (value[key] === undefined || value[key] === null) {
+                            value[key] = defaultObject[key];
+                        }
+                    }
+                    return value;
                 }
+
+                // coloca os default que sobrar
                 for (let key in defaultObject) {
                     if (!defaultObject.hasOwnProperty(key)) continue;
 

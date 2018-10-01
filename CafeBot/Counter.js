@@ -3,7 +3,8 @@ const utils = require('../utils');
 let insideCount = {};
 
 const Cafebase = require('./Cafebase');
-const db = new Cafebase('teste');
+const db = new Cafebase('gacha');
+const Gacha = require('./Gacha');
 
 // cache da ultima vez q foi usado um comando, pra evitar spam de comandos
 let LAST_USED = {};
@@ -131,13 +132,36 @@ class Counter {
         message.reply(text);
     }*/
 
+    static nickCommand(message, args) {
+        console.log('+NICK', args[0]);
+        message.member.setNickname(args[0]);
+    }
+
+    static onMemberUpdate(oldMember, newMember) {
+        let oldNick = oldMember.nickname || oldMember.user.nickname;
+        let newNick = newMember.nickname || newMember.user.nickname;
+        console.log('MUDOU NICK', oldNick, newNick);
+        if (oldNick !== newNick) {
+            newMember.setNickname(oldNick);
+        }
+    }
+
     static commands() {
         return {
             'count': Counter.countCommand,
+            'gggd': Gacha.gachaDailyCommand,
+            'gggt': Gacha.gachaInfoTokensCommand,
+            //'nick': Counter.nickCommand,
             'vassoura': Counter.broomCommand,
             'db': Counter.dbTestCommand,
             'msgtest': Counter.messageTestCommand/*,
             'async': Counter.asyncTestCommand*/
+        }
+    }
+
+    static events() {
+        return {
+            //'guildMemberUpdate': Counter.onMemberUpdate
         }
     }
 }
