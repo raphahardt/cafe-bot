@@ -62,10 +62,10 @@ CafeBot.registerDiscordEvents(client, activator, [
     //require('./CafeBot/Wololo'), // fim do wololo (19/02/18 ✝)
     require('./CafeBot/Sorteio'),
     //require('./CafeBot/Exp'), // ainda não tá pronto
-    require('./CafeBot/BattleRoyale'),
+    //require('./CafeBot/BattleRoyale'), // fim do battle royale (30/09/19 ✝)
     require('./CafeBot/Nsfw'),
     require('./CafeBot/RemindMe'),
-    //require('./CafeBot/Gacha'),
+    require('./CafeBot/Gacha'),
 ]);
 
 // conecta o bot

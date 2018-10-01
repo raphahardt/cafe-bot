@@ -33,7 +33,7 @@ const GACHA_RARITIES = [
 
 let GACHA_PULL_COST = 100;
 const GACHA_MAX_PULLS = 10;
-let GACHA_INITIAL_TOKENS = 200;
+let GACHA_INITIAL_TOKENS = 800;
 let GACHA_EXTRA_CHANCE_MULTIPLIER = 1;
 
 // 7 dias
@@ -66,7 +66,7 @@ let GACHA_ONGOING_PULL = {};
 
 db.refreshConfig(config => {
     GACHA_PULL_COST = config.pullCost || 100;
-    GACHA_INITIAL_TOKENS = config.initialTokens || 200;
+    GACHA_INITIAL_TOKENS = config.initialTokens || 800;
     GACHA_EXTRA_CHANCE_MULTIPLIER = config.extraChanceMultiplier || 1;
 
     GACHA_EXTRA_TOKENS_CHANNEL = config.extraTokensChannel || '346798009050333184';
