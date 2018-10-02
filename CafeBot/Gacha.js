@@ -121,7 +121,10 @@ class Gacha {
             case 'i':
                 return Gacha.gachaInfoCommand(message, args);
             case 'tokens':
+            case 't':
                 return Gacha.gachaInfoTokensCommand(message, args);
+            case 'keep':
+                return Gacha.gachaKeepCommand(message, args);
             case 'list':
             case 'l':
                 return Gacha.gachaListCommand(message, args);
@@ -152,7 +155,7 @@ class Gacha {
                 return Gacha.gachaRefreshNicknamesCommand(message, args);
             default:
                 const adminCommands = hasPermission(message) ? ['create', 'delete', 'draw', 'punish'] : [];
-                const commands = adminCommands.concat(['info', 'list', 'equip', 'exchange', 'pull', 'bonus', 'testdm']).map(c => `\`${c}\``).join(', ');
+                const commands = adminCommands.concat(['info', 'list', 'equip', 'exchange', 'pull', 'keep', 'bonus', 'testdm']).map(c => `\`${c}\``).join(', ');
                 message.reply(`:x: Comando inexistente.\nComandos disponíveis: ${commands} ou \`help\` para mais detalhes.`);
         }
     }
@@ -193,7 +196,7 @@ class Gacha {
                 ;
             }
 
-            const prompt = InterativePrompt.create(channel, member, `:game_die: **Criando um novo item** :new:`, 30000)
+            const prompt = InterativePrompt.create(channel, member, `:game_die: \`+gacha create\` **Criando um novo item** :new:`, 30000)
                 .addPrompt(
                     'prompt-type',
                     `Escolha o tipo de item a ser criado: ${typesText}`,
@@ -706,6 +709,243 @@ class Gacha {
             message.reply(`:x: ${error.message}`);
         }
 
+    }
+
+    /**
+     * Marca um item para ele nunca sumir no exchange
+     *
+     * @param message
+     * @param args
+     */
+    static gachaKeepCommand(message, args) {
+        try {
+            const guild = getCafeComPaoGuild(message);
+            const member = getCafeComPaoMember(guild, message);
+
+            const channel = message.channel;
+
+            getInfo(member)
+                .then(info => {
+                    const filter = (item, id) => {
+                        // vê se .roles[id] for maior do que zero
+                        // .roles[id] é o numero de itens possuídos pelo usuario
+                        // e pega só os itens C
+                        return info.roles[item.id] && item.rarity === 0;
+                    };
+
+                    db.findAll('roles', filter)
+                        .then(items => {
+
+                            if (items.length === 0) {
+                                message.reply(`:x: Você não possui nenhum item.`);
+                                return;
+                            }
+
+                            let pages = [];
+                            let pageLength = 10;
+                            let pageIndex = 0;
+                            let itemIndex = 1;
+
+                            items.forEach(item => {
+                                pages[pageIndex] = pages[pageIndex] || '';
+                                pages[pageIndex] += `\n:small_blue_diamond: `
+                                    + `\`[${itemIndex}]\` `
+                                    + formatItem(guild, item, false, false)
+                                    + (info.keep.includes(item.id) ? ' *[Mantido]*' : '');
+
+                                itemIndex++;
+
+                                if (itemIndex % pageLength === 0) {
+                                    pageIndex++;
+                                }
+                            });
+
+                            const prompt = InterativePrompt.create(channel, member, `:game_die: \`+gacha keep\` **Mantendo um item**`, 60000)
+                                .addPromptPagination(
+                                    'prompt-item',
+                                    `Escolha o item a ser mantido (ou desmantido, caso já esteja):`,
+                                    pages,
+                                    `Digite o número do item`,
+                                    response => {
+                                        const v = parseInt(response);
+                                        return v >= 1 && v <= items.length;
+                                    },
+                                    (choice, prompt) => {
+                                        prompt.setChoice('item', parseInt(choice) - 1);
+                                    }
+                                )
+                            ;
+
+                            prompt.start('prompt-item')
+                                .then(choice => {
+
+                                })
+
+                            ;
+
+                        })
+                        .catch(error => {
+                            console.error(error);
+                            message.reply(`:x: ${error}`);
+                        })
+                    ;
+
+                })
+                .catch(error => {
+                    console.error(error);
+                    message.reply(`:x: ${error}`);
+                })
+            ;
+
+            let typesText = '';
+            for (let t = 0; t < GACHA_ITEM_TYPES.length; t++) {
+                typesText += `\n`
+                    + `:small_orange_diamond: `
+                    + `\`[${t + 1}]\` `
+                    + GACHA_ITEM_TYPES[t].name
+                ;
+            }
+
+            let raritiesText = '';
+            for (let r = 0; r < GACHA_RARITIES.length; r++) {
+                raritiesText += `\n`
+                    + `:small_orange_diamond: `
+                    + `\`[${r + 1}]\` `
+                    + GACHA_RARITIES[r].emojiLetter
+                ;
+            }
+
+            const prompt = InterativePrompt.create(channel, member, `:game_die: **Criando um novo item** :new:`, 30000)
+                .addPrompt(
+                    'prompt-type',
+                    `Escolha o tipo de item a ser criado: ${typesText}`,
+                    `Digite o número da opção`,
+                    response => {
+                        const v = parseInt(response);
+                        return v >= 1 && v <= GACHA_ITEM_TYPES.length;
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('type', parseInt(choice) - 1);
+                        prompt.setNext('prompt-rarity');
+                    }
+                )
+                .addPrompt(
+                    'prompt-rarity',
+                    `Escolha qual vai ser a raridade desse item: ${raritiesText}`,
+                    `Digite o número da opção`,
+                    response => {
+                        const v = parseInt(response);
+                        return v >= 1 && v <= GACHA_RARITIES.length;
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('rarity', parseInt(choice) - 1);
+
+                        switch (prompt.getChoice('type')) {
+                            case GACHA_TYPES.ROLE:
+                                prompt.setNext('prompt-color');
+                                break;
+                            case GACHA_TYPES.ICON:
+                                prompt.setNext('prompt-icon-default');
+                                break;
+                            case GACHA_TYPES.TROLL:
+                                prompt.setNext('prompt-icon');
+                                break;
+                            case GACHA_TYPES.GAME:
+                                prompt.setChoice('emoji', '🎮');
+                                prompt.setNext('prompt-game-link');
+                                break;
+                        }
+                    }
+                )
+                .addPrompt(
+                    'prompt-color',
+                    `Digite uma cor, em hexadecimal, que a role vai ter.\nExemplo: **#fc00a3**`,
+                    `Digite a cor`,
+                    response => {
+                        return response.match(/^#[0-9a-fA-F]{6}$/);
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('color', choice);
+                        prompt.setNext('prompt-name');
+                    }
+                )
+                .addPrompt(
+                    'prompt-game-link',
+                    `Digite o link (com \\<\\> em volta) que resgata o jogo, ou se o jogo for gift pela Steam, digite o link pro seu usuário. Se for uma key (Origin, Uplay, outros), digite a key. \nExemplo:\n **\\<<https://www.humblebundle.com/gift?key=ABCDE>\\>** (se for link do Humble Bundle)\n**\\<<https://steamcommunity.com/id/ABCDE>\\>** (se for gift no seu inventário da steam)`,
+                    `Digite um link ou key`,
+                    response => {
+                        return !response.startsWith(utils.prefix);
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('link', choice);
+                        prompt.setNext('prompt-name');
+                    }
+                )
+                .addPrompt(
+                    'prompt-icon-default',
+                    `Digite um emoji para ser o ícone. Deve ser um emoji default, não pode ser um emoji personalizado.\nExemplo: :smiley:`,
+                    `Digite o emoji`,
+                    response => {
+                        return response.match(/^[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]$/u);
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('emoji', choice);
+                        prompt.setNext('prompt-name');
+                    }
+                )
+                .addPrompt(
+                    'prompt-icon',
+                    `Digite um emoji para ser o ícone. Pode ser um emoji default ou emoji personalizado, desde que seja DESTE server.\nExemplo: <:dance:463542150475546653>`,
+                    `Digite o emoji`,
+                    response => {
+                        return response.match(/^<:[^:]+:\d+>$/) || response.match(/^[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]$/u);
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('emoji', choice);
+                        prompt.setNext('prompt-name');
+                    }
+                )
+                .addPrompt(
+                    'prompt-name',
+                    `Digite o nome desse item. Exemplos:
+ **Marrom-cocô** (se for uma role)
+ **Murro na poc** (se for um icone tipo :left_facing_fist:)
+ **Um avatar da polly** (se for um item troll)`,
+                    `Digite o nome`,
+                    response => {
+                        return !response.startsWith(utils.prefix);
+                    },
+                    (choice, prompt) => {
+                        prompt.setChoice('name', choice);
+                    }
+                )
+            ;
+
+            // começa o prompt
+            prompt.start('prompt-type')
+                .then(itemSelected => {
+                    switch (itemSelected.type) {
+                        case GACHA_TYPES.ROLE:
+                            return createRole(guild, member, itemSelected.color, itemSelected.rarity, itemSelected.name, itemSelected);
+                        case GACHA_TYPES.ICON:
+                        case GACHA_TYPES.TROLL:
+                        case GACHA_TYPES.GAME:
+                            return createItem(guild, member, itemSelected);
+                    }
+                })
+                .then(item => {
+                    return message.reply(`:white_check_mark: Item ${formatItem(guild, item)} criado com sucesso.`);
+                })
+                .catch(error => {
+                    console.error(error);
+                    message.reply(`:x: ${error}`);
+                })
+            ;
+
+        } catch (error) {
+            console.error(error);
+            message.reply(`:x: ${error.message}`);
+        }
     }
 
     /**
@@ -1953,6 +2193,10 @@ class Gacha {
             + `Cada pull dá direito a um item, e cada item custa ${GACHA_PULL_COST} tokens. Você pode multiplicar `
             + `o número de pulls colocando uma quantidade na frente, aumentando também o custo proporcionalmente.\n`
             + `Se você rolar 10 itens de uma vez, você tem uma garantia de pelo menos ${GACHA_EXTRA_CHANCE_MULTIPLIER} ${GACHA_RARITIES[1].emojiLetter}+).\n`
+            + `\`+gacha keep\`\n`
+            + `Abre um menu interativo que você vai poder escolher que itens você quer sempre manter dos que `
+            + `são do tipo ${GACHA_RARITIES[0].emojiLetter} no exchange.\n`
+            + `\n`
             + `\n`
             + `\`+gacha testdm\`\n`
             + `Verifica se o bot consegue mandar DM direto pra você. Isso é necessário para claim de jogos do gacha. `
@@ -2155,6 +2399,7 @@ function getInfo(member) {
         roles: {},
         tokens: GACHA_INITIAL_TOKENS,
         daily: {},
+        keep: [],
         equip: {}
     };
 
@@ -2174,6 +2419,7 @@ function modifyInfo(member, fn) {
         roles: {},
         tokens: GACHA_INITIAL_TOKENS,
         daily: {},
+        keep: [],
         equip: {}
     };
 

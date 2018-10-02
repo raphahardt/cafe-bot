@@ -4,7 +4,8 @@ let insideCount = {};
 
 const Cafebase = require('./Cafebase');
 const db = new Cafebase('teste');
-//const Gacha = require('./Gacha');
+const Gacha = require('./Gacha');
+const InterativePrompt = require('./Util/InterativePrompt');
 
 // cache da ultima vez q foi usado um comando, pra evitar spam de comandos
 let LAST_USED = {};
@@ -59,6 +60,37 @@ class Counter {
             console.error(error);
             message.reply(`:x: ${error.message}`);
         }
+    }
+
+    static pageCommand(message, args) {
+        const pages = [
+            "1\n2\n3\n4\n5\n",
+            "6\n7\n8\n9\n10\n",
+            "11\n12\n13\n14\n15\n",
+            "16\n17"
+        ];
+
+        const prompt = InterativePrompt.create(message.channel, message.member, `:game_die: \`+gacha keep\` **Mantendo um item**`, 60000)
+            .addPromptPagination(
+                'prompt-item',
+                `Escolha o item a ser mantido (ou desmantido, caso já esteja):`,
+                pages,
+                `Digite o número do item`,
+                response => {
+                    const v = parseInt(response);
+                    return v >= 1 && v <= 17;
+                },
+                (choice, prompt) => {
+                    prompt.setChoice('item', parseInt(choice) - 1);
+                }
+            )
+        ;
+
+        prompt.start('prompt-item')
+            .then(selected => {
+                message.reply(selected.item);
+            })
+        ;
     }
 
     static dbTestCommand(message, args) {
@@ -149,6 +181,7 @@ class Counter {
     static commands() {
         return {
             'count': Counter.countCommand,
+            'page': Counter.pageCommand,
             // 'gggd': Gacha.gachaDailyCommand,
             // 'gggh': Gacha.gachaHelpCommand,
             // 'gggr': Gacha.gachaRefreshNicknamesCommand,

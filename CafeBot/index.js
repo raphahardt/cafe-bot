@@ -1,5 +1,9 @@
 
+const Discord = require("discord.js");
 const utils = require('../utils');
+
+// cache de quem usou um comando pra evitar flood de comandos
+let COMMANDS_LAST_USED = {};
 
 module.exports = {
     /**
@@ -28,33 +32,37 @@ module.exports = {
                 for (let timer in timers) {
                     if (!timers.hasOwnProperty(timer)) continue;
 
-                    /*console.log('timer registrado ' + timer, [
-                        dateNow.getSeconds(),
-                        dateNow.getMinutes(),
-                        dateNow.getHours(),
-                        dateNow.getDate(),
-                        dateNow.getMonth() + 1,
-                        dateNow.getDay(),
-                        dateNow.getFullYear()
-                    ]);*/
-
                     // executa o evento de fato
-                    timers[timer].apply(listener, [
-                        discordClient,
-                        dateNow.getSeconds(),
-                        dateNow.getMinutes(),
-                        dateNow.getHours(),
-                        dateNow.getDate(),
-                        dateNow.getMonth() + 1,
-                        dateNow.getDay(),
-                        dateNow.getFullYear(),
-                        dateNow
-                    ]);
+                    try {
+                        const r = timers[timer].apply(listener, [
+                            discordClient,
+                            dateNow.getSeconds(),
+                            dateNow.getMinutes(),
+                            dateNow.getHours(),
+                            dateNow.getDate(),
+                            dateNow.getMonth() + 1,
+                            dateNow.getDay(),
+                            dateNow.getFullYear(),
+                            dateNow
+                        ]);
+
+                        handlePromiseReturn(r, discordClient);
+                    } catch (error) {
+                        handleError(error, discordClient);
+                    }
                 }
             }
 
         }, 60000);
 
+        // registra o evento de erros.
+        // necessário, para não crashar o node.
+        // visto em: https://nodejs.org/dist/latest/docs/api/events.html#events_error_events
+        discordClient.on('error', error => {
+            handleError(error, discordClient);
+        });
+
+        // evento pros comandos
         discordClient.on('message', message => {
             if (message.author.bot) return;
 
@@ -67,18 +75,6 @@ module.exports = {
             let argsString = message.content.slice(utils.prefix.length).trim();
             const args = parseArgs(argsString);
             const command = args.shift().toLowerCase();
-
-            // comando especial para desligar o bot
-            // FIXME: não tá desligando porra nenhuma, a aws religa ele caso ele fique offline kkkkk
-            if (command === 'off' && message.author.id.toString() === '208028185584074763') {
-                // desliga o bot
-                message.channel.send(`Desligando...`)
-                    .then(() => {
-                        discordClient.destroy();
-                    }).catch(console.error);
-
-                return;
-            }
 
             // invocando os comandos
             for (let i = 0; i < listeners.length; i++) {
@@ -99,7 +95,12 @@ module.exports = {
                     if (command === lstCommand.toLowerCase()) {
                         console.log('invocando ' + command, args);
                         // chama o comando do listener registrado
-                        lstCommands[lstCommand].call(listener, message, args);
+                        try {
+                            const r = lstCommands[lstCommand].call(listener, message, args);
+                            handlePromiseReturn(r, message);
+                        } catch (error) {
+                            handleError(error, message);
+                        }
                     }
                 }
             }
@@ -131,7 +132,12 @@ module.exports = {
                     }
 
                     // executa o evento de fato
-                    events[event].apply(listener, args);
+                    try {
+                        const r = events[event].apply(listener, args);
+                        handlePromiseReturn(r, discordClient);
+                    } catch (error) {
+                        handleError(error, discordClient);
+                    }
                 });
             }
         }
@@ -145,30 +151,95 @@ module.exports = {
  * @param string
  */
 function parseArgs(string) {
-    // tira os espaços repetidos, primeiro de tudo
-    string = string.replace(/ +/g, ' ');
+    if (string.indexOf('"') >= 0) {
+        // tira os espaços repetidos, primeiro de tudo
+        string = string.replace(/ +/g, ' ');
 
-    let args = [];
-    let insideQuote = false, argIdx = 0;
-    for (let i = 0; i < string.length; i++) {
-        const char = string.charAt(i);
+        let args = [];
+        let insideQuote = false, argIdx = 0;
+        for (let i = 0; i < string.length; i++) {
+            const char = string.charAt(i);
 
-        switch (char) {
-            case ' ':
-                if (!insideQuote) {
-                    argIdx++;
-                }
-                break;
-            case '"':
-                insideQuote = !insideQuote;
-                continue;
+            switch (char) {
+                case ' ':
+                    if (!insideQuote) {
+                        argIdx++;
+                    }
+                    break;
+                case '"':
+                    insideQuote = !insideQuote;
+                    continue;
+            }
+
+            if (!args[argIdx]) {
+                args[argIdx] = '';
+            }
+            args[argIdx] += char;
         }
 
-        if (!args[argIdx]) {
-            args[argIdx] = '';
-        }
-        args[argIdx] += char;
+        return args.map(e => e.trim()).filter(e => e.length > 0);
+    }
+    // uma pequena otimização no caso de não ter nenhuma aspas, não faz sentido
+    // correr a string inteira todas as vezes
+    return string.split(/ +/g);
+}
+
+/**
+ * Faz log do erro, responde pro usuário (se possível) e manda
+ * uma DM pra mim com o erro.
+ *
+ * @param {Error|string} error
+ * @param {Discord.Message|Discord.Client} messageOrClient
+ */
+function handleError(error, messageOrClient) {
+    // primeiro de tudo, manda pro log do servidor
+    console.error(error);
+
+    let message, client;
+    if (messageOrClient instanceof Discord.Message) {
+        message = messageOrClient;
+        client = messageOrClient.client;
+    } else {
+        client = messageOrClient;
     }
 
-    return args.map(e => e.trim()).filter(e => e.length > 0);
+    if (message) {
+        // se tiver sido num canal, responder pro usuário com o erro
+        message.reply(`:x: ${error}`);
+    }
+
+    // me avisa
+    client.fetchUser('208028185584074763', false)
+        .then(eu => {
+            return eu.createDM();
+        })
+        .then(dm => {
+            if (error instanceof Error) {
+                return dm.send(`:x: [${error.name}] ${error.message}\n${error.stack}`);
+            }
+            return dm.send(`:x: ${error}`);
+        })
+        .catch(err => {}) // ignora os erros de me avisar, qq coisa eu olho direto no log
+    ;
+}
+
+/**
+ * Se o retorno de um dos métodos dos módulos for um Promise,
+ * então tenta capturar o erro e manda pro handleError().
+ *
+ * @param {any} r
+ * @param {Discord.Message|Discord.Client} messageOrClient
+ */
+function handlePromiseReturn(r, messageOrClient) {
+    if (r instanceof Promise) {
+        // esse catch não vai ser executado
+        // se o promise que foi retornado já tiver um catch
+        // isso é util pois posso capturar o erro no proprio
+        // modulo e controlar quando ou não eu quero mandar
+        // o log de erros por dm
+        // visto em: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/catch#Using_and_chaining_the_catch_method
+        r.catch((error) => {
+            handleError(error, messageOrClient);
+        })
+    }
 }

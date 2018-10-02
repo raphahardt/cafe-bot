@@ -298,7 +298,7 @@ class Cafebase {
         const fn = this.ref.child(path).on('value', snapshot => {
             const value = snapshot.exists() ? snapshot.val() : defaultValue;
 
-            callback(value);
+            callback(value, snapshot.key);
         });
 
         return this.lives[path] = (function (db, path, fn) {
@@ -322,17 +322,17 @@ class Cafebase {
         const fnAdded = this.ref.child(path).on('child_added', snapshot => {
             const value = snapshot.exists() ? snapshot.val() : defaultValue;
 
-            callback('added', value);
+            callback('added', value, snapshot.key);
         });
         const fnChanged = this.ref.child(path).on('child_changed', snapshot => {
             const value = snapshot.exists() ? snapshot.val() : defaultValue;
 
-            callback('changed', value);
+            callback('changed', value, snapshot.key);
         });
         const fnRemoved = this.ref.child(path).on('child_removed', snapshot => {
             const value = snapshot.exists() ? snapshot.val() : defaultValue;
 
-            callback('removed', value);
+            callback('removed', value, snapshot.key);
         });
 
         return this.livesCollections[path] = (function (db, path, fnA, fnC, fnR) {

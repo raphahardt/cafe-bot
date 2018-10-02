@@ -1,3 +1,6 @@
+
+const Cafebase = require('./Cafebase');
+
 /**
  * Fiz esse módulo pra poder ativar e desativar módulos do bot online
  * quando precisar.
@@ -10,8 +13,24 @@
  * (que é um saco fazer kkk)
  */
 class ModuleActivator {
-    constructor () {
-        this.blacklistModules = [];
+    constructor (_debug) {
+        this.blacklistModules = {};
+        this._debug = !!_debug;
+
+        if (!this._debug) {
+            this.db = new Cafebase('modules');
+
+            const activator = this;
+            this.db.getLiveCollection('blacklist', (event, ignore, moduleName) => {
+                console.log('MODULE', moduleName);
+                if (event === 'added') {
+                    activator.blacklistModules[moduleName] = true;
+                } else if (event === 'removed') {
+                    activator.blacklistModules[moduleName] = false;
+                }
+            });
+        }
+
         this.modulesInstalled = {};
     }
 
@@ -19,48 +38,63 @@ class ModuleActivator {
     static get name() { return false }
 
     isDisabled(moduleName) {
-        if (!moduleName) {
+        if (!moduleName || this._debug) {
             // se o nome do modulo for vazio, ele sempre vai estar ativo
             return false;
         }
-        return this.blacklistModules.includes(moduleName);
+        return !!this.blacklistModules[moduleName];
     }
 
     modCommand(message, args) {
-        if (message.author.id.toString() !== '208028185584074763'
-            && message.author.id.toString() !== '164083196999237633'
-            && message.author.id.toString() !== '132137996995526656') return;
+        if (message.author.id !== '208028185584074763' || this._debug) return;
 
         args.forEach(arg => {
             const moduleName = arg.toLowerCase();
-            const module = this.modulesInstalled[moduleName];
+            //const module = this.modulesInstalled[moduleName];
             if (this.isDisabled(moduleName)) {
                 // ativa
-                this.blacklistModules.splice(this.blacklistModules.indexOf(moduleName), 1);
-                if (module.onEnable) module.onEnable();
-                message.channel.send(`Módulo **${moduleName}** ativado.`);
+                //this.blacklistModules.splice(this.blacklistModules.indexOf(moduleName), 1);
+                this.db.save('blacklist/' + moduleName, 1)
+                    .then(() => {
+                        //if (module.onEnable) module.onEnable();
+                        return this.template(message, `Módulo **${moduleName}** ativado.`);
+                    })
+                ;
             } else {
                 // desativa
-                this.blacklistModules.push(moduleName);
-                if (module.onDisable) module.onDisable();
-                message.channel.send(`Módulo **${moduleName}** desativado.`);
+                //this.blacklistModules.push(moduleName);
+                this.db.save('blacklist/' + moduleName, null)
+                    .then(() => {
+                        //if (module.onDisable) module.onDisable();
+                        return this.template(message, `Módulo **${moduleName}** desativado.`);
+                    })
+                ;
             }
         })
     }
 
     modsCommand(message, args) {
-        const modules = this.blacklistModules.join('**, **');
-        if (!modules) {
-            message.channel.send(`Todos os módulos estão ativos.`);
-            return;
+        if (this._debug) return;
+
+        const blMods = Object.keys(this.blacklistModules);
+        if (!blMods.length) {
+            return this.template(message, 'Todos os módulos estão ativos.');
         }
-        message.channel.send(`Módulos desativados no momento: **${modules}**.`);
+        const modulesText = blMods.join('**, **');
+        return this.template(message, `Módulos desativados no momento: **${modulesText}**.`);
+    }
+
+    template(message, text) {
+        return message.reply(`:space_invader: ${text}`);
     }
 
     commands() {
+        if (this._debug) {
+            return {};
+        }
         return {
-            'mod': this.modCommand,
-            'mods': this.modsCommand
+            'amod': this.modCommand,
+            'amods': this.modsCommand
         }
     }
 }

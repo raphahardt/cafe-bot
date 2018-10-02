@@ -42,6 +42,25 @@ class InterativePrompt {
         return this;
     }
 
+    addPromptPagination(id, description, pages, footer, filterResponses, cbChoice, maxChoices) {
+        this.addPrompt(id, description, footer, filterResponses, cbChoice, maxChoices);
+        this.prompts[id].pagination = true;
+        this.prompts[id].pages = pages;
+        this.prompts[id].pageIndex = 0;
+        return this;
+    }
+
+    renderDescription(description) {
+        if (description.indexOf('#') >= 0) {
+            for (let key in this.choices) {
+                if (!this.choices.hasOwnProperty(key)) continue;
+
+                description = description.replace(new RegExp('#' + key + '#', 'g'), this.choices[key]);
+            }
+        }
+        return description;
+    }
+
     start(id) {
         const that = this;
         this.choices = {};
@@ -62,8 +81,19 @@ class InterativePrompt {
                         reject(new Error('Id de prompt `' + this.next + '` não existe.'));
                         return;
                     }
-                    const text = (this.title ? this.title + "\n\n" : "") + (prompt.description ? prompt.description + "\n\n" : "");
-                    return this.channel.send(`${text}${prompt.footer} ou \`cancel\` para cancelar.`);
+
+                    let description = prompt.description ? this.renderDescription(prompt.description) : '';
+                    let footer = prompt.footer;
+
+                    if (prompt.pagination) {
+                        description += `\n\n*(Página ${prompt.pageIndex + 1}/${prompt.pages.length})*\n`;
+                        description += prompt.pages[prompt.pageIndex].trim();
+
+                        footer += `, \`next\` para a próxima página, \`prev\` para a anterior,`;
+                    }
+
+                    const text = (this.title ? this.title + "\n\n" : "") + (description ? description + "\n\n" : "");
+                    return this.channel.send(`${text}${footer} ou \`cancel\` para cancelar.`);
                 }).then(msg => {
                     if (msg) {
                         oldMsg = msg;
@@ -75,21 +105,30 @@ class InterativePrompt {
                         }
 
                         return this.channel.awaitMessages(m => {
+                            // se a mensagem não for do autor do prompt, nem considera
+                            if (this.member.id !== m.author.id) {
+                                return false;
+                            }
+                            // sempre aceitar "cancel"
                             if (m.content === 'cancel') {
                                 return true;
                             }
-                            const filterResponse = (
-                                this.member.id === m.author.id
-                                && prompt.filter.apply(null, [m.content, that])
-                            );
+                            // se for paginação, aceitar tbm "next" e "prev"
+                            if (prompt.pagination) {
+                                if (['next', 'prev'].includes(m.content)) {
+                                    return true;
+                                }
+                            }
 
-                            if (!filterResponse && this.member.id === m.author.id) {
+                            // vê quais parametros são aceitos nesse prompt
+                            let filterResponse = prompt.filter.apply(null, [m.content, that]);
+
+                            if (!filterResponse) {
                                 this.channel.send(`:x: Resposta inválida. Tente novamente ou \`cancel\` para cancelar.`)
                                     .then(mi => {
-                                        this.channel.client.setTimeout(() => {
-                                            mi.delete();
-                                        }, 3000);
+                                        return mi.delete(3000);
                                     })
+                                    .catch(console.error)
                                 ;
                             }
 
@@ -117,12 +156,32 @@ class InterativePrompt {
                             reject(new Error('Id de prompt `' + this.next + '` não existe.'));
                             return;
                         }
-                        // limpa o next antes de executar o callback.
-                        // o callback vai definir um, ou não.
-                        // se não definir, vai finalizar
-                        this.next = null;
 
-                        const cbReturn = prompt.callback.apply(null, [response, that]);
+                        if (prompt.pagination && ['next', 'prev'].includes(response)) {
+                            // se for paginação e tiver escolhido mudar de pagina,
+                            // não limpa o this.next, já que é pra se manter no mesmo
+                            // prompt sempre até escolher algo
+                            let pageToGo = prompt.pageIndex;
+                            if (response === 'next') {
+                                pageToGo++;
+                                if (pageToGo >= prompt.pages.length) {
+                                    pageToGo = 0;
+                                }
+                            } else if (response === 'prev') {
+                                pageToGo--;
+                                if (pageToGo < 0) {
+                                    pageToGo = prompt.pages.length - 1;
+                                }
+                            }
+                            prompt.pageIndex = pageToGo;
+                        } else {
+                            // limpa o next antes de executar o callback.
+                            // o callback vai definir um, ou não.
+                            // se não definir, vai finalizar
+                            this.next = null;
+
+                            const cbReturn = prompt.callback.apply(null, [response, that]);
+                        }
 
                         // recursivamente chama o proximo prompt
                         if (this.next) {
