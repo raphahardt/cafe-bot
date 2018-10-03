@@ -1,3 +1,4 @@
+const PermissionError = require('./Errors/PermissionError');
 
 const utils = require('../utils');
 const adminsIds = require('../adminIds');
@@ -5,7 +6,7 @@ const adminsIds = require('../adminIds');
 class Ping {
     constructor () {}
 
-    static get modName() { return 'ping' }
+    get modName() { return 'ping' }
 
     pingCommand(message, args) {
         return message.reply("Ping?")

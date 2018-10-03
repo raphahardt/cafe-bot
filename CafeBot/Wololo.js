@@ -102,7 +102,7 @@ ref.child('exits').on('value', snapshot => {
 class Wololo {
     constructor () {}
 
-    static get modName() { return 'wololo' }
+    get modName() { return 'wololo' }
 
     static wololoCommand(message, args) {
         //console.log('ROLES', message.guild.roles.array().map(r => `${r.id}: ${r.name}`));

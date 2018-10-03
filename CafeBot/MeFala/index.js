@@ -9,11 +9,11 @@ const Transformer = require('./LetterTransformer');
 class MeFala {
     constructor() {}
 
-    static get modName() { return 'mefala' }
+    get modName() { return 'mefala' }
 
     mainCommand(message, args) {
         if (args.length === 0) {
-            return message.reply('Faça alguma pergunta.');
+            return message.reply(':speaking_head: Faça alguma pergunta.');
         }
 
         let phrase = args.join(" ") || '';

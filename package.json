@@ -15,6 +15,7 @@
     "points-in-polygon": "^0.2.1",
     "poisson-disk-sampling": "^1.0.2",
     "simplex-noise": "^2.4.0",
+    "weather-js": "^2.0.0",
     "ytdl-core": "^0.18.5"
   },
   "devDependencies": {},

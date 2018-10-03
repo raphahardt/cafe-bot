@@ -11,6 +11,8 @@ class CommandOfuscator {
         this.module = module;
     }
 
+    get modName() { return this.module.modName; }
+
     commands() {
         if (!this.module.commands) {
             return {};
@@ -23,6 +25,14 @@ class CommandOfuscator {
             }
         }
         return ofuscatedCommands;
+    }
+
+    events() {
+        return {};
+    }
+
+    timers() {
+        return {};
     }
 }
 

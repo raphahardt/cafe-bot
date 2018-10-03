@@ -8,7 +8,7 @@ let voiceChatConnected = null;
 class Audio {
     constructor () {}
 
-    static get modName() { return 'audio' }
+    get modName() { return 'audio' }
 
     static playCommand(message, args) {
         // se foi um 'play' só pra fazer a musica voltar

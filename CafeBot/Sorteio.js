@@ -3,6 +3,8 @@ const utils = require('../utils');
 const Discord = require("discord.js");
 const Cafebase = require('./Cafebase');
 
+const PermissionError = require('./Errors/PermissionError');
+
 const adminsIds = require('../adminIds');
 
 const leveledRoles = [
@@ -23,7 +25,7 @@ class Sorteio {
         this.db = new Cafebase('sorteio');
     }
 
-    static get modName() { return 'sorteio' }
+    get modName() { return 'sorteio' }
 
     giveawayCommand(message, args) {
         const arg = args.shift();
@@ -51,7 +53,7 @@ class Sorteio {
     giveawayCreateCommand(message, args) {
         // verifica se é um admin para criar um giveaway
         if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
-            return message.reply(`:x: *Você não tem permissão de criar um sorteio.*`);
+            throw new PermissionError(`Você não tem permissão de criar um sorteio.`);
         }
 
         const gamesCount = parseInt(args.shift());
@@ -179,7 +181,7 @@ Inicia um giveaway.
 
         // verifica se é um admin para encerrar um giveaway
         if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
-            return message.reply(`:x: *Você não tem permissão de encerrar um sorteio.*`);
+            throw new PermissionError(`Você não tem permissão de encerrar um sorteio.`);
         }
 
 //         let giveInfo;
@@ -297,7 +299,7 @@ Inicia um giveaway.
     giveawayCancelCommand(message, args) {
         // verifica se é um admin para encerrar um giveaway
         if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_CHANNELS)) {
-            return message.reply(`:x: *Você não tem permissão de cancelar um sorteio.*`);
+            throw new PermissionError(`Você não tem permissão de cancelar um sorteio.`);
         }
 
         return this.db.getOne('atual')
@@ -307,7 +309,7 @@ Inicia um giveaway.
                 }
 
                 if (giveInfo.creator !== message.author.id) {
-                    return message.reply(`:x: Somente o criador do giveaway pode cancela-lo.`);
+                    return message.reply(`:x: Somente o criador do giveaway pode cancelá-lo.`);
                 }
 
                 return this.db.save('atual', null)
@@ -348,7 +350,7 @@ Inicia um giveaway.
                     return message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
                 }
 
-                const gamesList = giveInfo.gameNames.map(n => `:small_blue_diamond: ${n}`).join("\n");
+                const gamesList = giveInfo.gameNames.map(n => `:small_blue_diamond: :video_game: ${n}`).join("\n");
                 return message.reply(`Lista de jogos do sorteio \`${giveInfo.name}\`\n${gamesList}`);
             })
             ;

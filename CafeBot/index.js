@@ -2,10 +2,13 @@ const Discord = require("discord.js");
 const Cafebase = require('./Cafebase');
 const utils = require('../utils');
 
+const PermissionError = require('./Errors/PermissionError');
+
 const bot = {
     // auto-explicativo
     packageJson: {},
     ready: false,
+    debug: false,
     cafeComPaoGuildId: '213797930937745409',
 
     // cache de quem usou um comando pra evitar flood de comandos
@@ -19,6 +22,8 @@ const bot = {
      * @param {Array} listeners
      */
     registerDiscordEvents: (discordClient, modules, listeners) => {
+        // debug
+        bot.debug = modules._debug;
 
         // registrando os modulos no moduleActivator
         listeners.forEach(listener => {
@@ -35,7 +40,7 @@ const bot = {
             for (let o of modules.iterateModules('timers')) {
                 const [module, key, fn, opts] = o;
 
-                console.log(module, module.constructor.modName + ' | timer triggered ' + key);
+                console.log(module, module.modName + ' | timer triggered ' + key);
 
                 // executa o evento de fato
                 try {
@@ -51,9 +56,9 @@ const bot = {
                         dateNow
                     ]);
 
-                    handlePromiseReturn(r, discordClient);
+                    handlePromiseReturn(r, discordClient, bot.debug);
                 } catch (error) {
-                    handleError(error, discordClient);
+                    handleError(error, discordClient, bot.debug);
                 }
             }
             // // invocando os eventos
@@ -103,12 +108,12 @@ const bot = {
             const phrases = utils.shuffle(['você tomar café', 'os ghosts safados', 'seus abcs']);
             discordClient.user.setActivity(`${phrases[0]} (${bot.packageJson.version})` + (modules._debug ? ' (testes)' : ''), { type: 'WATCHING' });
 
-            if (!modules._debug) {
+            if (!bot.debug) {
                 // procura o canal pra mandar as mensagens pinnadas
                 const logChannel = discordClient.channels.get('240297584420323338');
                 if (logChannel) {
                     const emb = new Discord.RichEmbed()
-                        .setColor(3447003)
+                        .setColor(0x3498db)
                         .setTitle(`Café bot v${bot.packageJson.version}`)
                         .setDescription(`Conectado no server`)
                         .setTimestamp(new Date());
@@ -123,12 +128,12 @@ const bot = {
         // necessário, para não crashar o node.
         // visto em: https://nodejs.org/dist/latest/docs/api/events.html#events_error_events
         discordClient.on('error', error => {
-            handleError(error, discordClient);
+            handleError(error, discordClient, bot.debug);
         });
 
         // ver: https://discord.js.org/#/docs/main/stable/class/Client?scrollTo=e-rateLimit
         discordClient.on('rateLimit', info => {
-            handleError(new Error('Rate limit: ' + JSON.stringify(info)), discordClient);
+            handleError(new Error('Rate limit: ' + JSON.stringify(info)), discordClient, bot.debug);
         });
 
         // evento pros comandos
@@ -150,7 +155,7 @@ const bot = {
                 const [module, cmd, fn, opts] = o;
 
                 if (command === cmd) {
-                    console.log(module, module.constructor.modName + ' | invoking ' + command, args);
+                    console.log(module, module.modName + ' | invoking ' + command, args);
                     // chama o comando do listener registrado
                     try {
                         let a = [message, args];
@@ -168,9 +173,9 @@ const bot = {
                         }
 
                         const r = fn.apply(module, a);
-                        handlePromiseReturn(r, message);
+                        handlePromiseReturn(r, message, bot.debug);
                     } catch (error) {
-                        handleError(error, message);
+                        handleError(error, message, bot.debug);
                     }
                 }
             }
@@ -208,14 +213,14 @@ const bot = {
         for (let o of modules.iterateModules('events', true)) {
             const [module, event, fn, opts] = o;
 
-            console.log(module, module.constructor.modName + ' | event registered ' + event);
+            console.log(module, module.modName + ' | event registered ' + event);
 
             // registra um evento no client do discord
             // antigo código: discordClient.on(event, events[event]);
             discordClient.on(event, (...args) => {
                 // hook pra ver se o modulo tá desativado ou não
-                if (modules.isDisabled(module.constructor.modName)) {
-                    console.log(module, module.constructor.modName + ' | tried execute event ' + event + ' but module is disabled');
+                if (modules.isDisabled(module.modName)) {
+                    console.log(module, module.modName + ' | tried execute event ' + event + ' but module is disabled');
                     return;
                 }
 
@@ -234,9 +239,9 @@ const bot = {
                 // executa o evento de fato
                 try {
                     const r = fn.apply(module, args);
-                    handlePromiseReturn(r, discordClient);
+                    handlePromiseReturn(r, discordClient, bot.debug);
                 } catch (error) {
-                    handleError(error, discordClient);
+                    handleError(error, discordClient, bot.debug);
                 }
             });
         }
@@ -324,8 +329,9 @@ function parseArgs(string) {
  *
  * @param {Error|string} error
  * @param {Discord.Message|Discord.Client} messageOrClient
+ * @param {Boolean} _debug
  */
-function handleError(error, messageOrClient) {
+function handleError(error, messageOrClient, _debug) {
     // primeiro de tudo, manda pro log do servidor
     console.error(error);
 
@@ -338,23 +344,33 @@ function handleError(error, messageOrClient) {
     }
 
     if (message) {
+        // handler
+        if (error instanceof PermissionError) {
+            // se for erro de permissão, só mostrar pro usuário
+            const msg = error.message || 'Você não tem permissão para usar este comando.';
+            message.reply(`:no_entry_sign: ${msg}`);
+            return;
+        }
+
         // se tiver sido num canal, responder pro usuário com o erro
         message.reply(`:x: ${error}`);
     }
 
-    // me avisa
-    client.fetchUser('208028185584074763', false)
-        .then(eu => {
-            return eu.createDM();
-        })
-        .then(dm => {
-            if (error instanceof Error) {
-                return dm.send(`:x: [${error.name}] ${error.message}\n${error.stack}`);
-            }
-            return dm.send(`:x: ${error}`);
-        })
-        .catch(err => {}) // ignora os erros de me avisar, qq coisa eu olho direto no log
-    ;
+    if (!_debug) {
+        // me avisa
+        client.fetchUser('208028185584074763', false)
+            .then(me => {
+                return me.createDM();
+            })
+            .then(dm => {
+                if (error instanceof Error) {
+                    return utils.sendLongMessage(dm, `:x: ${error.stack}`);
+                }
+                return dm.send(`:x: ${error}`);
+            })
+            .catch(err => {}) // ignora os erros de me avisar, qq coisa eu olho direto no log
+        ;
+    }
 }
 
 /**
@@ -363,8 +379,9 @@ function handleError(error, messageOrClient) {
  *
  * @param {any} r
  * @param {Discord.Message|Discord.Client} messageOrClient
+ * @param {Boolean} _debug
  */
-function handlePromiseReturn(r, messageOrClient) {
+function handlePromiseReturn(r, messageOrClient, _debug) {
     if (r instanceof Promise) {
         // esse catch não vai ser executado
         // se o promise que foi retornado já tiver um catch
@@ -373,7 +390,7 @@ function handlePromiseReturn(r, messageOrClient) {
         // o log de erros por dm
         // visto em: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/catch#Using_and_chaining_the_catch_method
         r.catch((error) => {
-            handleError(error, messageOrClient);
+            handleError(error, messageOrClient, _debug);
         })
     }
 }

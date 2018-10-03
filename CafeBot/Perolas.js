@@ -4,6 +4,8 @@ const utils = require("../utils");
 const Discord = require("discord.js");
 const Cafebase = require('./Cafebase');
 
+const PermissionError = require('./Errors/PermissionError');
+
 // array com os canais que tem q ser ignorados
 const perolaIgnoredChannelsIds = [
     '341395801093963787', // mural
@@ -46,7 +48,7 @@ class Perolas {
         this.db = new Cafebase('perolas');
     }
 
-    static get modName() { return 'perolas' }
+    get modName() { return 'perolas' }
 
     /**
      * Invocado toda vez que alguém dá um reaction em alguma mensagem.
@@ -94,7 +96,10 @@ class Perolas {
      * @param {Array} args Parametros do comando
      */
     pinsCommand(guild, message, args) {
-        const mainChannel = guild.channels.find('name', args[0]);
+        if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_MESSAGES)) {
+            throw new PermissionError();
+        }
+        const mainChannel = guild.channels.find(c => c.name === args[0]);
         const perolasChannel = guild.channels.get(perolaChannelId);
         if (!mainChannel || !perolasChannel) return;
 

@@ -12,7 +12,7 @@ const amigosDatabase = './amigos.txt';
 class AmigoSecreto {
     constructor () {}
 
-    static get modName() { return 'amigosecreto' }
+    get modName() { return 'amigosecreto' }
 
     /**
      *

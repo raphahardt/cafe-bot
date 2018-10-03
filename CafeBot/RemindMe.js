@@ -1,44 +1,37 @@
 
-const fbAdmin = require("firebase-admin");
-const fbServiceAccount = require("../misc/cafebot-2018-firebase-adminsdk-j17ic-a11e9f3222.json");
 const utils = require('../utils');
 const ADMIN_IDS = require('../adminIds');
 const Discord = require("discord.js");
+const Cafebase = require('./Cafebase');
 
-const fbApp = fbAdmin.initializeApp({
-    credential: fbAdmin.credential.cert(fbServiceAccount),
-    databaseURL: "https://cafebot-2018.firebaseio.com"
-}, 'remindme');
-
-const db = fbApp.database();
-const ref = db.ref('remindme');
+const PermissionError = require('./Errors/PermissionError');
 
 class RemindMe {
-    constructor () {}
+    constructor () {
+        this.db = new Cafebase('remindme');
+    }
 
-    static get modName() { return 'remindme' }
+    get modName() { return 'remindme' }
 
-    static remindCommand(message, args) {
-
+    remindCommand(message, args) {
         const arg = args.shift();
         switch (arg) {
             case 'create':
             case 'c':
-                return RemindMe.remindCreateCommand(message, args);
+                return this.remindCreateCommand(message, args);
             case 'list':
             case 'l':
-                return RemindMe.remindListCommand(message, args);
+                return this.remindListCommand(message, args);
             case 'delete':
             case 'del':
             case 'd':
-                return RemindMe.remindDeleteCommand(message, args);
+                return this.remindDeleteCommand(message, args);
             case 'reset':
-                return RemindMe.remindDeleteAllCommand(message, args);
+                return this.remindDeleteAllCommand(message, args);
             case 'help':
-                message.reply('__*Comandos disponíveis*__:\n**+remind create** ou **+remindme**\nO formato para uso é: `(+remindme | +remind create) mensagem (in | every) (X (days | hours | minutes | weeks | months (day X)?) | sunday | monday | tuesday | wednesday | thursday | friday | saturday | weekend | workdays | XX/XX/XXXX) (at XX:XX)?`\nOs *parenteses* significam agrupamento de opções, **não** usar eles no comando, assim como os *pipelines* também - que indicam a separação de cada opção. A *interrogação* significa que aquele parametro é opcional. No caso do `at`, os horários são baseados no horário de brasília (BRT|BRST). Caso não use o `at`, o horário a ser considerado será o horário em que o evento foi criado.\n\nExemplos de uso:\n`+remindme algo in 5 hours` lembra uma vez daqui 5 horas\n`+remindme algo every 1 month day 4 at 5:00` lembra repetidamente todo dia 4 a cada mês as 5h da manhã\n`+remindme algo every monday friday` lembra repetidamente todas segundas e sextas\n`+remindme algo in 2 days at 14:00`. lembra uma vez daqui 2 dias as 14h\n\n**+remind list**\nMostra todos os eventos que você tem cadastrados.\n\n**+remind delete *id***\nExclui um evento cadastrado pelo id.\n\n**+remind reset**\nExclui todos seus eventos.');
-                break;
+                return message.reply('__*Comandos disponíveis*__:\n**+remind create** ou **+remindme**\nO formato para uso é: `(+remindme | +remind create) mensagem (in | every) (X (days | hours | minutes | weeks | months (day X)?) | sunday | monday | tuesday | wednesday | thursday | friday | saturday | weekend | workdays | XX/XX/XXXX) (at XX:XX)?`\nOs *parenteses* significam agrupamento de opções, **não** usar eles no comando, assim como os *pipelines* também - que indicam a separação de cada opção. A *interrogação* significa que aquele parametro é opcional. No caso do `at`, os horários são baseados no horário de brasília (BRT|BRST). Caso não use o `at`, o horário a ser considerado será o horário em que o evento foi criado.\n\nExemplos de uso:\n`+remindme algo in 5 hours` lembra uma vez daqui 5 horas\n`+remindme algo every 1 month day 4 at 5:00` lembra repetidamente todo dia 4 a cada mês as 5h da manhã\n`+remindme algo every monday friday` lembra repetidamente todas segundas e sextas\n`+remindme algo in 2 days at 14:00`. lembra uma vez daqui 2 dias as 14h\n\n**+remind list**\nMostra todos os eventos que você tem cadastrados.\n\n**+remind delete *id***\nExclui um evento cadastrado pelo id.\n\n**+remind reset**\nExclui todos seus eventos.');
             default:
-                message.reply(`:x: Comando inexistente.\nComandos disponíveis: \`help\`, \`create\`, \`list\`, \`delete\`, \`reset\``);
+                return message.reply(`:x: Comando inexistente.\nComandos disponíveis: \`help\`, \`create\`, \`list\`, \`delete\`, \`reset\``);
         }
     }
 
@@ -49,9 +42,9 @@ class RemindMe {
      * @param args
      * @return {*}
      */
-    static remindMeCommand(message, args) {
+    remindMeCommand(message, args) {
         // só um atalho de +remindme x pra +remind create x
-        return RemindMe.remindCommand(message, ['create'].concat(args));
+        return this.remindCommand(message, ['create'].concat(args));
     }
 
     /**
@@ -60,9 +53,9 @@ class RemindMe {
      * @param message
      * @param args
      */
-    static remindMeAdvancedCommand(message, args) {
+    remindMeAdvancedCommand(message, args) {
         if (args[0] === 'help') {
-            message.reply(`__*Comandos disponíveis*__:
+            return message.reply(`__*Comandos disponíveis*__:
 **+remindmeplus**
 Usado pra você mesmo manipular a frequencia do seu evento, usando a sintaxe do *crontab*.
 Deve ser usado da seguinte forma: \`+remindmeplus 10 5 * * * * 0 mensagem\`, onde os 7 primeiros parametros são o agendamento do seu evento.
@@ -90,49 +83,48 @@ esse evento vai ser executado *repetidamente* todo dia 4 de cada mês, não impo
 \`+remindmeplus 30 23 * * * * 0 algo\`
 esse evento vai ser executado *uma vez só* às 23:30, não importando que dia, que mês, que dia semana ou que ano seja
 `);
-            return;
         }
 
-        try {
-            let pattern = [];
-            let content;
-            let repeatEvent;
+        let pattern = [];
+        let content;
+        let repeatEvent;
 
-            for (let i = 0; i < 6; i++) {
-                pattern.push(args.shift());
-            }
-            repeatEvent = !!args.shift();
-            content = args.join(' ');
-            pattern = pattern.join(' ');
-
-            let event = {
-                author: message.author.id,
-                content: content,
-                pattern: pattern,
-                syntax: pattern,
-                loop: repeatEvent,
-                createdAt: (new Date()).getTime(),
-                lastExecutedAt: null
-            };
-
-            const now = new Date();
-            event.nextExecution = findNextExecution(event, now).getTime();
-
-            let savedEvent = ref.child('events').push();
-            event.id = savedEvent.key;
-
-            savedEvent.set(event, err => {
-                if (err) {
-                    message.reply(`:x: Houve um erro ao gravar seu evento: ${err}`);
-                    return;
-                }
-                message.reply(`:white_check_mark: Evento \`${event.id}\` registrado. Te avisarei em **${formatFutureDate(now, event.nextExecution)}**`);
-            });
-
-        } catch (error) {
-            console.error(error);
-            message.reply(`:x: ${error.message}`);
+        for (let i = 0; i < 6; i++) {
+            pattern.push(args.shift());
         }
+        repeatEvent = !!args.shift();
+        content = args.join(' ');
+        pattern = pattern.join(' ');
+
+        let event = {
+            author: message.author.id,
+            content: content,
+            pattern: pattern,
+            syntax: pattern,
+            loop: repeatEvent,
+            createdAt: (new Date()).getTime(),
+            lastExecutedAt: null
+        };
+
+        const now = new Date();
+        event.nextExecution = findNextExecution(event, now).getTime();
+
+        return this.db.insert('events', event)
+            .then(newEvent => {
+                return message.reply(`:white_check_mark: Evento \`${newEvent.id}\` registrado. Te avisarei em **${formatFutureDate(now, newEvent.nextExecution)}**`);
+            })
+        ;
+
+        // let savedEvent = ref.child('events').push();
+        // event.id = savedEvent.key;
+        //
+        // savedEvent.set(event, err => {
+        //     if (err) {
+        //         message.reply(`:x: Houve um erro ao gravar seu evento: ${err}`);
+        //         return;
+        //     }
+        //     message.reply(`:white_check_mark: Evento \`${event.id}\` registrado. Te avisarei em **${formatFutureDate(now, event.nextExecution)}**`);
+        // });
     }
 
     /**
@@ -141,48 +133,47 @@ esse evento vai ser executado *uma vez só* às 23:30, não importando que dia, 
      * @param message
      * @param args
      */
-    static remindCreateCommand(message, args) {
-        try {
-            let author = message.author;
-            let members = utils.resolveAllMentioned(message, args, false, true);
-            if (members.length > 0) {
-                if (message.author.id !== '208028185584074763') {
-                    message.reply(`:x: *Você não tem permissão.*`);
-                    return;
-                }
-                author = members[0];
+    remindCreateCommand(message, args) {
+        let author = message.author;
+        let members = utils.resolveAllMentioned(message, args, false, true);
+        if (members.length > 0) {
+            if (message.author.id !== '208028185584074763') {
+                throw new PermissionError('Você não tem permissão.');
             }
-
-            const [content, pattern, repeatEvent, syntax] = interpretEvent(args);
-
-            let event = {
-                author: author.id,
-                content: content,
-                pattern: pattern,
-                syntax: syntax,
-                loop: repeatEvent,
-                createdAt: (new Date()).getTime(),
-                lastExecutedAt: null
-            };
-
-            const now = new Date();
-            event.nextExecution = findNextExecution(event, now).getTime();
-
-            let savedEvent = ref.child('events').push();
-            event.id = savedEvent.key;
-
-            savedEvent.set(event, err => {
-                if (err) {
-                    message.reply(`:x: Houve um erro ao gravar seu evento: ${err}`);
-                    return;
-                }
-                message.reply(`:white_check_mark: Evento \`${event.id}\` registrado. Te avisarei em **${formatFutureDate(now, event.nextExecution)}**`);
-            });
-
-        } catch (error) {
-            console.error(error);
-            message.reply(`:x: ${error.message}`);
+            author = members[0];
         }
+
+        const [content, pattern, repeatEvent, syntax] = interpretEvent(args);
+
+        let event = {
+            author: author.id,
+            content: content,
+            pattern: pattern,
+            syntax: syntax,
+            loop: repeatEvent,
+            createdAt: (new Date()).getTime(),
+            lastExecutedAt: null
+        };
+
+        const now = new Date();
+        event.nextExecution = findNextExecution(event, now).getTime();
+
+        return this.db.insert('events', event)
+            .then(newEvent => {
+                return message.reply(`:white_check_mark: Evento \`${newEvent.id}\` registrado. Te avisarei em **${formatFutureDate(now, newEvent.nextExecution)}**`);
+            })
+        ;
+
+        // let savedEvent = ref.child('events').push();
+        // event.id = savedEvent.key;
+        //
+        // savedEvent.set(event, err => {
+        //     if (err) {
+        //         message.reply(`:x: Houve um erro ao gravar seu evento: ${err}`);
+        //         return;
+        //     }
+        //     message.reply(`:white_check_mark: Evento \`${event.id}\` registrado. Te avisarei em **${formatFutureDate(now, event.nextExecution)}**`);
+        // });
     }
 
     /**
@@ -191,35 +182,50 @@ esse evento vai ser executado *uma vez só* às 23:30, não importando que dia, 
      * @param message
      * @param args
      */
-    static remindListCommand(message, args) {
-        try {
-            const isDebug = args.includes('--debug') && ADMIN_IDS.includes(message.author.id);
-            const now = new Date();
+    remindListCommand(message, args) {
+        const isDebug = args.includes('--debug') && ADMIN_IDS.includes(message.author.id);
+        const now = new Date();
 
-            ref.child('events').once('value', snapshot => {
-                const events = snapshot.val();
+        return this.db.findAll('events', (event) => isDebug || event.author === message.author.id)
+            .then(events => {
                 let foundEvents = '';
 
-                for (let id in events) {
-                    if (!events.hasOwnProperty(id)) continue;
-                    const ev = events[id];
-                    if (isDebug || ev.author === message.author.id) {
-                        foundEvents += `\n:small_blue_diamond: ` + (isDebug ? `<@${ev.author}> ` : '') + `\`${ev.id}\` **${ev.content}** ${ev.syntax}` + (ev.nextExecution ? ' *(em ' + formatFutureDate(now, ev.nextExecution) + ')*' : '');
-                    }
-                }
+                events.forEach(event => {
+                    foundEvents += "\n"
+                        + `:small_blue_diamond: `
+                        + (isDebug ? `<@${event.author}> ` : '')
+                        + `\`${event.id}\` **${event.content}** ${event.syntax}`
+                        + (event.nextExecution ? ' *(em ' + formatFutureDate(now, event.nextExecution) + ')*' : '')
+                    ;
+                });
 
                 if (!foundEvents) {
-                    message.reply(`:x: Nenhum evento registrado. Crie um com \`+remindme\` ou \`+remind help\` para saber mais.`);
-                    return;
+                    return message.reply(`:x: Nenhum evento registrado. Crie um com \`+remindme\` ou \`+remind help\` para saber mais.`);
                 }
 
-                utils.sendLongMessage(message.channel, `${message.author}, Seus eventos registrados:${foundEvents}`);
-            });
+                return utils.sendLongMessage(message.channel, `${message.author}, Seus eventos registrados:${foundEvents}`);
+            })
+        ;
 
-        } catch (error) {
-            console.error(error);
-            message.reply(`:x: ${error.message}`);
-        }
+        // ref.child('events').once('value', snapshot => {
+        //     const events = snapshot.val();
+        //     let foundEvents = '';
+        //
+        //     for (let id in events) {
+        //         if (!events.hasOwnProperty(id)) continue;
+        //         const ev = events[id];
+        //         if (isDebug || ev.author === message.author.id) {
+        //             foundEvents += `\n:small_blue_diamond: ` + (isDebug ? `<@${ev.author}> ` : '') + `\`${ev.id}\` **${ev.content}** ${ev.syntax}` + (ev.nextExecution ? ' *(em ' + formatFutureDate(now, ev.nextExecution) + ')*' : '');
+        //         }
+        //     }
+        //
+        //     if (!foundEvents) {
+        //         message.reply(`:x: Nenhum evento registrado. Crie um com \`+remindme\` ou \`+remind help\` para saber mais.`);
+        //         return;
+        //     }
+        //
+        //     utils.sendLongMessage(message.channel, `${message.author}, Seus eventos registrados:${foundEvents}`);
+        // });
     }
 
     /**
@@ -228,38 +234,49 @@ esse evento vai ser executado *uma vez só* às 23:30, não importando que dia, 
      * @param message
      * @param args
      */
-    static remindDeleteCommand(message, args) {
-        try {
-            const isDebug = args.includes('--debug') && ADMIN_IDS.includes(message.author.id);
-            const eventId = args[0];
+    remindDeleteCommand(message, args) {
+        const isDebug = args.includes('--debug') && ADMIN_IDS.includes(message.author.id);
+        const eventId = args[0];
 
-            ref.child('events/' + eventId).once('value', snapshot => {
-                const event = snapshot.val();
-
+        return this.db.getOne('events/' + eventId)
+            .then(event => {
                 if (!event) {
-                    message.reply(`:x: Evento não existe.`);
-                    return;
+                    return message.reply(':x: Evento não existe.');
                 }
 
                 if (!isDebug && event.author !== message.author.id) {
-                    message.reply(`:x: Você não é autor deste evento.`);
-                    return;
+                    throw new PermissionError('Você não é autor deste evento.');
                 }
 
-                ref.child('events/' + eventId).set(null, err => {
-                    if (err) {
-                        message.reply(`:x: Houve um erro ao deletar seu evento: ${err}`);
-                        return;
-                    }
-
-                    message.reply(`:white_check_mark: Evento \`${eventId}\` deletado com sucesso.`);
-                });
-            });
-
-        } catch (error) {
-            console.error(error);
-            message.reply(`:x: ${error.message}`);
-        }
+                return this.db.save('events/' + eventId, null)
+                    .then(() => {
+                        return message.reply(`:white_check_mark: Evento \`${eventId}\` deletado com sucesso.`);
+                    })
+                ;
+            })
+        ;
+        // ref.child('events/' + eventId).once('value', snapshot => {
+        //     const event = snapshot.val();
+        //
+        //     if (!event) {
+        //         message.reply(`:x: Evento não existe.`);
+        //         return;
+        //     }
+        //
+        //     if (!isDebug && event.author !== message.author.id) {
+        //         message.reply(`:x: Você não é autor deste evento.`);
+        //         return;
+        //     }
+        //
+        //     ref.child('events/' + eventId).set(null, err => {
+        //         if (err) {
+        //             message.reply(`:x: Houve um erro ao deletar seu evento: ${err}`);
+        //             return;
+        //         }
+        //
+        //         message.reply(`:white_check_mark: Evento \`${eventId}\` deletado com sucesso.`);
+        //     });
+        // });
     }
 
     /**
@@ -268,50 +285,64 @@ esse evento vai ser executado *uma vez só* às 23:30, não importando que dia, 
      * @param message
      * @param args
      */
-    static remindDeleteAllCommand(message, args) {
-        try {
-            let author = message.author;
-            /*let members = utils.resolveAllMentioned(message, args, false, true);
-            if (members.length > 0) {
-                if (message.author.id !== '208028185584074763') {
-                    message.reply(`:x: *Você não tem permissão.*`);
-                    return;
-                }
-                author = members[0];
-            }*/
+    remindDeleteAllCommand(message, args) {
+        let author = message.author;
+        /*let members = utils.resolveAllMentioned(message, args, false, true);
+        if (members.length > 0) {
+            if (message.author.id !== '208028185584074763') {
+                message.reply(`:x: *Você não tem permissão.*`);
+                return;
+            }
+            author = members[0];
+        }*/
 
-            ref.child('events').once('value', snapshot => {
-                const events = snapshot.val();
+        return this.db.findAll('events', (event) => event.author === message.author.id)
+            .then(events => {
+
+                if (!events.length) {
+                    return message.reply(`:x: Nenhum evento registrado. Crie um com \`+remindme\` ou \`+remind help\` para saber mais.`);
+                }
+
                 let deleteEvents = [];
-
-                for (let id in events) {
-                    if (!events.hasOwnProperty(id)) continue;
-                    const ev = events[id];
-                    if (ev.author === author.id) {
-                        deleteEvents.push(id);
-                    }
-                }
-
-                if (!deleteEvents.length) {
-                    message.reply(`:x: Nenhum evento registrado. Crie um com \`+remindme\` ou \`+remind help\` para saber mais.`);
-                    return;
-                }
-
-                for (let i = 0; i < deleteEvents.length; i++) {
-                    deleteEvents[i] = ref.child('events/' + deleteEvents[i]).set(null);
-                }
-
-                Promise.all(deleteEvents).then((events) =>{
-                    message.reply(`:white_check_mark: Todos seus ${events.length} eventos foram deletados com sucesso.`);
-                }).catch(err => {
-                    message.reply(`:x: Erro ao excluir todos seus eventos: ${err}`);
+                events.forEach(event => {
+                    deleteEvents.push(this.db.save('events/' + event.id, null));
                 });
-            });
 
-        } catch (error) {
-            console.error(error);
-            message.reply(`:x: ${error.message}`);
-        }
+                return Promise.all(deleteEvents)
+                    .then((events) =>{
+                        message.reply(`:white_check_mark: Todos seus ${events.length} eventos foram deletados com sucesso.`);
+                    })
+                ;
+            })
+            ;
+
+        // ref.child('events').once('value', snapshot => {
+        //     const events = snapshot.val();
+        //     let deleteEvents = [];
+        //
+        //     for (let id in events) {
+        //         if (!events.hasOwnProperty(id)) continue;
+        //         const ev = events[id];
+        //         if (ev.author === author.id) {
+        //             deleteEvents.push(id);
+        //         }
+        //     }
+        //
+        //     if (!deleteEvents.length) {
+        //         message.reply(`:x: Nenhum evento registrado. Crie um com \`+remindme\` ou \`+remind help\` para saber mais.`);
+        //         return;
+        //     }
+        //
+        //     for (let i = 0; i < deleteEvents.length; i++) {
+        //         deleteEvents[i] = ref.child('events/' + deleteEvents[i]).set(null);
+        //     }
+        //
+        //     Promise.all(deleteEvents).then((events) =>{
+        //         message.reply(`:white_check_mark: Todos seus ${events.length} eventos foram deletados com sucesso.`);
+        //     }).catch(err => {
+        //         message.reply(`:x: Erro ao excluir todos seus eventos: ${err}`);
+        //     });
+        // });
     }
 
     /**
@@ -327,16 +358,11 @@ esse evento vai ser executado *uma vez só* às 23:30, não importando que dia, 
      * @param year
      * @param date
      */
-    static remindTimer(client, seconds, minutes, hours, day, month, dayWeek, year, date) {
-        try {
-            ref.child('events').once('value', snapshot => {
-                const events = snapshot.val();
-
-                for (let id in events) {
-                    if (!events.hasOwnProperty(id)) continue;
-                    let ev = events[id];
-
-                    let patternParts = parsePattern(ev.pattern);
+    remindTimer(client, seconds, minutes, hours, day, month, dayWeek, year, date) {
+        return this.db.getArray('events')
+            .then(events => {
+                events.forEach(event => {
+                    let patternParts = parsePattern(event.pattern);
                     let activate = true;
 
                     //console.log(patternParts);
@@ -346,7 +372,7 @@ esse evento vai ser executado *uma vez só* às 23:30, não importando que dia, 
                     tests.forEach((value, index) => {
                         activate = activate
                             && (    patternParts[index].includes(value)
-                                 || patternParts[index].includes(-1) );
+                                || patternParts[index].includes(-1) );
                         //console.log(index, activate);
                     });
                     /*activate = activate && (patternParts[0].includes(minutes) || patternParts[0].includes(-1));
@@ -366,68 +392,168 @@ esse evento vai ser executado *uma vez só* às 23:30, não importando que dia, 
                     if (!activate) {
                         // se não for pra ser executado, só dá uma testada pra ver se não deveria
                         // já ter sido executado
-                        if ((!ev.nextExecution || date.getTime() > ev.nextExecution)
-                            && (!ev.lastExecutedAt || ev.lastExecutedAt + 60000 <= date.getTime())) {
+                        if ((!event.nextExecution || date.getTime() > event.nextExecution)
+                            && (!event.lastExecutedAt || event.lastExecutedAt + 60000 <= date.getTime())) {
                             activate = true;
-                            console.log('forcou ativacao do evento', ev);
+                            console.log('forcou ativacao do evento', event);
                         }
                     } else {
-                        console.log('ativou evento', ev);
+                        console.log('ativou evento', event);
                     }
 
                     // se cumpriu alguma das exigencias
                     if (activate) {
-                        const author = ev.author;
-                        const content = ev.content;
-                        if (ev.loop) {
+                        const author = event.author;
+                        const content = event.content;
+                        if (event.loop) {
                             // se for repetitivo, não deletar e marcar a ultima execucao dele
-                            ev.lastExecutedAt = date.getTime();
-                            ev.nextExecution = findNextExecution(ev, date).getTime();
+                            event.lastExecutedAt = date.getTime();
+                            event.nextExecution = findNextExecution(event, date).getTime();
                         } else {
                             // deleta o evento se ja foi executado
-                            ev = null;
+                            event = null;
                         }
 
-                        client.fetchUser(author).then(user => {
-                            return user.createDM();
-                        }).then(dm => {
-                            return dm.send(`:alarm_clock: **Evento:** ${content}`);
-                        }).then(msgSent => {
-                            ref.child('events/' + id).set(ev, err => {
-                                if (err) {
-                                    console.error(err);
-                                    return;
-                                }
-
-                                if (ev) {
-                                    msgSent.edit(msgSent.content + `\n*próxima execução em ${formatFutureDate(date, ev.nextExecution)}*`);
-                                }
-
-                                // deu tudo certo!
-                            });
-                        }).catch(console.error);
+                        // importante: nesse caso aqui eu não tenho como fazer
+                        // Promise.all() e retornar pro controller lidar com os erros,
+                        // pq o erro de um evento não pode atrapalhar a entrega de
+                        // outro evento.
+                        // então nesse caso, eu só lido da forma mais simples possível, que
+                        // é passar o erro pro console.error()
+                        client.fetchUser(author)
+                            .then(user => {
+                                return user.createDM();
+                            })
+                            .then(dm => {
+                                return dm.send(`:alarm_clock: **Evento:** ${content}`);
+                            })
+                            .then(msgSent => {
+                                return this.db.save('events/' + event.id, event)
+                                    .then(() => {
+                                        if (event) {
+                                            return msgSent.edit(msgSent.content + `\n*próxima execução em ${formatFutureDate(date, event.nextExecution)}*`);
+                                        }
+                                    })
+                                ;
+                                // ref.child('events/' + id).set(event, err => {
+                                //     if (err) {
+                                //         console.error(err);
+                                //         return;
+                                //     }
+                                //
+                                //     if (event) {
+                                //         msgSent.edit(msgSent.content + `\n*próxima execução em ${formatFutureDate(date, event.nextExecution)}*`);
+                                //     }
+                                //
+                                //     // deu tudo certo!
+                                // });
+                            })
+                            .catch(console.error);
                     }
+                });
+            })
+        ;
 
-                }
+        // try {
+        //     ref.child('events').once('value', snapshot => {
+        //         const events = snapshot.val();
+        //
+        //         for (let id in events) {
+        //             if (!events.hasOwnProperty(id)) continue;
+        //             let ev = events[id];
+        //
+        //             let patternParts = parsePattern(ev.pattern);
+        //             let activate = true;
+        //
+        //             //console.log(patternParts);
+        //
+        //             // verifica se pattern cumpre as exigencias
+        //             let tests = [minutes, hours, day, month, dayWeek, year];
+        //             tests.forEach((value, index) => {
+        //                 activate = activate
+        //                     && (    patternParts[index].includes(value)
+        //                          || patternParts[index].includes(-1) );
+        //                 //console.log(index, activate);
+        //             });
+        //             /*activate = activate && (patternParts[0].includes(minutes) || patternParts[0].includes(-1));
+        //             console.log(activate);
+        //             activate = activate && (patternParts[1].includes(hours) || patternParts[1].includes(-1));
+        //             console.log(activate);
+        //             activate = activate && (patternParts[2].includes(day) || patternParts[2].includes(-1));
+        //             console.log(activate);
+        //             activate = activate && (patternParts[3].includes(month) || patternParts[3].includes(-1));
+        //             console.log(activate);
+        //             activate = activate && (patternParts[4].includes(dayWeek) || patternParts[4].includes(-1));
+        //             console.log(activate);
+        //             activate = activate && (patternParts[5].includes(year) || patternParts[5].includes(-1));
+        //             console.log(activate);*/
+        //
+        //             // tenta uma ultima vez
+        //             if (!activate) {
+        //                 // se não for pra ser executado, só dá uma testada pra ver se não deveria
+        //                 // já ter sido executado
+        //                 if ((!ev.nextExecution || date.getTime() > ev.nextExecution)
+        //                     && (!ev.lastExecutedAt || ev.lastExecutedAt + 60000 <= date.getTime())) {
+        //                     activate = true;
+        //                     console.log('forcou ativacao do evento', ev);
+        //                 }
+        //             } else {
+        //                 console.log('ativou evento', ev);
+        //             }
+        //
+        //             // se cumpriu alguma das exigencias
+        //             if (activate) {
+        //                 const author = ev.author;
+        //                 const content = ev.content;
+        //                 if (ev.loop) {
+        //                     // se for repetitivo, não deletar e marcar a ultima execucao dele
+        //                     ev.lastExecutedAt = date.getTime();
+        //                     ev.nextExecution = findNextExecution(ev, date).getTime();
+        //                 } else {
+        //                     // deleta o evento se ja foi executado
+        //                     ev = null;
+        //                 }
+        //
+        //                 client.fetchUser(author).then(user => {
+        //                     return user.createDM();
+        //                 }).then(dm => {
+        //                     return dm.send(`:alarm_clock: **Evento:** ${content}`);
+        //                 }).then(msgSent => {
+        //                     ref.child('events/' + id).set(ev, err => {
+        //                         if (err) {
+        //                             console.error(err);
+        //                             return;
+        //                         }
+        //
+        //                         if (ev) {
+        //                             msgSent.edit(msgSent.content + `\n*próxima execução em ${formatFutureDate(date, ev.nextExecution)}*`);
+        //                         }
+        //
+        //                         // deu tudo certo!
+        //                     });
+        //                 }).catch(console.error);
+        //             }
+        //
+        //         }
+        //
+        //     });
+        //
+        // } catch (error) {
+        //     console.error(error);
+        // }
+    }
 
-            });
-
-        } catch (error) {
-            console.error(error);
+    commands() {
+        return {
+            'remindme': this.remindMeCommand,
+            'remind': this.remindCommand,
+            'remindmeplus': this.remindMeAdvancedCommand
         }
     }
 
-    static commands() {
+    timers() {
         return {
-            'remindme': RemindMe.remindMeCommand,
-            'remind': RemindMe.remindCommand,
-            'remindmeplus': RemindMe.remindMeAdvancedCommand
-        }
-    }
-
-    static timers() {
-        return {
-            'remindme': RemindMe.remindTimer
+            'remindme': this.remindTimer
         }
     }
 }

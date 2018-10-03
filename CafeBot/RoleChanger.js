@@ -2,6 +2,8 @@
 const utils = require('../utils');
 const Discord = require("discord.js");
 
+const PermissionError = require('./Errors/PermissionError');
+
 let bannedSuggestions = [];
 let allRoles;
 
@@ -14,30 +16,24 @@ const SUGGEST_VOTES_MAX = 5;
 class RoleChanger {
     constructor () {}
 
-    static get modName() { return 'rolechanger' }
+    get modName() { return 'rolechanger' }
 
     roleCommand(guild, message, args) {
         const arg = args.shift();
 
         // pega todas as roles disponiveis
         if (!allRoles) {
-            allRoles = guild.roles.clone().filter(role => role.name.indexOf(ROLE_PREFIX) === 0 && !specialRoles.includes(role.name));
+            allRoles = guild.roles
+                .clone()
+                .filter(role => role.name.indexOf(ROLE_PREFIX) === 0 && !specialRoles.includes(role.name));
         }
 
         // pega os membros que vão ter suas roles alteradas
         let members = utils.resolveAllMentioned(message, args, false, true);
         if (members.length > 0) {
             if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_ROLES)) {
-                message.reply(`:x: *Você não tem permissão de alterar as roles de outra pessoa.*`);
-                return;
+                throw new PermissionError(`Você não tem permissão de alterar as roles de outra pessoa.`);
             }
-
-            // members = message.mentions.members.array();
-            //
-            // // tira eles da lista de argumentos
-            // members.forEach(member => {
-            //     args.splice(args.indexOf('<@!'+member.id+'>'), 1);
-            // });
         } else {
             members.push(message.member);
         }
@@ -277,7 +273,7 @@ Retira uma ou mais roles do seu usuário, ou de outro usuário (caso você tenha
      */
     roleDeleteCommand(guild, message, args, allRoles) {
         if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_ROLES)) {
-            return message.reply(`:x: *Você não tem permissão de deletar uma role.*`);
+            throw new PermissionError(`Você não tem permissão de deletar uma role.`);
         }
 
         const roleName = args[0];

@@ -3,15 +3,17 @@ const utils = require('../utils');
 const adminsIds = require('../adminIds');
 const Discord = require("discord.js");
 
+const PermissionError = require('./Errors/PermissionError');
+
 let NSFW_MESSAGES = {};
 let NSFW_MESSAGES_SEEN = {};
 
 class Nsfw {
     constructor () {}
 
-    static get modName() { return 'nsfw' }
+    get modName() { return 'nsfw' }
 
-    static nsfwCommand(message, args) {
+    nsfwCommand(message, args) {
         if (message.channel instanceof Discord.DMChannel) {
             let code = args[0];
 
@@ -20,63 +22,56 @@ class Nsfw {
                 code = args[1];
 
                 if (!NSFW_MESSAGES[code]) {
-                    message.reply(`:white_check_mark: Mensagem \`${code}\` já excluída ou expirada.`);
-                    return;
+                    return message.reply(`:white_check_mark: Mensagem \`${code}\` já excluída ou expirada.`);
                 }
                 if (NSFW_MESSAGES[code].author === message.author.id
                     || adminsIds.includes(message.author.id)) {
                     // primeiro exclui o alerta de que teve aquela msg
-                    NSFW_MESSAGES[code].msgSent.delete()
+                    return NSFW_MESSAGES[code].msgSent.delete()
                         .then(() => {
                             delete NSFW_MESSAGES[code];
-                            message.reply(`:white_check_mark: Mensagem \`${code}\` excluída com sucesso.`);
+                            return message.reply(`:white_check_mark: Mensagem \`${code}\` excluída com sucesso.`);
                         })
-                        .catch(console.error);
-                } else {
-                    message.reply(`:x: Você não pode deletar essa mensagem.`);
+                        ;
                 }
-                return;
+                throw new PermissionError(`Você não tem permissão de deletar essa mensagem.`);
             }
 
             // se já não existir a msg
             NSFW_MESSAGES_SEEN[code] = NSFW_MESSAGES_SEEN[code] || [];
 
             if (!NSFW_MESSAGES[code] || NSFW_MESSAGES_SEEN[code].includes(message.author.id)) {
-                message.reply(`:x: Mensagem \`${code}\` não existe. Provavelmente já expirou ou você já viu.`);
-                return;
+                return message.reply(`:x: Mensagem \`${code}\` não existe. Provavelmente já expirou ou você já viu.`);
             }
 
             if (NSFW_MESSAGES[code]) {
                 if (NSFW_MESSAGES[code].author === message.author.id) {
                     // ignorar responder se foi a propria pessoa pedindo pra ver a msg que ela mesma mandou
-                    //return;
+                    return;
                 }
 
-                message.reply(NSFW_MESSAGES[code].content, NSFW_MESSAGES[code].options)
+                return message.reply(NSFW_MESSAGES[code].content, NSFW_MESSAGES[code].options)
                     .then(msg => {
                         // marca como já visto por esse usuario
                         NSFW_MESSAGES_SEEN[code].push(message.author.id);
 
-                        message.client.setTimeout(() => {
-                            // msg se auto destrou em 120 segundos (2 minutos)
-                            msg.delete();
-                        }, 120000);
+                        return msg.delete(120000);
                     })
-                    .catch(console.error);
+                    ;
             }
         } else {
             if (args.join(' ').match(/^(clear )?[0-9]{13,15}$/g)) {
                 // tentou dar o comando de ver fora da dm
-                message.author.createDM().then(dm => {
-                    dm.send(`É aqui que você tem que dar o comando :)`);
-                }).catch(console.error);
-                return;
+                return message.author.createDM().then(dm => {
+                    return dm.send(`É aqui que você tem que dar o comando :)`);
+                });
             }
-            message.delete()
+
+            // deleta a msg e cria um nsfw dela
+            return message.delete()
                 .then(msg => {
                     return createNsfwAlert(msg);
-                })
-                .catch(console.error);
+                });
         }
     }
 
@@ -86,9 +81,9 @@ class Nsfw {
      * @param {Discord.MessageReaction} messageReaction O objeto reaction, que contem a mensagem e o emoji dado
      * @param {Discord.User} user O usuário que fez essa reaction (pode ser membro do server ou não)
      */
-    static onReactionAdd(messageReaction, user) {
+    onReactionAdd(messageReaction, user) {
         let reactCount = messageReaction.count;
-        messageReaction.fetchUsers()
+        return messageReaction.fetchUsers()
             .then(users => {
                 if (users && !users.some(u => adminsIds.includes(u.id))) {
                     // ignora quem não for admin
@@ -104,19 +99,18 @@ class Nsfw {
                 if (msg) {
                     return createNsfwAlert(msg, true);
                 }
-            })
-            .catch(console.error);
+            });
     }
 
-    static commands() {
+    commands() {
         return {
-            'nsfw': Nsfw.nsfwCommand
+            'nsfw': this.nsfwCommand
         }
     }
 
-    static events() {
+    events() {
         return {
-            'messageReactionAdd': Nsfw.onReactionAdd
+            'messageReactionAdd': this.onReactionAdd
         }
     }
 }

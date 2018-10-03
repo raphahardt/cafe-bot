@@ -16,7 +16,7 @@ const permittedJequitiChannels = [
 class AntiJequiti {
     constructor() {}
 
-    static get modName() { return 'antijequiti' }
+    get modName() { return 'antijequiti' }
 
     /**
      * Invocado ao deletar uma mensagem

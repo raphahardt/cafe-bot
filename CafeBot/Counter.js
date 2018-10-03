@@ -13,7 +13,7 @@ class Counter {
         this.db = new Cafebase('teste');
     }
 
-    static get modName() { return 'counter' }
+    get modName() { return 'counter' }
 
     countCommand(message, args) {
         const now = new Date();

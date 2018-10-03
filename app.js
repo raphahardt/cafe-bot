@@ -14,21 +14,21 @@ const activator = new ModuleActivator();
 // registra os eventos de cada um dos 'módulos' do bot
 CafeBot.registerDiscordEvents(client, activator, [
     activator, // o próprio activator também possui comandos, então ele é um modulo também
-    require('./CafeBot/Counter'),
-    require('./CafeBot/Ping'),
-    //require('./CafeBot/AntiJequiti'), // rip *2017 ✝️2017
-    require('./CafeBot/Perolas'),
-    //require('./CafeBot/AmigoSecreto'), TODO: reformular
-    require('./CafeBot/MeFala'),
-    //require('./CafeBot/Audio'), // ainda não tá pronto
-    require('./CafeBot/RoleChanger'),
-    //require('./CafeBot/Wololo'), // fim do wololo (19/02/18 ✝)
-    require('./CafeBot/Sorteio'),
-    //require('./CafeBot/Exp'), // ainda não tá pronto
-    //require('./CafeBot/BattleRoyale'), // fim do battle royale (30/09/18 ✝)
-    require('./CafeBot/Nsfw'),
-    require('./CafeBot/RemindMe'),
-    require('./CafeBot/Gacha'),
+    new (require('./CafeBot/Counter'))(),
+    new (require('./CafeBot/Ping'))(),
+    //new (require('./CafeBot/AntiJequiti'))(), // rip *2017 ✝️2017
+    new (require('./CafeBot/Perolas'))(),
+    //new (require('./CafeBot/AmigoSecreto'))(), TODO: reformular
+    new (require('./CafeBot/MeFala'))(),
+    //new (require('./CafeBot/Audio'))(), // ainda não tá pronto
+    new (require('./CafeBot/RoleChanger'))(),
+    //new (require('./CafeBot/Wololo'))(), // fim do wololo (19/02/18 ✝)
+    new (require('./CafeBot/Sorteio'))(),
+    //new (require('./CafeBot/Exp'))(), // ainda não tá pronto
+    //new (require('./CafeBot/BattleRoyale'))(), // fim do battle royale (30/09/18 ✝)
+    new (require('./CafeBot/Nsfw'))(),
+    new (require('./CafeBot/RemindMe'))(),
+    new (require('./CafeBot/Gacha'))(),
 ]);
 
 // conecta o bot

@@ -60,7 +60,7 @@ let lastMessages = {};
 class Exp {
     constructor () {}
 
-    static get modName() { return 'exp' }
+    get modName() { return 'exp' }
 
     /**
      *

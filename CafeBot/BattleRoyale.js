@@ -97,7 +97,7 @@ function makeRandomInt(seed) {
 class BattleRoyale {
     constructor () {}
 
-    static get modName() { return 'royale' }
+    get modName() { return 'royale' }
 
     static royaleCommand(message, args) {
         //console.log('ROLES', message.guild.roles.array().map(r => `${r.id}: ${r.name}`));

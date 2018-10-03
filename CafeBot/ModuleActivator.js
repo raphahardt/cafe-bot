@@ -34,7 +34,7 @@ class ModuleActivator {
     }
 
     // esse módulo é o unico q não tem nome e não pode ser desativado
-    static get modName() { return false }
+    get modName() { return false }
 
     /**
      * Adiciona um módulo no pool de módulos.
@@ -43,7 +43,7 @@ class ModuleActivator {
      */
     installModule(module) {
         if (module.modName) {
-            this.modulesInstalled[module.modName] = new module();
+            this.modulesInstalled[module.modName] = module;
         }
     }
 
@@ -109,6 +109,7 @@ class ModuleActivator {
     modCommand(message, args) {
         if (message.author.id !== '208028185584074763' || this._debug) return;
 
+        let ps = [];
         args.forEach(arg => {
             const moduleName = arg.toLowerCase();
             const module = this.modulesInstalled[moduleName];
@@ -117,22 +118,24 @@ class ModuleActivator {
             }
             if (this.isDisabled(moduleName)) {
                 // ativa
-                this.db.save('blacklist/' + moduleName, null)
+                ps.push(this.db.save('blacklist/' + moduleName, null)
                     .then(() => {
                         if (module.onEnable) module.onEnable();
                         return message.reply(`:full_moon_with_face: Módulo **${moduleName}** ativado.`);
                     })
-                ;
+                );
             } else {
                 // desativa
-                this.db.save('blacklist/' + moduleName, 1)
+                ps.push(this.db.save('blacklist/' + moduleName, 1)
                     .then(() => {
                         if (module.onDisable) module.onDisable();
                         return message.reply(`:new_moon_with_face: Módulo **${moduleName}** desativado.`);
                     })
-                ;
+                );
             }
-        })
+        });
+
+        return Promise.all(ps);
     }
 
     /**
