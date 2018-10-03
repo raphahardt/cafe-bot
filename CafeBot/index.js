@@ -1,11 +1,16 @@
-
 const Discord = require("discord.js");
+const Cafebase = require('./Cafebase');
 const utils = require('../utils');
 
-// cache de quem usou um comando pra evitar flood de comandos
-let COMMANDS_LAST_USED = {};
+const bot = {
+    // auto-explicativo
+    packageJson: {},
+    ready: false,
+    cafeComPaoGuildId: '213797930937745409',
 
-module.exports = {
+    // cache de quem usou um comando pra evitar flood de comandos
+    commandsLastUsed: {},
+
     /**
      * Registra os eventos e comandos de um listener.
      *
@@ -16,50 +21,114 @@ module.exports = {
     registerDiscordEvents: (discordClient, modules, listeners) => {
 
         // registrando os modulos no moduleActivator
-        for (let i = 0; i < listeners.length; i++) {
-            const listener = listeners[i];
-            modules.modulesInstalled[listener.name] = listener;
-        }
+        listeners.forEach(listener => {
+            modules.installModule(listener);
+        });
 
         discordClient.setInterval(() => {
+            // se o bot ainda não estiver ready, nem executa
+            if (!bot.ready) return;
+
             const dateNow = new Date();
 
-            // invocando os eventos
-            for (let i = 0; i < listeners.length; i++) {
-                const listener = listeners[i];
-                const timers = listener.timers ? listener.timers() : {};
+            // invocando os eventos v2
+            for (let o of modules.iterateModules('timers')) {
+                const [module, key, fn, opts] = o;
 
-                for (let timer in timers) {
-                    if (!timers.hasOwnProperty(timer)) continue;
+                console.log(module, module.constructor.modName + ' | timer triggered ' + key);
 
-                    // executa o evento de fato
-                    try {
-                        const r = timers[timer].apply(listener, [
-                            discordClient,
-                            dateNow.getSeconds(),
-                            dateNow.getMinutes(),
-                            dateNow.getHours(),
-                            dateNow.getDate(),
-                            dateNow.getMonth() + 1,
-                            dateNow.getDay(),
-                            dateNow.getFullYear(),
-                            dateNow
-                        ]);
+                // executa o evento de fato
+                try {
+                    const r = fn.apply(module, [
+                        discordClient,
+                        dateNow.getSeconds(),
+                        dateNow.getMinutes(),
+                        dateNow.getHours(),
+                        dateNow.getDate(),
+                        dateNow.getMonth() + 1,
+                        dateNow.getDay(),
+                        dateNow.getFullYear(),
+                        dateNow
+                    ]);
 
-                        handlePromiseReturn(r, discordClient);
-                    } catch (error) {
-                        handleError(error, discordClient);
-                    }
+                    handlePromiseReturn(r, discordClient);
+                } catch (error) {
+                    handleError(error, discordClient);
+                }
+            }
+            // // invocando os eventos
+            // for (let i = 0; i < listeners.length; i++) {
+            //     const listener = listeners[i];
+            //     const timers = listener.timers ? listener.timers() : {};
+            //
+            //     for (let timer in timers) {
+            //         if (!timers.hasOwnProperty(timer)) continue;
+            //
+            //         // executa o evento de fato
+            //         try {
+            //             const r = timers[timer].apply(listener, [
+            //                 discordClient,
+            //                 dateNow.getSeconds(),
+            //                 dateNow.getMinutes(),
+            //                 dateNow.getHours(),
+            //                 dateNow.getDate(),
+            //                 dateNow.getMonth() + 1,
+            //                 dateNow.getDay(),
+            //                 dateNow.getFullYear(),
+            //                 dateNow
+            //             ]);
+            //
+            //             handlePromiseReturn(r, discordClient);
+            //         } catch (error) {
+            //             handleError(error, discordClient);
+            //         }
+            //     }
+            // }
+
+        }, 60000);
+
+        // ready
+        discordClient.on('ready', () => {
+            bot.ready = true;
+
+            console.log(`Bot ${bot.packageJson.name} v${bot.packageJson.version} [${discordClient.users.size} membros] [${discordClient.channels.size} canais] [${discordClient.guilds.size} servers]`);
+
+            // sai de todas as guilds q não seja o café com pão
+            discordClient.guilds.forEach((guild) => {
+                if (guild.id !== '213797930937745409') {
+                    guild.leave();
+                }
+            });
+
+            const phrases = utils.shuffle(['você tomar café', 'os ghosts safados', 'seus abcs']);
+            discordClient.user.setActivity(`${phrases[0]} (${bot.packageJson.version})` + (modules._debug ? ' (testes)' : ''), { type: 'WATCHING' });
+
+            if (!modules._debug) {
+                // procura o canal pra mandar as mensagens pinnadas
+                const logChannel = discordClient.channels.get('240297584420323338');
+                if (logChannel) {
+                    const emb = new Discord.RichEmbed()
+                        .setColor(3447003)
+                        .setTitle(`Café bot v${bot.packageJson.version}`)
+                        .setDescription(`Conectado no server`)
+                        .setTimestamp(new Date());
+
+                    logChannel.send({embed: emb});
                 }
             }
 
-        }, 60000);
+        });
 
         // registra o evento de erros.
         // necessário, para não crashar o node.
         // visto em: https://nodejs.org/dist/latest/docs/api/events.html#events_error_events
         discordClient.on('error', error => {
             handleError(error, discordClient);
+        });
+
+        // ver: https://discord.js.org/#/docs/main/stable/class/Client?scrollTo=e-rateLimit
+        discordClient.on('rateLimit', info => {
+            handleError(new Error('Rate limit: ' + JSON.stringify(info)), discordClient);
         });
 
         // evento pros comandos
@@ -76,71 +145,136 @@ module.exports = {
             const args = parseArgs(argsString);
             const command = args.shift().toLowerCase();
 
-            // invocando os comandos
-            for (let i = 0; i < listeners.length; i++) {
-                const listener = listeners[i];
-                const lstCommands = listener.commands ? listener.commands() : {};
+            // invocando os comandos v2
+            for (let o of modules.iterateModules('commands')) {
+                const [module, cmd, fn, opts] = o;
 
-                // hook pra ver se o modulo tá desativado ou não
-                if (modules.isDisabled(listener.name)) {
-                    //console.log(`tentou registrar o comando do modulo ${listener.name}, mas ele tá desativado`);
-                    continue;
-                }
-
-                for (let lstCommand in lstCommands) {
-                    if (!lstCommands.hasOwnProperty(lstCommand)) continue;
-
-                    //console.log('comando registrado ' + lstCommand);
-
-                    if (command === lstCommand.toLowerCase()) {
-                        console.log('invocando ' + command, args);
-                        // chama o comando do listener registrado
-                        try {
-                            const r = lstCommands[lstCommand].call(listener, message, args);
-                            handlePromiseReturn(r, message);
-                        } catch (error) {
-                            handleError(error, message);
+                if (command === cmd) {
+                    console.log(module, module.constructor.modName + ' | invoking ' + command, args);
+                    // chama o comando do listener registrado
+                    try {
+                        let a = [message, args];
+                        if (opts.guild) {
+                            const guild = getCafeComPaoGuildAndCheck(message, opts);
+                            // coloca a guild como primeiro argumento
+                            a = [guild].concat(a);
                         }
+
+                        if (opts.disallowDM) {
+                            if (message.channel instanceof Discord.DMChannel) {
+                                message.reply(`:x: Este comando só pode ser usado dentro do servidor.`);
+                                continue;
+                            }
+                        }
+
+                        const r = fn.apply(module, a);
+                        handlePromiseReturn(r, message);
+                    } catch (error) {
+                        handleError(error, message);
                     }
                 }
             }
+            // // invocando os comandos
+            // for (let i = 0; i < listeners.length; i++) {
+            //     const listener = listeners[i];
+            //     const lstCommands = listener.commands ? listener.commands() : {};
+            //
+            //     // hook pra ver se o modulo tá desativado ou não
+            //     if (modules.isDisabled(listener.name)) {
+            //         //console.log(`tentou registrar o comando do modulo ${listener.name}, mas ele tá desativado`);
+            //         continue;
+            //     }
+            //
+            //     for (let lstCommand in lstCommands) {
+            //         if (!lstCommands.hasOwnProperty(lstCommand)) continue;
+            //
+            //         //console.log('comando registrado ' + lstCommand);
+            //
+            //         if (command === lstCommand.toLowerCase()) {
+            //             console.log('invocando ' + command, args);
+            //             // chama o comando do listener registrado
+            //             try {
+            //                 const r = lstCommands[lstCommand].call(listener, message, args);
+            //                 handlePromiseReturn(r, message);
+            //             } catch (error) {
+            //                 handleError(error, message);
+            //             }
+            //         }
+            //     }
+            // }
         });
 
-        // invocando os eventos
-        for (let i = 0; i < listeners.length; i++) {
-            const listener = listeners[i];
-            const events = listener.events ? listener.events() : {};
+        // invocando os eventos v2
+        for (let o of modules.iterateModules('events', true)) {
+            const [module, event, fn, opts] = o;
 
-            for (let event in events) {
-                if (!events.hasOwnProperty(event)) continue;
+            console.log(module, module.constructor.modName + ' | event registered ' + event);
 
-                console.log('evento registrado ' + event);
+            // registra um evento no client do discord
+            // antigo código: discordClient.on(event, events[event]);
+            discordClient.on(event, (...args) => {
+                // hook pra ver se o modulo tá desativado ou não
+                if (modules.isDisabled(module.constructor.modName)) {
+                    console.log(module, module.constructor.modName + ' | tried execute event ' + event + ' but module is disabled');
+                    return;
+                }
 
-                // registra um evento no client do discord
-                // antigo código: discordClient.on(event, events[event]);
-                discordClient.on(event, (...args) => {
-                    // hook pra ver se o modulo tá desativado ou não
-                    if (modules.isDisabled(listener.name)) {
-                        console.log(`tentou executar o modulo ${listener.name}, mas ele tá desativado`);
-                        return;
+                // só em alguns eventos, mandar o client nos argumentos, pra facilitar
+                // minha vida na hora de pegar o client do discord
+                if (event === 'ready') {
+                    args = [discordClient].concat(args);
+                } else {
+                    if (opts.guild) {
+                        const guild = getCafeComPaoGuildAndCheck(discordClient, opts);
+                        // coloca a guild como primeiro argumento
+                        args = [guild].concat(args);
                     }
+                }
 
-                    // só em alguns eventos, mandar o client nos argumentos, pra facilitar
-                    // minha vida na hora de pegar o client do discord
-                    if (event === 'ready') {
-                        args = [discordClient].concat(args);
-                    }
-
-                    // executa o evento de fato
-                    try {
-                        const r = events[event].apply(listener, args);
-                        handlePromiseReturn(r, discordClient);
-                    } catch (error) {
-                        handleError(error, discordClient);
-                    }
-                });
-            }
+                // executa o evento de fato
+                try {
+                    const r = fn.apply(module, args);
+                    handlePromiseReturn(r, discordClient);
+                } catch (error) {
+                    handleError(error, discordClient);
+                }
+            });
         }
+        // // invocando os eventos
+        // for (let i = 0; i < listeners.length; i++) {
+        //     const listener = listeners[i];
+        //     const events = listener.events ? listener.events() : {};
+        //
+        //     for (let event in events) {
+        //         if (!events.hasOwnProperty(event)) continue;
+        //
+        //         console.log('evento registrado ' + event);
+        //
+        //         // registra um evento no client do discord
+        //         // antigo código: discordClient.on(event, events[event]);
+        //         discordClient.on(event, (...args) => {
+        //             // hook pra ver se o modulo tá desativado ou não
+        //             if (modules.isDisabled(listener.name)) {
+        //                 console.log(`tentou executar o modulo ${listener.name}, mas ele tá desativado`);
+        //                 return;
+        //             }
+        //
+        //             // só em alguns eventos, mandar o client nos argumentos, pra facilitar
+        //             // minha vida na hora de pegar o client do discord
+        //             if (event === 'ready') {
+        //                 args = [discordClient].concat(args);
+        //             }
+        //
+        //             // executa o evento de fato
+        //             try {
+        //                 const r = events[event].apply(listener, args);
+        //                 handlePromiseReturn(r, discordClient);
+        //             } catch (error) {
+        //                 handleError(error, discordClient);
+        //             }
+        //         });
+        //     }
+        // }
     }
 };
 
@@ -243,3 +377,31 @@ function handlePromiseReturn(r, messageOrClient) {
         })
     }
 }
+
+/**
+ *
+ * @param {Discord.Message|Discord.Client} messageOrClient
+ * @param {object} opts
+ * @returns {Discord.Guild}
+ */
+function getCafeComPaoGuildAndCheck(messageOrClient, opts) {
+    let guild;
+    if (messageOrClient instanceof Discord.Message) {
+        guild = messageOrClient.guild || messageOrClient.client.guilds.get(bot.cafeComPaoGuildId);
+    } else {
+        guild = messageOrClient.guilds.get(bot.cafeComPaoGuildId);
+    }
+
+    if (!opts.noGuildCheck) {
+        if (!guild || !guild.available) {
+            throw new Error(`Guild com problema.`);
+        }
+    }
+
+    return guild;
+}
+
+module.exports = (packageJson) => {
+    bot.packageJson = packageJson;
+    return bot;
+};

@@ -9,16 +9,15 @@ const Transformer = require('./LetterTransformer');
 class MeFala {
     constructor() {}
 
-    static get name() { return 'mefala' }
+    static get modName() { return 'mefala' }
 
-    static mainCommand(message, args) {
+    mainCommand(message, args) {
         if (args.length === 0) {
-            message.channel.send('Faça alguma pergunta.');
-            return;
+            return message.reply('Faça alguma pergunta.');
         }
 
         let phrase = args.join(" ") || '';
-        console.log('PERGUNTA', phrase);
+        //console.log('PERGUNTA', phrase);
         let phrasesResult = [];
         for (let i = 0; i < interpreters.length; i++) {
             const interpreter = interpreters[i];
@@ -56,8 +55,7 @@ class MeFala {
 
             if (!emojis) {
                 // se por algum motivo, ainda não vir emojis
-                message.reply('...');
-                return;
+                return message.reply(':x: Erro no `+mefala`.');
             }
         }
 
@@ -72,23 +70,23 @@ class MeFala {
                     }
                     // acabou os emojis
                     return selectedPhraseResult;
-                }).catch(console.error);
+                });
         }
 
         // (inicio a recursividade aqui)
-        _react().then((selectedPhrase) => {
+        return _react().then((selectedPhrase) => {
             // se chegou aqui, é pq todos os emojis foram enviados.
             // aqui eu sou respondido com a frase selecionada.
             // posso fazer alguma coisa ela aqui.
             // (mas a princípio, o código não vai fazer nada, mas
             // deixei aberto pra possibilidades)
-            console.log('REACT ENVIOU FRASE', selectedPhrase);
-        }).catch(console.error);
+            //console.log('REACT ENVIOU FRASE', selectedPhrase);
+        });
     }
 
-    static commands() {
+    commands() {
         return {
-            'mefala': MeFala.mainCommand
+            'mefala': this.mainCommand
         }
     }
 

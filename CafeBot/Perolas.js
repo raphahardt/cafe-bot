@@ -2,16 +2,7 @@
 const emojis = require("../emojis.json");
 const utils = require("../utils");
 const Discord = require("discord.js");
-const fbAdmin = require("firebase-admin");
-const fbServiceAccount = require("../misc/cafebot-2018-firebase-adminsdk-j17ic-a11e9f3222.json");
-
-const fbApp = fbAdmin.initializeApp({
-    credential: fbAdmin.credential.cert(fbServiceAccount),
-    databaseURL: "https://cafebot-2018.firebaseio.com"
-}, 'perolas');
-
-const db = fbApp.database();
-const ref = db.ref('perolas');
+const Cafebase = require('./Cafebase');
 
 // array com os canais que tem q ser ignorados
 const perolaIgnoredChannelsIds = [
@@ -51,77 +42,84 @@ const perolaValidEmojis = [emojis.WILTED_FLOWER];
  *
  */
 class Perolas {
-    constructor() {}
+    constructor() {
+        this.db = new Cafebase('perolas');
+    }
 
-    static get name() { return 'perolas' }
+    static get modName() { return 'perolas' }
 
     /**
      * Invocado toda vez que alguém dá um reaction em alguma mensagem.
      *
+     * @param {Discord.Guild} guild
      * @param {Discord.MessageReaction} messageReaction O objeto reaction, que contem a mensagem e o emoji dado
      * @param {Discord.User} user O usuário que fez essa reaction (pode ser membro do server ou não)
      */
-    static onReactionAdd(messageReaction, user) {
+    onReactionAdd(guild, messageReaction, user) {
         //console.log('REACTION', perolaValidEmojis.includes(messageReaction.emoji.name), messageReaction.count);
+        const message = messageReaction.message;
+
+        // ignora mensagens de bot
+        if (message.author.bot) return;
 
         // ignora canais "especiais"
-        if (perolaIgnoredChannelsIds.includes(messageReaction.message.channel.id)) return;
+        if (perolaIgnoredChannelsIds.includes(message.channel.id)) return;
 
         // procura o canal pra mandar as mensagens pinnadas
-        const perolasChannel = messageReaction.message.guild.channels.get(perolaChannelId);
+        const perolasChannel = guild.channels.get(perolaChannelId);
         if (!perolasChannel) return;
 
         // ignora os reactions na propria mesa perola, pra nao entrar em loop infinito
-        if (perolasChannel === messageReaction.message.channel) return;
-
-        // ignora mensagens de bot também
-        if (messageReaction.message.author.bot) return;
+        if (perolasChannel === message.channel) return;
 
         let reactCount = messageReaction.count;
-        messageReaction.fetchUsers()
+        return messageReaction.fetchUsers()
             .then(users => {
-                if (users && users.has(messageReaction.message.author.id)) {
+                if (users && users.has(message.author.id)) {
                     reactCount--;
                 }
 
                 if (perolaValidEmojis.includes(messageReaction.emoji.name) && reactCount >= perolaCountThreshold) {
-                    sendPerolaMessage(messageReaction.message, perolasChannel, reactCount, users);
+                    return sendPerolaMessage(this, message, perolasChannel, reactCount, users);
                 }
-            })
-            .catch(console.error);
+            });
     }
 
     /**
      * Comando +pins
      * Serve pra pegar todas as mensagens pinnadas e jogar no channel de pérolas.
      *
+     * @param {Discord.Guild} guild
      * @param {Discord.Message} message
      * @param {Array} args Parametros do comando
      */
-    static pinsCommand(message, args) {
-        const mainChannel = message.guild.channels.find('name', args[0]);
-        const perolasChannel = message.guild.channels.get(perolaChannelId);
+    pinsCommand(guild, message, args) {
+        const mainChannel = guild.channels.find('name', args[0]);
+        const perolasChannel = guild.channels.get(perolaChannelId);
         if (!mainChannel || !perolasChannel) return;
 
         // pega todas as mensagens pinnadas
-        mainChannel.fetchPinnedMessages()
+        return mainChannel.fetchPinnedMessages()
             .then(pinnedMessages => {
+                let all = [];
                 pinnedMessages.forEach(pinMsg => {
                     // manda cada uma no channel de perolas
-                    sendPerolaMessage(pinMsg, perolasChannel);
-                })
-            }).catch(console.error);
+                    all.push(sendPerolaMessage(this, pinMsg, perolasChannel));
+                });
+
+                return Promise.all(all);
+            });
     }
 
-    static commands() {
+    commands() {
         return {
-            'pins': Perolas.pinsCommand
+            'pins': [this.pinsCommand, { guild: true }]
         }
     }
 
-    static events() {
+    events() {
         return {
-            'messageReactionAdd': Perolas.onReactionAdd
+            'messageReactionAdd': [this.onReactionAdd, { guild: true }]
         }
     }
 
@@ -131,13 +129,14 @@ class Perolas {
 /**
  * Envia a mensagem no canal de pérolas (mesa-da-vergonha)
  *
+ * @param {Perolas} perolas
  * @param {Discord.Message} originalMessage
  * @param {Discord.TextChannel} perolasChannel
  * @param {number} reactCount
  * @param {Collection<User>} reactUsers
  */
-function sendPerolaMessage(originalMessage, perolasChannel, reactCount, reactUsers) {
-    perolaMessageAlreadyExists(originalMessage, perolasChannel).then(msgPosted => {
+function sendPerolaMessage(perolas, originalMessage, perolasChannel, reactCount, reactUsers) {
+    return perolaMessageAlreadyExists(perolas, originalMessage, perolasChannel).then(msgPosted => {
         const originalUser = originalMessage.author;
 
         const emb = new Discord.RichEmbed()
@@ -152,7 +151,7 @@ function sendPerolaMessage(originalMessage, perolasChannel, reactCount, reactUse
 
         if (!msgPosted) {
             const userReactLast = reactUsers.last();
-            doSendPerolaMessage(perolasChannel, originalMessage, emb, userReactLast);
+            return doSendPerolaMessage(perolas, perolasChannel, originalMessage, emb, userReactLast);
         } else {
             let changeRank = false;
 
@@ -165,74 +164,76 @@ function sendPerolaMessage(originalMessage, perolasChannel, reactCount, reactUse
 
             if (changeRank) {
                 // pra atualizar o embed
-                msgPosted.edit({embed: emb});
+                return msgPosted.edit({embed: emb});
             }
         }
-    }).catch(console.error);
+    });
 }
 
 /**
  * Verifica se a mensagem já existe no pérolas
  *
+ * @param {Perolas} perolas
  * @param {Discord.Message} message
  * @param {Discord.TextChannel} perolaChannel
  */
-function perolaMessageAlreadyExists(message, perolaChannel) {
-    // const arr = perolaChannel.messages.array();
-    // for (let i = 0; i < arr.length; i++) {
-    //     const msg = arr[i];
-    //     for (let j = 0; j < msg.embeds.length; j++) {
-    //         const embed = msg.embeds[j];
-    //
-    //         // se a mensagem tiver o mesmo texto
-    //         if (message.content && embed.description === message.content.toString()) {
-    //             return msg;
-    //         }
-    //
-    //         if (embed.image && message.attachments.array().length) {
-    //             // se a mensagem tiver a mesma imagem URL
-    //             if (embed.image.url === message.attachments.first().url) {
-    //                 return msg;
-    //             }
-    //         }
-    //     }
-    // }
-    //
-    // return false;
-
+function perolaMessageAlreadyExists(perolas, message, perolaChannel) {
     return new Promise((resolve, reject) => {
-        ref.child(`msgs/${message.id}`).once('value', snapshot => {
-            let infoMsg = snapshot.val();
+        perolas.db.getOne('msgs/' + message.id)
+            .then(infoMsg => {
+                if (infoMsg && infoMsg.perolaId) {
+                    perolaChannel.fetchMessage(infoMsg.perolaId)
+                        .then(postedMsg => {
+                            resolve(postedMsg);
+                        })
+                        .catch(() => {
+                            // mensagem não existe ou deu algum problema em dar fetch nessa msg
+                            // se for esse o caso, cria outro wilted
+                            resolve(false);
+                        });
+                    return;
+                }
 
-            if (infoMsg && infoMsg.perolaId) {
-                perolaChannel.fetchMessage(infoMsg.perolaId)
-                    .then(postedMsg => {
-                        resolve(postedMsg);
-                    })
-                    .catch(() => {
-                        // mensagem não existe ou deu algum problema em dar fetch nessa msg
-                        // se for esse o caso, cria outro wilted
-                        resolve(false);
-                    });
-                return;
-            }
-
-            // não achou a msg
-            resolve(false);
-        });
+                // não achou a msg
+                resolve(false);
+            })
+            .catch((err) => {
+                // erro é considerado msg não encontrada
+                resolve(false);
+            })
+        ;
+        // ref.child(`msgs/${message.id}`).once('value', snapshot => {
+        //     let infoMsg = snapshot.val();
+        //
+        //     if (infoMsg && infoMsg.perolaId) {
+        //         perolaChannel.fetchMessage(infoMsg.perolaId)
+        //             .then(postedMsg => {
+        //                 resolve(postedMsg);
+        //             })
+        //             .catch(() => {
+        //                 // mensagem não existe ou deu algum problema em dar fetch nessa msg
+        //                 // se for esse o caso, cria outro wilted
+        //                 resolve(false);
+        //             });
+        //         return;
+        //     }
+        //
+        //     // não achou a msg
+        //     resolve(false);
+        // });
     });
 }
 
-function doSendPerolaMessage(perolasChannel, originalMessage, emb, userReactLast) {
-    perolasChannel.send({embed: emb})
+function doSendPerolaMessage(perolas, perolasChannel, originalMessage, emb, userReactLast) {
+    return perolasChannel.send({embed: emb})
         .then(postedMsg => {
             const info = {
                 perolaId: postedMsg.id,
                 userReactLast: userReactLast ? userReactLast.id : null,
                 timestamp: (new Date()).getTime()
             };
-            return ref.child(`msgs/${originalMessage.id}`).set(info);
-        }).catch(console.error);
+            return perolas.db.save('msgs/' + originalMessage.id, info);
+        });
 }
 
 module.exports = Perolas;

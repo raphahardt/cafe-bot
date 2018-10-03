@@ -16,7 +16,7 @@ const ref = db.ref('remindme');
 class RemindMe {
     constructor () {}
 
-    static get name() { return 'remindme' }
+    static get modName() { return 'remindme' }
 
     static remindCommand(message, args) {
 

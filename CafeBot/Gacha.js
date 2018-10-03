@@ -104,7 +104,7 @@ db.refreshConfig(config => {
 class Gacha {
     constructor () {}
 
-    static get name() { return 'gacha' }
+    static get modName() { return 'gacha' }
 
     static gachaCommand(message, args) {
         const arg = args.shift();

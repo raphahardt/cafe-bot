@@ -9,7 +9,7 @@ let NSFW_MESSAGES_SEEN = {};
 class Nsfw {
     constructor () {}
 
-    static get name() { return 'nsfw' }
+    static get modName() { return 'nsfw' }
 
     static nsfwCommand(message, args) {
         if (message.channel instanceof Discord.DMChannel) {

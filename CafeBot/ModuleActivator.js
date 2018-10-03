@@ -22,11 +22,10 @@ class ModuleActivator {
 
             const activator = this;
             this.db.getLiveCollection('blacklist', (event, ignore, moduleName) => {
-                console.log('MODULE', moduleName);
                 if (event === 'added') {
                     activator.blacklistModules[moduleName] = true;
                 } else if (event === 'removed') {
-                    activator.blacklistModules[moduleName] = false;
+                    delete activator.blacklistModules[moduleName];
                 }
             });
         }
@@ -35,8 +34,64 @@ class ModuleActivator {
     }
 
     // esse módulo é o unico q não tem nome e não pode ser desativado
-    static get name() { return false }
+    static get modName() { return false }
 
+    /**
+     * Adiciona um módulo no pool de módulos.
+     *
+     * @param module
+     */
+    installModule(module) {
+        if (module.modName) {
+            this.modulesInstalled[module.modName] = new module();
+        }
+    }
+
+    /**
+     * Itera sobre os metodos de um módulo.
+     *
+     * @param method Valores possíveis: commands, timers, events
+     * @param includeDisableds
+     */
+    *iterateModules(method, includeDisableds) {
+        for (let moduleName in this.modulesInstalled) {
+            if (!this.modulesInstalled.hasOwnProperty(moduleName)) continue;
+            const module = this.modulesInstalled[moduleName];
+
+            if (!includeDisableds && this.isDisabled(moduleName)) {
+                // modulo desabilitado, não considerar
+                console.log('DISABLED');
+                continue;
+            }
+
+            const methodsAvailable = module[method] !== undefined ? module[method]() : {};
+            if (typeof methodsAvailable !== 'object') {
+                throw new Error('Method ' + method + '() of class ' + module.name + ' must return an object.');
+            }
+
+            for (let m in methodsAvailable) {
+                if (!methodsAvailable.hasOwnProperty(m)) continue;
+
+                // todo: fazer suporte pra mais de um argumento aqui (talvez retornar um array do modulo, onde o 0 é a fn e 1 é outra coisa)
+                let fn, opts = {};
+                if (Array.isArray(methodsAvailable[m])) {
+                    fn = methodsAvailable[m][0];
+                    opts = methodsAvailable[m][1];
+                } else {
+                    fn = methodsAvailable[m];
+                }
+
+                yield [module, m, fn, opts];
+            }
+        }
+    }
+
+    /**
+     * Retorna true se o módulo está desativado.
+     *
+     * @param moduleName
+     * @returns {boolean}
+     */
     isDisabled(moduleName) {
         if (!moduleName || this._debug) {
             // se o nome do modulo for vazio, ele sempre vai estar ativo
@@ -45,56 +100,77 @@ class ModuleActivator {
         return !!this.blacklistModules[moduleName];
     }
 
+    /**
+     * Ativa/desativa um módulo do sistema.
+     *
+     * @param message
+     * @param args
+     */
     modCommand(message, args) {
         if (message.author.id !== '208028185584074763' || this._debug) return;
 
         args.forEach(arg => {
             const moduleName = arg.toLowerCase();
-            //const module = this.modulesInstalled[moduleName];
+            const module = this.modulesInstalled[moduleName];
+            if (!module) {
+                return message.reply(`:x: Módulo **${moduleName}** não existe.`);
+            }
             if (this.isDisabled(moduleName)) {
                 // ativa
-                //this.blacklistModules.splice(this.blacklistModules.indexOf(moduleName), 1);
-                this.db.save('blacklist/' + moduleName, 1)
+                this.db.save('blacklist/' + moduleName, null)
                     .then(() => {
-                        //if (module.onEnable) module.onEnable();
-                        return this.template(message, `Módulo **${moduleName}** ativado.`);
+                        if (module.onEnable) module.onEnable();
+                        return message.reply(`:full_moon_with_face: Módulo **${moduleName}** ativado.`);
                     })
                 ;
             } else {
                 // desativa
-                //this.blacklistModules.push(moduleName);
-                this.db.save('blacklist/' + moduleName, null)
+                this.db.save('blacklist/' + moduleName, 1)
                     .then(() => {
-                        //if (module.onDisable) module.onDisable();
-                        return this.template(message, `Módulo **${moduleName}** desativado.`);
+                        if (module.onDisable) module.onDisable();
+                        return message.reply(`:new_moon_with_face: Módulo **${moduleName}** desativado.`);
                     })
                 ;
             }
         })
     }
 
+    /**
+     * Lista os módulos que estão desativos no momento.
+     *
+     * @param message
+     * @param args
+     * @returns {Promise<Message|Message[]>|*}
+     */
     modsCommand(message, args) {
         if (this._debug) return;
 
         const blMods = Object.keys(this.blacklistModules);
         if (!blMods.length) {
-            return this.template(message, 'Todos os módulos estão ativos.');
+            return message.reply(`:full_moon: Todos os módulos estão ativos.`);
         }
+        const modsInst = Object.keys(this.modulesInstalled);
         const modulesText = blMods.join('**, **');
-        return this.template(message, `Módulos desativados no momento: **${modulesText}**.`);
-    }
-
-    template(message, text) {
-        return message.reply(`:space_invader: ${text}`);
+        const emojis = [
+            ':full_moon:',
+            ':waning_gibbous_moon:',
+            ':last_quarter_moon:',
+            ':waning_crescent_moon:',
+            ':new_moon:'
+        ];
+        const idx = Math.round((blMods.length / Math.max(1, modsInst.length)) * 4);
+        return message.reply(`${emojis[idx]} Módulos desativados no momento: **${modulesText}**.`);
     }
 
     commands() {
         if (this._debug) {
+            // desabilita qualquer possibilidade de
+            // conflito desses comandos, se tiver testando localmente
             return {};
         }
         return {
-            'amod': this.modCommand,
-            'amods': this.modsCommand
+            'mod': this.modCommand,
+            'mods': this.modsCommand
         }
     }
 }

@@ -411,9 +411,12 @@ const utils = {
 
         // manda a mensagem de quantas msgs vao ser e envia uma a uma
         return Promise.all(msgPromises).then((msgs) => {
+            let editsPromises = [];
             for (let m = 0; m < msgs.length; m++) {
-                msgs[m].edit(content[m]);
+                editsPromises.push(msgs[m].edit(content[m]));
             }
+
+            return Promise.all(editsPromises);
         });
     }
 

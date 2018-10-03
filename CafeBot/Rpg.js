@@ -2,7 +2,7 @@
 class Rpg {
     constructor () {}
 
-    static get name() { return 'rpg' }
+    static get modName() { return 'rpg' }
 
     static pingCommand(message, args) {
         message.channel.send("Ping?")
