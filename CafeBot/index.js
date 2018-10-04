@@ -40,7 +40,7 @@ const bot = {
             for (let o of modules.iterateModules('timers')) {
                 const [module, key, fn, opts] = o;
 
-                console.log(module, module.modName + ' | timer triggered ' + key);
+                console.log(module.modName + ' | timer triggered ' + key);
 
                 // executa o evento de fato
                 try {
@@ -155,7 +155,7 @@ const bot = {
                 const [module, cmd, fn, opts] = o;
 
                 if (command === cmd) {
-                    console.log(module, module.modName + ' | invoking ' + command, args);
+                    console.log(module.modName + ' | invoking ' + command, args);
                     // chama o comando do listener registrado
                     try {
                         let a = [message, args];
@@ -167,7 +167,7 @@ const bot = {
 
                         if (opts.disallowDM) {
                             if (message.channel instanceof Discord.DMChannel) {
-                                message.reply(`:x: Este comando só pode ser usado dentro do servidor.`);
+                                message.reply(`:no_entry_sign: Este comando só pode ser usado dentro do servidor.`);
                                 continue;
                             }
                         }
@@ -213,14 +213,14 @@ const bot = {
         for (let o of modules.iterateModules('events', true)) {
             const [module, event, fn, opts] = o;
 
-            console.log(module, module.modName + ' | event registered ' + event);
+            console.log(module.modName + ' | event registered ' + event);
 
             // registra um evento no client do discord
             // antigo código: discordClient.on(event, events[event]);
             discordClient.on(event, (...args) => {
                 // hook pra ver se o modulo tá desativado ou não
                 if (modules.isDisabled(module.modName)) {
-                    console.log(module, module.modName + ' | tried execute event ' + event + ' but module is disabled');
+                    console.log(module.modName + ' | tried execute event ' + event + ' but module is disabled');
                     return;
                 }
 

@@ -2,9 +2,9 @@
 const Discord = require("discord.js");
 
 class InterativePrompt {
-    constructor(channel, member, title, timeout) {
+    constructor(channel, user, title, timeout) {
         this.channel = channel;
-        this.member = member;
+        this.user = user;
         this.title = title;
         this.timeout = timeout;
         this.choices = {};
@@ -51,6 +51,9 @@ class InterativePrompt {
     }
 
     renderDescription(description) {
+        if (typeof description === 'function') {
+            return description(this.choices, this);
+        }
         if (description.indexOf('#') >= 0) {
             for (let key in this.choices) {
                 if (!this.choices.hasOwnProperty(key)) continue;
@@ -106,7 +109,7 @@ class InterativePrompt {
 
                         return this.channel.awaitMessages(m => {
                             // se a mensagem não for do autor do prompt, nem considera
-                            if (this.member.id !== m.author.id) {
+                            if (this.user.id !== m.author.id) {
                                 return false;
                             }
                             // sempre aceitar "cancel"
@@ -121,7 +124,7 @@ class InterativePrompt {
                             }
 
                             // vê quais parametros são aceitos nesse prompt
-                            let filterResponse = prompt.filter.apply(null, [m.content, that]);
+                            let filterResponse = prompt.filter.apply(null, [m.content, that, m]);
 
                             if (!filterResponse) {
                                 this.channel.send(`:x: Resposta inválida. Tente novamente ou \`cancel\` para cancelar.`)
@@ -145,17 +148,24 @@ class InterativePrompt {
                             oldMsg.delete();
                             oldMsg = null;
                         }
-                        const response = collected.first().content;
-                        console.log('RESPONSE', this.next, response);
 
-                        if (response === 'cancel') {
-                            return Promise.reject(collected);
-                        }
                         const prompt = this.prompts[this.next];
                         if (!prompt) {
                             reject(new Error('Id de prompt `' + this.next + '` não existe.'));
                             return;
                         }
+
+                        let responses = [];
+                        collected.forEach(c => {
+                            responses.push(c.content);
+                        });
+
+                        if (responses.includes('cancel')) {
+                            return Promise.reject(collected);
+                        }
+                        console.log('RESPONSES', this.next, responses);
+
+                        const response = prompt.max === 1 ? responses[0] : null;
 
                         if (prompt.pagination && ['next', 'prev'].includes(response)) {
                             // se for paginação e tiver escolhido mudar de pagina,
@@ -180,7 +190,7 @@ class InterativePrompt {
                             // se não definir, vai finalizar
                             this.next = null;
 
-                            const cbReturn = prompt.callback.apply(null, [response, that]);
+                            const cbReturn = prompt.callback.apply(null, [response || responses, that]);
                         }
 
                         // recursivamente chama o proximo prompt
