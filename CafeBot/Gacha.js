@@ -2092,7 +2092,7 @@ function createRole(gacha, guild, user, color, rarity, name, props) {
                                     })
                                     .catch(err => {
                                         // deu erro no banco, deleta o emoji pra reverter alterações
-                                        guild.deleteEmoji(emoji, 'Erro ao salvar, revertendo');
+                                        guild.deleteEmoji(emoji, 'Erro ao salvar, revertendo').catch(rj);
                                         rj(err);
                                     })
                                 ;
@@ -2106,7 +2106,7 @@ function createRole(gacha, guild, user, color, rarity, name, props) {
                     }).catch(err => {
                         // se deu erro em algum momento na criacao da imagem/emoji,
                         // deleta a role pra reverter alterações
-                        role.delete('Erro na criação do emoji, revertendo');
+                        role.delete('Erro na criação do emoji, revertendo').catch(reject);
                         reject(err);
                     });
 
@@ -2217,33 +2217,48 @@ function rarityLetterToNumber(letter) {
 
 function addEmojiToNickname(member, emoji) {
     return new Promise((resolve, reject) => {
-        let newNickname = member.nickname || member.user.username;
+        let newNickname = (member.nickname || member.user.username).trim();
         newNickname = emoji + ' ' + newNickname;
 
         console.log('NICK A', newNickname);
 
         // marca que tá sendo alterado o nick, para não disparar o evento de mudança de nick
         GACHA_CHANGING_NICK[member.id] = true;
-        member.setNickname(newNickname.trim())
-            .then(resolve)
-            .catch(reject)
+        member.setNickname(newNickname)
+            .then(() => {
+                delete GACHA_CHANGING_NICK[member.id];
+                resolve();
+            })
+            .catch((e) => {
+                delete GACHA_CHANGING_NICK[member.id];
+                reject(e);
+            })
         ;
     })
 }
 
 function removeEmojiToNickname(member, emoji) {
     return new Promise((resolve, reject) => {
-        let newNickname = member.nickname || member.user.username;
-        newNickname = newNickname.replace(new RegExp(emoji, 'g'), '');
+        let oldNickname = (member.nickname || member.user.username).trim();
+        let newNickname = oldNickname;
+        newNickname = newNickname.replace(new RegExp(emoji, 'g'), '').trim();
 
-        console.log('NICK R', newNickname);
+        if (oldNickname !== newNickname) {
+            console.log('NICK R', newNickname);
 
-        // marca que tá sendo alterado o nick, para não disparar o evento de mudança de nick
-        GACHA_CHANGING_NICK[member.id] = true;
-        member.setNickname(newNickname.trim())
-            .then(resolve)
-            .catch(reject)
-        ;
+            // marca que tá sendo alterado o nick, para não disparar o evento de mudança de nick
+            GACHA_CHANGING_NICK[member.id] = true;
+            member.setNickname(newNickname)
+                .then(() => {
+                    delete GACHA_CHANGING_NICK[member.id];
+                    resolve();
+                })
+                .catch((e) => {
+                    delete GACHA_CHANGING_NICK[member.id];
+                    reject(e);
+                })
+            ;
+        }
     })
 }
 

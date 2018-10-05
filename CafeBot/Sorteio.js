@@ -29,6 +29,7 @@ class Sorteio {
     }
 
     get modName() { return 'sorteio' }
+    get icon() { return ':tickets:' }
 
     giveawayCommand(message, args) {
         const arg = args.shift();
@@ -332,6 +333,11 @@ class Sorteio {
                         function _shuffle(max, count) {
                             return randomNumber(0, max)
                                 .then(luckyNumber => {
+                                    if (count === 0) {
+                                        // terminou de sortear todos
+                                        return Promise.resolve();
+                                    }
+
                                     let winner = null;
 
                                     // acha o ganhador
@@ -345,12 +351,8 @@ class Sorteio {
                                     if (!winner || winners.includes(winner)) {
                                         // se não teve ganhador, ou o ganhador já ganhou
                                         // tenta sortear de novo
+                                        console.log('again', luckyNumber, winners.includes(winner), count);
                                         return _shuffle(max, count);
-                                    }
-
-                                    if (count === 0) {
-                                        // terminou de sortear todos
-                                        return Promise.resolve();
                                     }
 
                                     // coloca nos ganhadores
@@ -367,20 +369,19 @@ class Sorteio {
                             .then(() => {
                                 let winnersText = '';
 
-                                winners.forEach((w, idx) => {
-                                    const username = w.user.username + '#' + w.user.discriminator;
-                                    const nick = w.nickname ? w.nickname + ` (${username})` : username;
+                                winners.forEach((winner, idx) => {
+                                    const username = winner.user.username + '#' + winner.user.discriminator;
+                                    const nick = winner.nickname ? winner.nickname + ` (${username})` : username;
 
                                     winnersText += "\n"
-                                        + `:small_blue_diamond: `
-                                        + giveInfo.gameNames[idx]
-                                        + ' - '
-                                        + nick
+                                        + `:small_blue_diamond: Prêmio `
+                                        + '*' + giveInfo.gameNames[idx] + '*: '
+                                        + `${winner}`
                                         + (isDebug ? ` *[ticket nº: ${luckyNumbers[idx]}]*` : '')
                                     ;
                                 });
 
-                                return message.reply(`ganhadores \`${giveInfo.name}\`:${winnersText}`);
+                                return message.channel.send(`:trophy: **Resultados do sorteio \`${giveInfo.name}\`**\nVencedores:${winnersText}`);
                             })
                         ;
 
@@ -715,28 +716,30 @@ function getParticipantsWithTickets(sorteio, guild) {
 
                     ids.forEach(id => {
                         const member = guild.members.get(id);
-                        let ticketCount = 100;
+                        if (member) {
+                            let ticketCount = 100;
 
-                        if (!ADMIN_IDS.includes(id)) {
-                            member.roles.forEach(role => {
-                                if (leveledRoles.includes(role.id)) {
-                                    // a cada role que o usuario tiver ele ganha 5% a mais de chance de ganhar
-                                    ticketCount *= 1.05;
-                                }
+                            if (!ADMIN_IDS.includes(id)) {
+                                member.roles.forEach(role => {
+                                    if (leveledRoles.includes(role.id)) {
+                                        // a cada role que o usuario tiver ele ganha 5% a mais de chance de ganhar
+                                        ticketCount *= 1.05;
+                                    }
+                                });
+                            }
+
+                            maxBound = parseInt(ticketCount);
+                            tickets.push({
+                                member: member,
+                                tickets: [minBound, minBound + maxBound - 1, maxBound - 1]
                             });
+
+                            minBound += maxBound;
                         }
-
-                        maxBound = parseInt(ticketCount);
-                        tickets.push({
-                            member: member,
-                            tickets: [ minBound, minBound + maxBound - 1, maxBound - 1 ]
-                        });
-
-                        minBound += maxBound;
                     });
 
                     tickets.min = 0;
-                    tickets.max = maxBound;
+                    tickets.max = minBound - 1;
 
                     console.log('TICKETS', tickets);
                     return tickets;
