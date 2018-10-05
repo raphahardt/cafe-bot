@@ -43,7 +43,7 @@ class Sorteio {
                 return this.giveawayEndCommand(message, args);
             case 'list':
             case 'l':
-                return this.giveawayListGamesCommand(message, args);
+                return this.giveawayListCommand(message, args);
             case 'cancel':
             case 'delete':
             case 'c':
@@ -72,7 +72,7 @@ class Sorteio {
                 return this.giveawayEndCommand(message, args);
             case 'list':
             case 'l':
-                return this.giveawayListGamesCommand(message, args);
+                return this.giveawayListCommand(message, args);
             case 'cancel':
             case 'delete':
             case 'c':
@@ -83,13 +83,25 @@ class Sorteio {
         }
     }
 
+    /**
+     * Cria um sorteio.
+     * Só pode ser criado um sorteio por vez, e esse
+     * sorteio será considerado o sorteio atual.
+     * Se tentar cadastrar outro sorteio, você será impedido.
+     *
+     * @param message
+     * @param args
+     * @return {Promise<Object>}
+     */
     giveawayCreateCommand(message, args) {
         // verifica se é um admin para criar um giveaway
         if (!hasPermission(message)) {
             throw new PermissionError(`Você não tem permissão de criar um sorteio.`);
         }
 
-        const prompt = new InterativePrompt(message.channel, message.author, ':tickets: **Criando um jogo para o giveaway** :new:', 30000)
+        const isRecover = args.includes('--recover');
+
+        const prompt = new InterativePrompt(message.channel, message.author, ':tickets: **Criando um prêmio para o giveaway** :new:', 60000)
             .addPrompt(
                 'g-title',
                 'Escolha um título para esse giveaway.',
@@ -104,7 +116,7 @@ class Sorteio {
             )
             .addPrompt(
                 'g-game-count',
-                'Quantos jogos terão nesse giveaway?',
+                'Quantos prêmios terão nesse giveaway?',
                 'Digite a quantidade',
                 response => {
                     const v = parseInt(response);
@@ -118,8 +130,8 @@ class Sorteio {
             )
             .addPrompt(
                 'g-game-title',
-                '`Jogo #_gameIndex#`\nDigite o nome do jogo.',
-                'Digite o nome completo do jogo',
+                '`Prêmio #_gameIndex#`\nDigite o nome do prêmio.',
+                'Digite o nome',
                 response => {
                     return !response.startsWith(utils.prefix);
                 },
@@ -132,10 +144,11 @@ class Sorteio {
             )
             .addPrompt(
                 'g-game-link',
-                '`Jogo #_gameIndex#`\nDigite o link para resgate do jogo.\n'
+                '`Prêmio #_gameIndex#`\nDigite as instruções para resgate desse prêmio.\n' +
+                    + 'Se for um jogo, digite o gift link dele.\n'
                     + 'Se for gift do Steam, digite a URL do usuário '
                     + 'da steam. Caso seja uma key, digite a key.',
-                'Digite o link para resgate do jogo',
+                'Digite o link para resgate do prêmio',
                 response => {
                     return !response.startsWith(utils.prefix);
                 },
@@ -150,10 +163,10 @@ class Sorteio {
 
                     // ver se termina ou começa de novo
                     if (index > p.getChoice('gamesCount')) {
-                        // chegou no ultimo jogo, pede pra confirmar
+                        // chegou no ultimo premio, pede pra confirmar
                         p.setNext('g-confirmation');
                     } else {
-                        // vai pro proximo jogo
+                        // vai pro proximo premio
                         p.setNext('g-game-title');
                     }
                 }
@@ -170,7 +183,7 @@ class Sorteio {
                     }
                     return text;
                 },
-                'Digite `yes` ou `y` para confirmar, `more` para adicionar mais um jogo',
+                'Digite `yes` ou `y` para confirmar, `more` para adicionar mais um prêmio',
                 response => {
                     return ['yes', 'y', 'more'].includes(response);
                 },
@@ -201,39 +214,33 @@ class Sorteio {
                             name: choices.title
                         };
 
-                        return this.db.saveAll([['atual', info], ['lista', null]])
+                        let toSave = [['atual', info]];
+                        if (!isRecover) {
+                            // se não for pra recuperar um sorteio perdido,
+                            // limpa a lista de participantes pra começar do zero.
+                            toSave.push(['lista', null]);
+                        }
+
+                        // salva o sorteio atual e limpa a lista de participantes
+                        return this.db.saveAll(toSave)
                             .then(() => {
-                                return message.reply(`:white_check_mark: Sorteio \`${info.name}\` criado.`);
+                                return message.reply(`:white_check_mark: Sorteio \`${info.name}\` `
+                                    + (isRecover ? `recuperado.` : `criado.`));
                             })
                             ;
                     })
                 ;
             })
         ;
-
-        // const giveRef = ref.child(`atual`);
-        //
-        // giveRef.once('value', snapshot => {
-        //     let giveInfo = snapshot.val();
-        //
-        //     if (giveInfo) {
-        //         message.reply(`:x: Já existe um sorteio em andamento.`);
-        //         return;
-        //     }
-        //
-        //     giveRef.set({
-        //         games: parseInt(gamesCount),
-        //         creator: message.author.id,
-        //         gameNames: gameNamesList,
-        //         name: giveawayName
-        //     });
-        //     // reseta todos os participantes
-        //     ref.child(`lista`).set({});
-        //
-        //     message.reply(`:white_check_mark: Sorteio \`${giveawayName}\` criado.`);
-        // });
     }
 
+    /**
+     * Participa do sorteio atual, caso haja.
+     *
+     * @param message
+     * @param args
+     * @return {Promise<Object>}
+     */
     giveawayParticipateCommand(message, args) {
         const userId = message.author.id;
 
@@ -264,43 +271,17 @@ class Sorteio {
                 ;
             })
         ;
-
-        // let giveInfo;
-        // const giveRef = ref.child(`atual`);
-        //
-        // giveRef.once('value', snapshot => {
-        //     giveInfo = snapshot.val();
-        //
-        //     if (!giveInfo) {
-        //         message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
-        //         return;
-        //     }
-        //
-        //     if (!message.member.roles.some(r => leveledRoles.includes(r.id))) {
-        //         const minimumLevel = message.guild.roles.get(leveledRoles[0]);
-        //         message.reply(`:x: Você precisa ter pelo menos o nível \`${minimumLevel.name}\` para participar.`);
-        //         return;
-        //     }
-        //
-        //     ref.child(`lista/${userId}`).once('value', sn => {
-        //         if (sn.val()) {
-        //             message.reply(`:thumbsup: Você já está participando do sorteio \`${giveInfo.name}\`.`);
-        //         } else {
-        //             // coloca o participante na lista
-        //             ref.child(`lista/${userId}`).set(1);
-        //
-        //             message.reply(`:white_check_mark: Participação confirmada no sorteio \`${giveInfo.name}\`.`);
-        //         }
-        //     });
-        //
-        //
-        //
-        // });
     }
 
+    /**
+     * Finaliza o sorteio atual, sorteando e distribuindo os prêmios
+     * entre os participantes, caso haja um sorteio.
+     *
+     * @param message
+     * @param args
+     * @return {Promise<Object>}
+     */
     giveawayEndCommand(message, args) {
-
-        // verifica se é um admin para encerrar um giveaway
         if (!hasPermission(message)) {
             throw new PermissionError(`Você não tem permissão de encerrar um sorteio.`);
         }
@@ -327,7 +308,7 @@ class Sorteio {
                             return message.reply(`:x: Não há participantes suficientes pro sorteio \`${giveInfo.name}\`. Necessitam pelo menos **${giveInfo.games}** (tem **${tickets.length}**).`);
                         }
 
-                        let winners = [], luckyNumbers = [];
+                        let winners = [], winnerMessagesDMs = [], luckyNumbers = [];
                         const maxShuffle = tickets.max;
 
                         function _shuffle(max, count) {
@@ -351,165 +332,128 @@ class Sorteio {
                                     if (!winner || winners.includes(winner)) {
                                         // se não teve ganhador, ou o ganhador já ganhou
                                         // tenta sortear de novo
-                                        console.log('again', luckyNumber, winners.includes(winner), count);
+                                        console.log('GIVEAWAY shuffle again', luckyNumber, winners.includes(winner), count);
                                         return _shuffle(max, count);
                                     }
 
-                                    // coloca nos ganhadores
-                                    winners.push(winner);
-                                    luckyNumbers.push(luckyNumber);
+                                    let sendPromise;
+                                    if (isDebug) {
+                                        // se é só teste, não precisa enviar dm
+                                        winnerMessagesDMs.push(null);
+                                        sendPromise = Promise.resolve();
+                                    } else {
+                                        sendPromise = winner.user.createDM()
+                                            .then(dm => {
+                                                // depois tenta mandar uma msg
+                                                return dm.send('.');
+                                            })
+                                            .then(testMessage => {
+                                                // conseguiu abrir dm e mandar a mensagem, entao
+                                                // vai conseguir mandar o premio
+                                                winnerMessagesDMs.push(testMessage);
+                                                return Promise.resolve(testMessage);
+                                            })
+                                        ;
+                                    }
 
-                                    // proximo numero
-                                    return _shuffle(max, count - 1);
+                                    // tenta abrir uma dm com o ganhador
+                                    return sendPromise
+                                        .catch((err) => {
+                                            // por algum motivo, a dm não pôde ser aberta
+                                            // com o usuário. isso acontece se ele tiver
+                                            // com configurações de privacidade que impedem
+                                            // que ele receba mensagens diretas de membros de
+                                            // um servidor.
+                                            // caso aconteça isso, eu não posso prejudicar os
+                                            // outros ganhadores, portanto, eu faço o código
+                                            // recuperar desse erro e marco esse ganhador
+                                            // como pessoa q tem que retirar esse premio
+                                            // "manualmente" com o criador do giveaway.
+                                            winnerMessagesDMs.push(null);
+
+                                            // não retornar nada recupera do erro aqui e
+                                            // executa o proximo .then
+                                            // visto em: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+                                        })
+                                        .then(() => {
+                                            // se entrou aqui, é pq foi recuperado do catch acima
+                                            // e deu tudo certo
+
+                                            // coloca nos ganhadores
+                                            winners.push(winner);
+                                            luckyNumbers.push(luckyNumber);
+
+                                            // proximo numero
+                                            return _shuffle(max, count - 1);
+                                        })
+                                    ;
                                 })
                             ;
                         }
 
+                        // começa a sortear cada numero, de acordo com o numero de premios disponíveis
                         return _shuffle(maxShuffle, giveInfo.games)
                             .then(() => {
                                 let winnersText = '';
 
                                 winners.forEach((winner, idx) => {
-                                    const username = winner.user.username + '#' + winner.user.discriminator;
-                                    const nick = winner.nickname ? winner.nickname + ` (${username})` : username;
+                                    // const username = winner.user.username + '#' + winner.user.discriminator;
+                                    // const nick = winner.nickname ? winner.nickname + ` (${username})` : username;
+
+                                    const wMessage = winnerMessagesDMs[idx];
+
+                                    if (wMessage) {
+                                        const prizeText = ''
+                                            + `:trophy: **Sorteio \`${giveInfo.name}\`**\n\n`
+                                            + `:tada: Você ganhou **${giveInfo.gameNames[idx]}**! :tada:\n`
+                                            + `A forma de como resgatar seu prêmio está logo abaixo.\n`
+                                            + `Só seguir as instruções da mensagem ou do link:\n\n`
+                                            + giveInfo.gameLinks[idx]
+                                            + `\n\nSe tiver dúvidas, só falar com um de nossos admins.`
+                                        ;
+                                        wMessage.edit(prizeText).catch(err => {
+                                            // por algum motivo não pode editar a mensagem
+                                            // pra poder dar pro usuário o premio.
+                                            message.channel.send(`:x: Por algum motivo houve um erro ao enviar o prêmio para ${winner}. [Erro] ${err}`);
+                                        });
+                                    }
 
                                     winnersText += "\n"
                                         + `:small_blue_diamond: Prêmio `
                                         + '*' + giveInfo.gameNames[idx] + '*: '
                                         + `${winner}`
+                                        + (!wMessage ? ' *(:x: Não foi possível enviar por DM)*' : '')
                                         + (isDebug ? ` *[ticket nº: ${luckyNumbers[idx]}]*` : '')
                                     ;
                                 });
 
-                                return message.channel.send(`:trophy: **Resultados do sorteio \`${giveInfo.name}\`**\nVencedores:${winnersText}`);
+                                return message.channel.send(
+                                    (isDebug ? ':exclamation: É SOMENTE UM TESTE :exclamation:' : '')
+                                    + `:trophy: **Resultados do sorteio \`${giveInfo.name}\`**\nVencedores:${winnersText}`)
+                                    .then(() => {
+                                        if (!isDebug) {
+                                            // apaga o sorteio
+                                            return this.db.save('atual', null);
+                                        }
+                                    })
+                                    ;
                             })
                         ;
 
                     })
                 ;
-
-                // return this.db.save('atual', null)
-                //     .then(() => {
-                //         return message.reply(`:white_check_mark: Sorteio \`${giveInfo.name}\` cancelado.`);
-                //     })
-                //     ;
             })
-            ;
-
-//         let giveInfo;
-//         const giveRef = ref.child(`atual`);
-//
-//         giveRef.once('value', snapshot => {
-//             giveInfo = snapshot.val();
-//
-//             if (!giveInfo) {
-//                 message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
-//                 return;
-//             }
-//
-//             if (giveInfo.creator !== message.author.id) {
-//                 message.reply(`:x: Somente o criador do giveaway pode encerra-lo.`);
-//                 return;
-//             }
-//
-//             ref.child(`lista`).once('value', sn => {
-//                 const keys = utils.shuffle(Object.keys(sn.val() || {}));
-//                 let gameCount = giveInfo.games;
-//
-//                 if (keys.length === 0) {
-//                     message.reply(`:x: Não há nenhum participante no sorteio \`${giveInfo.name}\`.`);
-//                     return;
-//                 }
-//
-//                 if (keys.length < gameCount) {
-//                     message.reply(`:x: Não há participantes suficientes pro sorteio \`${giveInfo.name}\`. Necessitam pelo menos ${gameCount} (tem ${keys.length}).`);
-//                     return;
-//                 }
-//
-//                 console.log(keys);
-//
-//                 let ticketsCounts = {};
-//                 let minBound = 0, maxBound, maxShuffle = 0;
-//
-//                 for (let i = 0; i < keys.length; i++) {
-//                     let userId = keys[i];
-//                     let ticketCount = 100;
-//
-//                     if (!adminsIds.includes(userId)) {
-//                         const mbr = message.guild.members.get(userId);
-//                         mbr.roles.array().forEach(role => {
-//                             if (leveledRoles.includes(role.id)) {
-//                                 // a cada role que o usuario tiver ele ganha 5% a mais de chance de ganhar
-//                                 ticketCount *= 1.05;
-//                             }
-//                         });
-//                     }
-//
-//                     maxBound = parseInt(ticketCount);
-//                     ticketsCounts[userId] = [ minBound, minBound + maxBound, maxBound ];
-//
-//                     minBound += maxBound;
-//                 }
-//                 maxShuffle = minBound + maxBound;
-//
-//                 console.log('TICKETS', ticketsCounts);
-//
-//                 let winners = [];
-//                 let luckyNumbers = [];
-//
-//                 while (gameCount) {
-//                     const luckyNumber = parseInt(Math.random() * maxShuffle);
-//                     console.log('LUCKY NUMBER', luckyNumber);
-//
-//                     let winner;
-//
-//                     for (let userId in ticketsCounts) {
-//                         if (luckyNumber >= ticketsCounts[userId][0] && luckyNumber < ticketsCounts[userId][1]) {
-//                             // sorteado
-//                             winner = message.guild.members.get(userId);
-//                         }
-//                     }
-//
-//                     if (!winner || winners.includes(winner)) {
-//                         // se não teve ganhador, ou o ganhador já ganhou
-//                         // tenta sortear de novo
-//                         continue;
-//                     }
-//
-//                     // coloca nos ganhadores
-//                     winners.push(winner);
-//                     luckyNumbers.push(luckyNumber);
-//
-//                     gameCount--;
-//                 }
-//
-//                 const winnersList = winners.map(m => {
-//                     const idx = winners.indexOf(m);
-//                     return `Prêmio *${giveInfo.gameNames[idx]}*: ${m} *[ticket: ${luckyNumbers[idx]}]*`;
-//                     // if (!m.nickname) {
-//                     //     return `${m.user.username}#${m.user.discriminator}`;
-//                     // }
-//                     // return m.nickname + ` (${m.user.username}#${m.user.discriminator})`;
-//                 }).map(n => `:small_blue_diamond: ${n}`).join("\n");
-//
-//                 const content = `:trophy: **Resultados do sorteio \`${giveInfo.name}\`**
-// Vencedores:
-// ${winnersList}`;
-//                 message.channel.send(content).then(msg => {
-//                     // enviou a mensagem, entao agora posso apagar o giveaway atual
-//                     giveRef.set(null);
-//                 }).catch(console.error);
-//
-//             });
-//
-//             // coloca o participante na lista
-//             //ref.child(`lista/${userId}`).set(1);
-//
-//         });
+        ;
     }
 
+    /**
+     * Cancela o sorteio atual, caso haja.
+     *
+     * @param message
+     * @param args
+     * @return {Promise<Object>}
+     */
     giveawayCancelCommand(message, args) {
-        // verifica se é um admin para encerrar um giveaway
         if (!hasPermission(message)) {
             throw new PermissionError(`Você não tem permissão de cancelar um sorteio.`);
         }
@@ -531,31 +475,16 @@ class Sorteio {
                     ;
             })
             ;
-
-        // let giveInfo;
-        // const giveRef = ref.child(`atual`);
-        //
-        // giveRef.once('value', snapshot => {
-        //     giveInfo = snapshot.val();
-        //
-        //     if (!giveInfo) {
-        //         message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
-        //         return;
-        //     }
-        //
-        //     if (giveInfo.creator !== message.author.id) {
-        //         message.reply(`:x: Somente o criador do giveaway pode cancela-lo.`);
-        //         return;
-        //     }
-        //
-        //     giveRef.set(null);
-        //     message.reply(`:white_check_mark: Sorteio \`${giveInfo.name}\` cancelado.`);
-        //
-        // });
-
     }
 
-    giveawayListGamesCommand(message, args) {
+    /**
+     * Lista os prêmios do sorteio atual, caso haja um sorteio.
+     *
+     * @param message
+     * @param args
+     * @return {Promise<Object>}
+     */
+    giveawayListCommand(message, args) {
         return this.db.getOne('atual')
             .then(giveInfo => {
                 if (!giveInfo) {
@@ -563,28 +492,18 @@ class Sorteio {
                 }
 
                 const gamesList = giveInfo.gameNames.map(n => `:small_blue_diamond: ${n}`).join("\n");
-                return message.reply(`Lista de jogos do sorteio \`${giveInfo.name}\`\n${gamesList}`);
+                return message.reply(`Lista de prêmios do sorteio \`${giveInfo.name}\`\n${gamesList}`);
             })
             ;
-//         let giveInfo;
-//         const giveRef = ref.child(`atual`);
-//
-//         giveRef.once('value', snapshot => {
-//             giveInfo = snapshot.val();
-//
-//             if (!giveInfo) {
-//                 message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
-//                 return;
-//             }
-//
-//             const gamesList = giveInfo.gameNames.map(n => `:small_blue_diamond: ${n}`).join("\n");
-//
-//             message.reply(`Lista de jogos do sorteio \`${giveInfo.name}\`
-// ${gamesList}`);
-//
-//         });
     }
 
+    /**
+     * Lista todos os participantes do sorteio atual, caso haja um sorteio.
+     *
+     * @param message
+     * @param args
+     * @return {Promise<Object>}
+     */
     giveawayListParticipantsCommand(message, args) {
         const isDebug = args.includes('--debug') && hasPermission(message);
         return this.db.getOne('atual')
@@ -617,75 +536,6 @@ class Sorteio {
                     ;
             })
             ;
-
-//         let giveInfo;
-//         const giveRef = ref.child(`atual`);
-//
-//         giveRef.once('value', snapshot => {
-//             giveInfo = snapshot.val();
-//
-//             if (!giveInfo) {
-//                 message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
-//                 return;
-//             }
-//
-//             ref.child(`lista`).once('value', sn => {
-//                 const keys = Object.keys(sn.val() || {});
-//
-//                 if (keys.length === 0) {
-//                     message.reply(`:x: Não há nenhum participante no sorteio \`${giveInfo.name}\`.`);
-//                     return;
-//                 }
-//
-//                 console.log(keys);
-//
-//                 let ticketsCounts = {};
-//                 let minBound = 0, maxBound;
-//
-//                 for (let i = 0; i < keys.length; i++) {
-//                     let userId = keys[i];
-//                     let ticketCount = 100;
-//
-//                     if (!adminsIds.includes(userId)) {
-//                         const mbr = message.guild.members.get(userId);
-//                         mbr.roles.array().forEach(role => {
-//                             if (leveledRoles.includes(role.id)) {
-//                                 // a cada role que o usuario tiver ele ganha 5% a mais de chance de ganhar
-//                                 ticketCount *= 1.05;
-//                             }
-//                         });
-//                     }
-//
-//                     maxBound = parseInt(ticketCount);
-//                     ticketsCounts[userId] = [ minBound, minBound + maxBound - 1, maxBound - 1 ];
-//
-//                     minBound += maxBound;
-//                 }
-//
-//                 console.log('TICKETS', ticketsCounts);
-//
-//                 let tickets = [];
-//                 for (let userId in ticketsCounts) {
-//                     tickets.push([message.guild.members.get(userId), ticketsCounts[userId]]);
-//                 }
-//
-//                 const ticketsList = tickets.map(t => {
-//                     const m = t[0], tickets = t[1];
-//                     const addon = giveInfo.creator === message.author.id ? ` *[tickets nº: ${tickets[0]}-${tickets[1]}]*` : ` *[tickets: ${tickets[2]}]*`;
-//
-//                     if (!m.nickname) {
-//                         return `**${m.user.username}#${m.user.discriminator}**${addon}`;
-//                     }
-//                     return `**${m.nickname} (${m.user.username}#${m.user.discriminator})**${addon}`;
-//                 }).map(n => `:small_blue_diamond: ${n}`).join("\n");
-//
-//                 message.reply(`Participantes do sorteio \`${giveInfo.name}\`
-// ${ticketsList}`);
-//
-//             });
-//
-//         });
-
     }
 
     commands() {
@@ -696,6 +546,14 @@ class Sorteio {
     }
 }
 
+/**
+ * Retorna um array todos os participantes com seus
+ * devidos tickets distribuídos.
+ *
+ * @param {Sorteio} sorteio
+ * @param {Discord.Guild} guild
+ * @return {Promise<Array>} Um array onde cada elemento é um objeto, em que member = participante e tickets = os tickets
+ */
 function getParticipantsWithTickets(sorteio, guild) {
     return sorteio.db.getAll('lista', {})
         .then(participants => {

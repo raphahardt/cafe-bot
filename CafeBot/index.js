@@ -61,34 +61,6 @@ const bot = {
                     handleError(error, discordClient, bot.debug);
                 }
             }
-            // // invocando os eventos
-            // for (let i = 0; i < listeners.length; i++) {
-            //     const listener = listeners[i];
-            //     const timers = listener.timers ? listener.timers() : {};
-            //
-            //     for (let timer in timers) {
-            //         if (!timers.hasOwnProperty(timer)) continue;
-            //
-            //         // executa o evento de fato
-            //         try {
-            //             const r = timers[timer].apply(listener, [
-            //                 discordClient,
-            //                 dateNow.getSeconds(),
-            //                 dateNow.getMinutes(),
-            //                 dateNow.getHours(),
-            //                 dateNow.getDate(),
-            //                 dateNow.getMonth() + 1,
-            //                 dateNow.getDay(),
-            //                 dateNow.getFullYear(),
-            //                 dateNow
-            //             ]);
-            //
-            //             handlePromiseReturn(r, discordClient);
-            //         } catch (error) {
-            //             handleError(error, discordClient);
-            //         }
-            //     }
-            // }
 
         }, 60000);
 
@@ -179,34 +151,6 @@ const bot = {
                     }
                 }
             }
-            // // invocando os comandos
-            // for (let i = 0; i < listeners.length; i++) {
-            //     const listener = listeners[i];
-            //     const lstCommands = listener.commands ? listener.commands() : {};
-            //
-            //     // hook pra ver se o modulo tá desativado ou não
-            //     if (modules.isDisabled(listener.name)) {
-            //         //console.log(`tentou registrar o comando do modulo ${listener.name}, mas ele tá desativado`);
-            //         continue;
-            //     }
-            //
-            //     for (let lstCommand in lstCommands) {
-            //         if (!lstCommands.hasOwnProperty(lstCommand)) continue;
-            //
-            //         //console.log('comando registrado ' + lstCommand);
-            //
-            //         if (command === lstCommand.toLowerCase()) {
-            //             console.log('invocando ' + command, args);
-            //             // chama o comando do listener registrado
-            //             try {
-            //                 const r = lstCommands[lstCommand].call(listener, message, args);
-            //                 handlePromiseReturn(r, message);
-            //             } catch (error) {
-            //                 handleError(error, message);
-            //             }
-            //         }
-            //     }
-            // }
         });
 
         // invocando os eventos v2
@@ -245,41 +189,6 @@ const bot = {
                 }
             });
         }
-        // // invocando os eventos
-        // for (let i = 0; i < listeners.length; i++) {
-        //     const listener = listeners[i];
-        //     const events = listener.events ? listener.events() : {};
-        //
-        //     for (let event in events) {
-        //         if (!events.hasOwnProperty(event)) continue;
-        //
-        //         console.log('evento registrado ' + event);
-        //
-        //         // registra um evento no client do discord
-        //         // antigo código: discordClient.on(event, events[event]);
-        //         discordClient.on(event, (...args) => {
-        //             // hook pra ver se o modulo tá desativado ou não
-        //             if (modules.isDisabled(listener.name)) {
-        //                 console.log(`tentou executar o modulo ${listener.name}, mas ele tá desativado`);
-        //                 return;
-        //             }
-        //
-        //             // só em alguns eventos, mandar o client nos argumentos, pra facilitar
-        //             // minha vida na hora de pegar o client do discord
-        //             if (event === 'ready') {
-        //                 args = [discordClient].concat(args);
-        //             }
-        //
-        //             // executa o evento de fato
-        //             try {
-        //                 const r = events[event].apply(listener, args);
-        //                 handlePromiseReturn(r, discordClient);
-        //             } catch (error) {
-        //                 handleError(error, discordClient);
-        //             }
-        //         });
-        //     }
-        // }
     }
 };
 

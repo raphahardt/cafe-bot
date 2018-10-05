@@ -8,13 +8,15 @@ class Ping {
 
     get modName() { return 'ping' }
 
-    pingCommand(message, args) {
-        return message.reply("Ping?")
-            .then(m => {
-                const client = message.client;
-                m.edit(`${message.author}, **Pong!** Latência: ${m.createdTimestamp - message.createdTimestamp}ms. Ping da API: ${Math.round(client.ping)}ms`);
-            })
-        ;
+    async pingCommand(message, args) {
+        const m = await message.reply("Ping?");
+        m.edit(`${message.author}, **Pong!** Latência: ${m.createdTimestamp - message.createdTimestamp}ms. Ping da API: ${Math.round(message.client.ping)}ms`);
+        // return message.reply("Ping?")
+        //     .then(m => {
+        //         const client = message.client;
+        //         m.edit(`${message.author}, **Pong!** Latência: ${m.createdTimestamp - message.createdTimestamp}ms. Ping da API: ${Math.round(client.ping)}ms`);
+        //     })
+        // ;
     }
 
     argsCommand(message, args) {

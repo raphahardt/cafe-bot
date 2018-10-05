@@ -11,7 +11,7 @@ class CommandOfuscator {
         this.module = module;
     }
 
-    get modName() { return this.module.modName; }
+    get modName() { return '_' + this.module.modName; }
 
     commands() {
         if (!this.module.commands) {

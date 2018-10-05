@@ -704,13 +704,30 @@ class Gacha {
                             )
                         ;
 
-                        prompt.start('prompt-item')
+                        return prompt.start('prompt-item')
                             .then(choice => {
-                                // TODO
+                                const chooseItem = items[choice.item];
+                                const isKeep = !info.keep.includes(chooseItem.id);
+
+                                if (chooseItem) {
+                                    // muda info
+                                    if (isKeep) {
+                                        // mantem
+                                        info.keep.push(chooseItem.id)
+                                    } else {
+                                        // desmantem
+                                        info.keep.splice(info.keep.indexOf(chooseItem.id), 1);
+                                    }
+
+                                    return this.db.save('info/' + member.id + '/keep', info.keep)
+                                        .then(() => {
+                                            return message.reply(`:white_check_mark: Item ${formatItem(guild, chooseItem)} ` + (isKeep ? 'marcado para manter' : 'desmarcado para manter') + '.');
+                                        })
+                                    ;
+
+                                }
                             })
-
                         ;
-
                     })
                 ;
 
@@ -724,132 +741,106 @@ class Gacha {
      * @param message
      * @param args
      */
-    gachaEquipCommand(message, args) {
-        try {
-            const isDebug = args.includes('--debug') && hasPermission(message);
-            const equipIndex = parseInt(args.shift());
-            const guild = getCafeComPaoGuild(message);
-            const member = getCafeComPaoMember(guild, message);
+    gachaEquipCommand(guild, message, args) {
+        const isDebug = args.includes('--debug') && hasPermission(message);
+        const equipIndex = parseInt(args.shift());
+        const member = getCafeComPaoMember(guild, message);
 
-            getInfo(this, member)
-                .then(info => {
-                    let oldEquip = {}, newEquip;
+        return getInfo(this, member)
+            .then(info => {
+                let oldEquip = {}, newEquip;
 
-                    const filter = (item, id) => {
-                        // vê se .roles[id] for maior do que zero
-                        // .roles[id] é o numero de itens possuídos pelo usuario
-                        return info.roles[item.id] && GACHA_ITEM_TYPES[item.type].canEquip;
-                    };
+                const filter = (item, id) => {
+                    // vê se .roles[id] for maior do que zero
+                    // .roles[id] é o numero de itens possuídos pelo usuario
+                    return info.roles[item.id] && GACHA_ITEM_TYPES[item.type].canEquip;
+                };
 
-                    this.db.findAll('roles', filter)
-                        .then(items => {
-                            let foundItems = 0;
-                            let itemIndex = 1;
+                return this.db.findAll('roles', filter)
+                    .then(items => {
+                        let foundItems = 0;
+                        let itemIndex = 1;
 
-                            items.forEach(item => {
-                                // old equip
-                                if (info.equip[item.type] === item.id) {
-                                    oldEquip[item.type] = item;
-                                }
-
-                                // new equip
-                                if (itemIndex === equipIndex) {
-                                    newEquip = item;
-                                }
-
-                                foundItems++;
-                                itemIndex++;
-                            });
-
-                            if (!foundItems) {
-                                message.reply(`:x: Você não possui nenhum item.`);
-                                return;
+                        items.forEach(item => {
+                            // old equip
+                            if (info.equip[item.type] === item.id) {
+                                oldEquip[item.type] = item;
                             }
 
-                            if (!newEquip) {
-                                message.reply(`:x: Item \`${equipIndex}\` não existe. Digite um número de 1 a ${foundItems}.`);
-                                return;
+                            // new equip
+                            if (itemIndex === equipIndex) {
+                                newEquip = item;
                             }
 
-                            // muda a role do usuario
-                            let equipPromise;
-                            const isEquip = (!oldEquip[newEquip.type] || (newEquip.id !== oldEquip[newEquip.type].id));
+                            foundItems++;
+                            itemIndex++;
+                        });
 
-                            let unequipFunction = (equipItem) => {
-                                switch (equipItem.type) {
-                                    case GACHA_TYPES.ROLE:
-                                        return member.removeRole(equipItem.role);
-                                    case GACHA_TYPES.ICON:
-                                        return removeEmojiToNickname(member, equipItem.emoji);
-                                    default:
-                                        return Promise.resolve();
-                                }
-                            };
+                        if (!foundItems) {
+                            return message.reply(`:x: Você não possui nenhum item.`);
+                        }
 
-                            let equipFunction = (equipItem) => {
-                                switch (equipItem.type) {
-                                    case GACHA_TYPES.ROLE:
-                                        return member.addRole(equipItem.role);
-                                    case GACHA_TYPES.ICON:
-                                        return addEmojiToNickname(member, equipItem.emoji);
-                                    default:
-                                        return Promise.resolve();
-                                }
-                            };
+                        if (!newEquip) {
+                            return message.reply(`:x: Item \`${equipIndex}\` não existe. Digite um número de 1 a ${foundItems}.`);
+                        }
 
-                            if (!isEquip) {
-                                // desequipar
-                                equipPromise = unequipFunction(newEquip);
-                            } else {
-                                // equipar e tirar a antiga, se tiver
-                                equipPromise = equipFunction(newEquip)
-                                    .then(() => {
-                                        if (oldEquip[newEquip.type]) {
-                                            return unequipFunction(oldEquip[newEquip.type]);
-                                        }
-                                        return Promise.resolve();
-                                    });
+                        // muda a role do usuario
+                        let equipPromise;
+                        const isEquip = (!oldEquip[newEquip.type] || (newEquip.id !== oldEquip[newEquip.type].id));
+
+                        let unequipFunction = (equipItem) => {
+                            switch (equipItem.type) {
+                                case GACHA_TYPES.ROLE:
+                                    return member.removeRole(equipItem.role);
+                                case GACHA_TYPES.ICON:
+                                    return removeEmojiToNickname(member, equipItem.emoji);
+                                default:
+                                    return Promise.resolve();
                             }
-                            equipPromise
+                        };
+
+                        let equipFunction = (equipItem) => {
+                            switch (equipItem.type) {
+                                case GACHA_TYPES.ROLE:
+                                    return member.addRole(equipItem.role);
+                                case GACHA_TYPES.ICON:
+                                    return addEmojiToNickname(member, equipItem.emoji);
+                                default:
+                                    return Promise.resolve();
+                            }
+                        };
+
+                        if (!isEquip) {
+                            // desequipar
+                            equipPromise = unequipFunction(newEquip);
+                        } else {
+                            // equipar e tirar a antiga, se tiver
+                            equipPromise = equipFunction(newEquip)
                                 .then(() => {
-                                    // muda info
-                                    info.equip[newEquip.type] = isEquip ? newEquip.id : null;
+                                    if (oldEquip[newEquip.type]) {
+                                        return unequipFunction(oldEquip[newEquip.type]);
+                                    }
+                                    return Promise.resolve();
+                                });
+                        }
+                        return equipPromise
+                            .then(() => {
+                                // muda info
+                                info.equip[newEquip.type] = isEquip ? newEquip.id : null;
 
-                                    this.db.save('info/' + member.id, info)
-                                        .then(newInfo => {
-                                            message.reply(`:white_check_mark: Item ${formatItem(guild, newEquip)} ` + (isEquip ? 'equipado' : 'desequipado') + '.');
-                                        })
-                                        .catch(err => {
-                                            console.error(err);
-                                            message.reply(`:x: ${err}`);
-                                        })
-                                    ;
-                                })
-                                .catch(error => {
-                                    console.error(error);
-                                    message.reply(`:x: ${error}`);
-                                })
-                            ;
+                                this.db.save('info/' + member.id + '/equip', info.equip)
+                                    .then(() => {
+                                        return message.reply(`:white_check_mark: Item ${formatItem(guild, newEquip)} ` + (isEquip ? 'equipado' : 'desequipado') + '.');
+                                    })
+                                ;
+                            })
+                        ;
 
-                        })
-                        .catch(error => {
-                            console.error(error);
-                            message.reply(`:x: ${error}`);
-                        })
-                    ;
+                    })
+                ;
 
-                })
-                .catch(error => {
-                    console.error(error);
-                    message.reply(`:x: ${error}`);
-                })
-            ;
-
-        } catch (error) {
-            console.error(error);
-            message.reply(`:x: ${error.message}`);
-        }
-
+            })
+        ;
     }
 
     /**
@@ -859,263 +850,249 @@ class Gacha {
      * @param message
      * @param args
      */
-    gachaPullCommand(message, args) {
-        try {
-            const isDebug = args.includes('--debug') && hasPermission(message);
-            let pullTimes = parseInt(args.shift()) || 1;
-            const guild = getCafeComPaoGuild(message);
-            const member = getCafeComPaoMember(guild, message);
+    gachaPullCommand(guild, message, args) {
+        const isDebug = args.includes('--debug') && hasPermission(message);
+        let pullTimes = parseInt(args.shift()) || 1;
+        const member = getCafeComPaoMember(guild, message);
 
-            if (GACHA_ONGOING_PULL[member.id]) {
-                message.reply(`:x: Pull em andamento. Aguarde alguns segundos antes de mandar outro.`);
-                return;
-            }
+        if (GACHA_ONGOING_PULL[member.id]) {
+            return message.reply(`:x: Pull em andamento. Aguarde alguns segundos antes de mandar outro.`);
+        }
 
-            // limita
-            pullTimes = Math.min(GACHA_MAX_PULLS, Math.max(1, pullTimes));
+        // limita
+        pullTimes = Math.min(GACHA_MAX_PULLS, Math.max(1, pullTimes));
 
-            const pullCostTotal = pullTimes * GACHA_PULL_COST;
+        const pullCostTotal = pullTimes * GACHA_PULL_COST;
 
-            this.db.getArray('roles')
-                .then(items => {
-                    if (!items.length) {
-                        message.reply(`:x: Nenhum item de gacha registrado. Aguarde os admins criarem novos itens.`);
-                        return;
-                    }
+        return this.db.getArray('roles')
+            .then(items => {
+                if (!items.length) {
+                    return message.reply(`:x: Nenhum item de gacha registrado. Aguarde os admins criarem novos itens.`);
+                }
 
-                    // tira qualquer skip que ficou de outros comandos
-                    this.db.delete('skip/' + member.id);
+                // tira qualquer skip que ficou de outros comandos
+                this.db.delete('skip/' + member.id);
 
-                    // transaction do pull começa aqui ---
-                    GACHA_ONGOING_PULL[member.id] = true;
+                // transaction do pull começa aqui ---
+                GACHA_ONGOING_PULL[member.id] = true;
 
-                    getInfo(this, member)
-                        .then(info => {
-                            if (info.tokens < pullCostTotal && !isDebug) {
-                                message.reply(`:x: Você não tem token suficiente. Seus tokens: **${info.tokens}**. Você precisa: **${pullCostTotal}**.`);
-                                // transaction do pull termina toda vez que há um termino repentino ---
-                                delete GACHA_ONGOING_PULL[member.id];
-                                return;
+                return getInfo(this, member)
+                    .then(info => {
+                        if (info.tokens < pullCostTotal && !isDebug) {
+                            // transaction do pull termina toda vez que há um termino repentino ---
+                            delete GACHA_ONGOING_PULL[member.id];
+                            return message.reply(`:x: Você não tem token suficiente. Seus tokens: **${info.tokens}**. Você precisa: **${pullCostTotal}**.`);
+                        }
+
+                        let itemsWon = [];
+                        let news = [];
+                        let maxRarityWon = 0;
+                        // se o numero de pulls for maior que 10, ganha
+                        // uma chance extra de tirar um item com raridade alta
+                        let minimumGachaRarityExtraChance = pullTimes >= 10 ? GACHA_EXTRA_CHANCE_MULTIPLIER : 0;
+
+                        // 1x pull do gacha
+                        let luckyNumberPromises = [];
+                        for (let t = 0; t < pullTimes; t++) {
+                            let maxShuffle = 10000;
+                            // garantia de chance, raridade alta
+                            if (minimumGachaRarityExtraChance > 0) {
+                                // pegando o maxShuffle e multiplicando pela
+                                // chance de uma raridade mais alta,
+                                // garante que o luckyNumber vai ser menor
+                                // e consequentemente, ganhando uma raridade mais alta
+                                maxShuffle *= GACHA_RARITIES[1].chance;
+
+                                minimumGachaRarityExtraChance--;
                             }
 
-                            let itemsWon = [];
-                            let news = [];
-                            let maxRarityWon = 0;
-                            // se o numero de pulls for maior que 10, ganha
-                            // uma chance extra de tirar um item com raridade alta
-                            let minimumGachaRarityExtraChance = pullTimes >= 10 ? GACHA_EXTRA_CHANCE_MULTIPLIER : 0;
+                            luckyNumberPromises.push(randomNumber(0, maxShuffle));
+                        }
 
-                            // 1x pull do gacha
-                            let luckyNumberPromises = [];
-                            for (let t = 0; t < pullTimes; t++) {
-                                let maxShuffle = 10000;
-                                // garantia de chance, raridade alta
-                                if (minimumGachaRarityExtraChance > 0) {
-                                    // pegando o maxShuffle e multiplicando pela
-                                    // chance de uma raridade mais alta,
-                                    // garante que o luckyNumber vai ser menor
-                                    // e consequentemente, ganhando uma raridade mais alta
-                                    maxShuffle *= GACHA_RARITIES[1].chance;
+                        // guarda todos os itens num array com todos os itens,
+                        // mas separado por raridade
+                        let possibleItemsByRarity = {};
+                        for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
+                            possibleItemsByRarity[r] = [];
+                        }
+                        items.forEach(item => {
+                            if (!item.owner) {
+                                possibleItemsByRarity[item.rarity].push(item);
+                            }
+                        });
 
-                                    minimumGachaRarityExtraChance--;
+                        return Promise.all(luckyNumberPromises)
+                            .then((luckyNumbers) => {
+                                // dá uma embaralhada nos numeros sorteados pra
+                                // os itens não aparecerem muito sequenciais
+                                luckyNumbers = utils.shuffle(luckyNumbers);
+
+                                // 1x pull do gacha
+                                for (let t = 0; t < pullTimes; t++) {
+                                    // pega o numero sorteado
+                                    const luckyNumber = luckyNumbers[t];
+
+                                    // encontra qual tipo de item você vai ganhar primeiro
+                                    let rarityWon;
+                                    for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
+                                        const rarityFactor = 10000 * GACHA_RARITIES[r].chance;
+
+                                        if (luckyNumber <= rarityFactor) {
+                                            rarityWon = r;
+                                            break;
+                                        }
+                                    }
+                                    maxRarityWon = Math.max(maxRarityWon, rarityWon);
+
+                                    //console.log('RARITY WON', rarityWon);
+
+                                    // agora, entre os itens, encontra qual deles vc vai ganhar, baseado
+                                    // na raridade que você tirou
+                                    let possibleItems = possibleItemsByRarity[rarityWon].slice();
+                                    // items.forEach(item => {
+                                    //     if (item.rarity === rarityWon && !item.owner) {
+                                    //         possibleItems.push(item);
+                                    //     }
+                                    // });
+
+                                    //console.log('POSSIBLE ITEMS', possibleItems);
+
+                                    // embaralha itens
+                                    possibleItems = utils.shuffle(possibleItems);
+
+                                    // ...e pego aleatoriamente um aleatoriamente
+                                    let idx = parseInt((Math.random() * (possibleItems.length * 2000)) / 2000);
+                                    idx = Math.min(possibleItems.length - 1, idx);
+                                    const itemWon = possibleItems[idx];
+
+                                    // coloca no hash de itens ganhos
+                                    itemsWon.push(itemWon);
+
+                                    if (!isDebug) {
+                                        info.tokens -= GACHA_PULL_COST;
+                                    }
+                                }
+                                // --- fim do for dos pulls
+
+                                //console.log('WON', itemsWon);
+
+                                let itemsToSave = [];
+
+                                // adiciona os itens ganhos no seu inventario
+                                for (let i = 0; i < itemsWon.length; i++) {
+                                    const item = itemsWon[i];
+
+                                    // cria o item no inventario do usuario, caso não tenha
+                                    info.roles[item.id] = info.roles[item.id] || 0;
+
+                                    // indica se é um item novo pro usuario
+                                    news.push(info.roles[item.id] === 0);
+
+                                    // adiciona +1
+                                    info.roles[item.id]++;
+
+                                    if (GACHA_ITEM_TYPES[item.type].limited) {
+                                        // se o item é um do tipo limitado, marcar o dono do item nele
+                                        item.owner = member.id;
+                                        itemsToSave.push(['roles/' + item.id, item])
+                                    }
                                 }
 
-                                luckyNumberPromises.push(randomNumber(0, maxShuffle));
-                            }
+                                // salva e mostra os ganhos do gacha
+                                //console.log('TO SAVE', [['info/' + member.id, info]].concat(itemsToSave));
+                                return this.db.saveAll([['info/' + member.id, info]].concat(itemsToSave))
+                                    .then(([newInfo, ...newItems]) => {
 
-                            Promise.all(luckyNumberPromises)
-                                .then((luckyNumbers) => {
-                                    // dá uma embaralhada nos numeros sorteados pra
-                                    // os itens não aparecerem muito sequenciais
-                                    luckyNumbers = utils.shuffle(luckyNumbers);
+                                        // tá salvo, transaction pode terminar tranquilo a partir daqui ---
+                                        delete GACHA_ONGOING_PULL[member.id];
 
-                                    // 1x pull do gacha
-                                    for (let t = 0; t < pullTimes; t++) {
-                                        // pega o numero sorteado
-                                        const luckyNumber = luckyNumbers[t];
-
-                                        // encontra qual tipo de item você vai ganhar primeiro
-                                        let rarityWon;
-                                        for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
-                                            const rarityFactor = 10000 * GACHA_RARITIES[r].chance;
-
-                                            if (luckyNumber <= rarityFactor) {
-                                                rarityWon = r;
-                                                break;
-                                            }
-                                        }
-                                        maxRarityWon = Math.max(maxRarityWon, rarityWon);
-
-                                        console.log('RARITY WON', rarityWon);
-
-                                        // agora, entre os itens, encontra qual deles vc vai ganhar, baseado
-                                        // na raridade que você tirou
-                                        let possibleItems = [];
-                                        items.forEach(item => {
-                                            if (item.rarity === rarityWon && !item.owner) {
-                                                possibleItems.push(item);
+                                        let skip = false;
+                                        // vai ficar escutando esse valor no db,
+                                        // e quanto esse valor for true, ele vai mudar
+                                        // a variavel skip = true e o open do gacha vai ser skipado
+                                        const endSkip = this.db.getLive('skip/' + member.id, val => {
+                                            if (val) {
+                                                skip = true;
+                                                this.db.delete('skip/' + member.id);
                                             }
                                         });
 
-                                        console.log('POSSIBLE ITEMS', possibleItems);
+                                        function _open(msg, countOpened) {
+                                            const min = itemsWon.length - countOpened;
 
-                                        // embaralha itens
-                                        possibleItems = utils.shuffle(possibleItems);
+                                            let wonText = '';
 
-                                        // ...e pego aleatoriamente um aleatoriamente
-                                        let idx = parseInt((Math.random() * (possibleItems.length * 2000)) / 2000);
-                                        idx = Math.min(possibleItems.length - 1, idx);
-                                        const itemWon = possibleItems[idx];
+                                            for (let i = 0; i < itemsWon.length; i++) {
+                                                const item = itemsWon[i];
 
-                                        // coloca no hash de itens ganhos
-                                        itemsWon.push(itemWon);
-
-                                        if (!isDebug) {
-                                            info.tokens -= GACHA_PULL_COST;
-                                        }
-                                    }
-                                    // --- fim do for dos pulls
-
-                                    console.log('WON', itemsWon);
-
-                                    let itemsToSave = [];
-
-                                    // adiciona os itens ganhos no seu inventario
-                                    for (let i = 0; i < itemsWon.length; i++) {
-                                        const item = itemsWon[i];
-
-                                        // cria o item no inventario do usuario, caso não tenha
-                                        info.roles[item.id] = info.roles[item.id] || 0;
-
-                                        // indica se é um item novo pro usuario
-                                        news.push(info.roles[item.id] === 0);
-
-                                        // adiciona +1
-                                        info.roles[item.id]++;
-
-                                        if (GACHA_ITEM_TYPES[item.type].limited) {
-                                            // se o item é um do tipo limitado, marcar o dono do item nele
-                                            item.owner = member.id;
-                                            itemsToSave.push(['roles/' + item.id, item])
-                                        }
-                                    }
-
-                                    // salva e mostra os ganhos do gacha
-                                    //console.log('TO SAVE', [['info/' + member.id, info]].concat(itemsToSave));
-                                    this.db.saveAll([['info/' + member.id, info]].concat(itemsToSave))
-                                        .then(([newInfo, ...newItems]) => {
-
-                                            // tá salvo, transaction pode terminar tranquilo a partir daqui ---
-                                            delete GACHA_ONGOING_PULL[member.id];
-
-                                            let skip = false;
-                                            // vai ficar escutando esse valor no db,
-                                            // e quanto esse valor for true, ele vai mudar
-                                            // a variavel skip = true e o open do gacha vai ser skipado
-                                            const endSkip = this.db.getLive('skip/' + member.id, val => {
-                                                if (val) {
-                                                    skip = true;
-                                                    this.db.delete('skip/' + member.id);
+                                                if (i >= min) {
+                                                    wonText += `\n`
+                                                        + `\`[${i+1}]\` `
+                                                        + `:gift:`;
+                                                } else {
+                                                    wonText += `\n`
+                                                        + `\`[${i+1}]\` `
+                                                        + formatItem(guild, item, news[i]);
                                                 }
-                                            });
-
-                                            function _open(msg, countOpened) {
-                                                const min = itemsWon.length - countOpened;
-
-                                                let wonText = '';
-
-                                                for (let i = 0; i < itemsWon.length; i++) {
-                                                    const item = itemsWon[i];
-
-                                                    if (i >= min) {
-                                                        wonText += `\n`
-                                                            + `\`[${i+1}]\` `
-                                                            + `:gift:`;
-                                                    } else {
-                                                        wonText += `\n`
-                                                            + `\`[${i+1}]\` `
-                                                            + formatItem(guild, item, news[i]);
-                                                    }
-                                                }
-
-                                                wonText += `\n\nSeus tokens: **${info.tokens}**`;
-
-                                                msg.edit(`${member},\n:slot_machine: Resultado do seu pull:\n${wonText}`).then(() => {
-                                                    if (countOpened > 0) {
-                                                        if (skip) {
-                                                            _open(msg, 0);
-                                                            return;
-                                                        }
-                                                        message.client.setTimeout(() => {
-                                                            _open(msg, countOpened - 1);
-                                                        }, 2000);
-                                                    } else {
-                                                        // quando termina a animação de open do gacha
-                                                        // não precisa mais ter o listen lá de cima.
-                                                        // então, finaliza
-                                                        endSkip();
-                                                    }
-                                                }).catch(err => {
-                                                    // se deu algum erro, tentar revelar tudo de uma vez
-                                                    console.error(err);
-                                                    _open(msg, 0);
-                                                });
                                             }
 
-                                            message.reply(`\n:slot_machine: Resultado do seu pull:\n:game_die: Carregando resultados :game_die:`)
-                                                .then(msg => {
-                                                    if (maxRarityWon >= 2) {
-                                                        // se for A pra cima, dar uma dica do que vem
-                                                        // através do react de "festa".
-                                                        // isso é como se fosse a cor das luzes
-                                                        // no gacha do bandori quando vem uma 3*+
-                                                        msg.react('🎉');
+                                            wonText += `\n\nSeus tokens: **${info.tokens}**`;
+
+                                            return msg.edit(`${member},\n:slot_machine: Resultado do seu pull:\n${wonText}`).then(() => {
+                                                if (countOpened > 0) {
+                                                    if (skip) {
+                                                        return _open(msg, 0);
                                                     }
-                                                    _open(msg, itemsWon.length);
-                                                })
-                                            ;
-                                        })
-                                        .catch(error => {
-                                            console.error(error);
-                                            message.reply(`:x: ${error}`);
-                                            // transaction do pull termina toda vez que há um termino repentino ---
-                                            delete GACHA_ONGOING_PULL[member.id];
-                                        })
-                                    ;
-                                })
-                                .catch(error => {
-                                    console.error(error);
-                                    message.reply(`:x: Não foi possível sortear seus prêmios. Tente novamente. ${error}`);
-                                    // transaction do pull termina toda vez que há um termino repentino ---
-                                    delete GACHA_ONGOING_PULL[member.id];
-                                })
-                            ;
+                                                    return new Promise(resolve => {
+                                                        message.client.setTimeout(() => {
+                                                            resolve(_open(msg, countOpened - 1));
+                                                        }, 2000);
+                                                    });
+                                                } else {
+                                                    // quando termina a animação de open do gacha
+                                                    // não precisa mais ter o listen lá de cima.
+                                                    // então, finaliza
+                                                    endSkip();
+                                                }
+                                            }).catch(err => {
+                                                if (countOpened === 0) {
+                                                    // se for a ultima tentativa, delegar esse erro pro controller
+                                                    throw err;
+                                                }
+                                                // se deu algum erro, tentar revelar tudo de uma vez
+                                                console.error(err);
+                                                return _open(msg, 0);
+                                            });
+                                        }
 
-                        })
-                        .catch(error => {
-                            console.error(error);
-                            message.reply(`:x: ${error}`);
-                            // transaction do pull termina toda vez que há um termino repentino ---
-                            delete GACHA_ONGOING_PULL[member.id];
-                        })
-                    ;
-                })
-                .catch(error => {
-                    console.error(error);
-                    message.reply(`:x: ${error}`);
+                                        return message.reply(`\n:slot_machine: Resultado do seu pull:\n:game_die: Carregando resultados :game_die:`)
+                                            .then(msg => {
+                                                if (maxRarityWon >= 2) {
+                                                    // se for A pra cima, dar uma dica do que vem
+                                                    // através do react de "festa".
+                                                    // isso é como se fosse a cor das luzes
+                                                    // no gacha do bandori quando vem uma 3*+
+                                                    msg.react('🎉');
+                                                }
+                                                return _open(msg, itemsWon.length);
+                                            })
+                                        ;
+                                    })
+                                ;
+                            })
+                        ;
 
-                    // transaction do pull termina toda vez que há um termino repentino ---
-                    delete GACHA_ONGOING_PULL[member.id];
-                })
-            ;
+                    })
+                ;
+            })
+            .catch(error => {
+                // transaction do pull termina toda vez que há um termino repentino ---
+                delete GACHA_ONGOING_PULL[member.id];
 
-        } catch (error) {
-            console.error(error);
-            message.reply(`:x: ${error.message}`);
-
-            // transaction do pull termina toda vez que há um termino repentino ---
-            delete GACHA_ONGOING_PULL[member.id];
-        }
+                // joga o erro novamente
+                throw error;
+            })
+        ;
 
     }
 
@@ -1125,191 +1102,168 @@ class Gacha {
      * @param message
      * @param args
      */
-    gachaExchangeCommand(message, args) {
-        try {
-            const isDebug = args.includes('--debug') && hasPermission(message);
-            const guild = getCafeComPaoGuild(message);
-            const member = getCafeComPaoMember(guild, message);
+    gachaExchangeCommand(guild, message, args) {
+        const isDebug = args.includes('--debug') && hasPermission(message);
+        const member = getCafeComPaoMember(guild, message);
 
-            getInfo(this, member)
-                .then(info => {
-                    // temporario para guardar o que foi trocado pra mostrar
-                    // pro usuário depois
-                    let exchanges = {};
-                    for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
-                        exchanges[r] = 0;
-                    }
-                    exchanges['games'] = [];
+        return getInfo(this, member)
+            .then(info => {
+                // temporario para guardar o que foi trocado pra mostrar
+                // pro usuário depois
+                let exchanges = {};
+                for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
+                    exchanges[r] = 0;
+                }
+                exchanges['games'] = [];
 
-                    const filter = (item, id) => {
-                        // vê se .roles[id] for maior do que zero
-                        // .roles[id] é o numero de itens possuídos pelo usuario
-                        return info.roles[item.id];
-                    };
+                const filter = (item, id) => {
+                    // vê se .roles[id] for maior do que zero
+                    // .roles[id] é o numero de itens possuídos pelo usuario
+                    return info.roles[item.id];
+                };
 
-                    this.db.findAll('roles', filter)
-                        .then(items => {
-                            if (!items.length) {
-                                message.reply(`:x: Nenhum item de gacha registrado. Aguarde os admins criarem novos itens.`);
-                                return;
-                            }
+                return this.db.findAll('roles', filter)
+                    .then(items => {
+                        if (!items.length) {
+                            return message.reply(`:x: Nenhum item de gacha registrado. Aguarde os admins criarem novos itens.`);
+                        }
 
-                            let foundItemsCount = 0;
-                            // let itemIndex = 1;
+                        let foundItemsCount = 0;
+                        // let itemIndex = 1;
 
-                            items.forEach(item => {
-                                // quantidade minima que deve sobrar no inventario.
-                                // se 0, significa que não vai sobrar nenhum no seu inventario
-                                // exemplo: itens trolls servem somente pra trocar por dinheiro
-                                let mustHaveAmount = GACHA_ITEM_TYPES[item.type].mustHaveAmount;
-                                if (info.roles[item.id] > mustHaveAmount) {
+                        items.forEach(item => {
+                            // quantidade minima que deve sobrar no inventario.
+                            // se 0, significa que não vai sobrar nenhum no seu inventario
+                            // exemplo: itens trolls servem somente pra trocar por dinheiro
+                            let mustHaveAmount = GACHA_ITEM_TYPES[item.type].mustHaveAmount;
+                            if (info.roles[item.id] > mustHaveAmount) {
 
-                                    // pega só os itens repetidos e deixa apenas um
-                                    const itemCountToExchange = info.roles[item.id] - mustHaveAmount;
-                                    if (mustHaveAmount > 0) {
-                                        info.roles[item.id] = mustHaveAmount;
-                                    } else {
-                                        info.roles[item.id] = null; // deleta
-                                    }
-
-                                    if (item.type === GACHA_TYPES.GAME && item.owner === member.id) {
-                                        // se for do tipo jogo, dar direto pro usuario
-                                        exchanges['games'].push(item);
-                                    } else {
-                                        // só vira token o que não for jogo
-                                        exchanges[item.rarity] += itemCountToExchange;
-                                    }
-
-                                    foundItemsCount++;
+                                // pega só os itens repetidos e deixa apenas um
+                                const itemCountToExchange = info.roles[item.id] - mustHaveAmount;
+                                if (mustHaveAmount > 0) {
+                                    info.roles[item.id] = mustHaveAmount;
+                                } else {
+                                    info.roles[item.id] = null; // deleta
                                 }
-                            });
 
-                            if (!foundItemsCount) {
-                                message.reply(`:x: Você não possui nenhum item repetido.`);
-                                return;
+                                if (item.type === GACHA_TYPES.GAME && item.owner === member.id) {
+                                    // se for do tipo jogo, dar direto pro usuario
+                                    exchanges['games'].push(item);
+                                } else {
+                                    // só vira token o que não for jogo
+                                    exchanges[item.rarity] += itemCountToExchange;
+                                }
+
+                                foundItemsCount++;
                             }
+                        });
 
-                            let text = `\n:arrows_counterclockwise: Seu exchange:\n`;
-                            let sumTokensExchange = 0;
+                        if (!foundItemsCount) {
+                            return message.reply(`:x: Você não possui nenhum item repetido e/ou nenhum jogo pra resgatar.`);
+                        }
 
-                            for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
-                                const itemTokenExchange = GACHA_RARITIES[r].exchange * exchanges[r];
+                        let text = `\n:arrows_counterclockwise: Seu exchange:\n`;
+                        let sumTokensExchange = 0;
 
-                                text += `\n  `
-                                    + GACHA_RARITIES[r].emojiLetter
-                                    + ` x ${exchanges[r]} = `
-                                    + `**${itemTokenExchange}**`
+                        for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
+                            const itemTokenExchange = GACHA_RARITIES[r].exchange * exchanges[r];
+
+                            text += `\n  `
+                                + GACHA_RARITIES[r].emojiLetter
+                                + ` x ${exchanges[r]} = `
+                                + `**${itemTokenExchange}**`
+                            ;
+
+                            sumTokensExchange += itemTokenExchange;
+                        }
+
+                        text += `\n   *Total* = **${sumTokensExchange}**`;
+
+                        if (exchanges['games'].length) {
+                            text += `\n\n**Jogo(s) resgatado(s):**`;
+                            exchanges['games'].forEach(gameItem => {
+                                text += `\n`
+                                    + ':small_blue_diamond: '
+                                    + formatItem(guild, gameItem)
                                 ;
+                            })
+                        }
 
-                                sumTokensExchange += itemTokenExchange;
-                            }
+                        // soma os tokens novos
+                        info.tokens += sumTokensExchange;
 
-                            text += `\n   *Total* = **${sumTokensExchange}**`;
+                        text += `\n\nSeu novo saldo de tokens: **${info.tokens}**`;
 
-                            if (exchanges['games'].length) {
-                                text += `\n\n**Jogo(s) resgatado(s):**`;
-                                exchanges['games'].forEach(gameItem => {
-                                    text += `\n`
-                                        + ':small_blue_diamond: '
-                                        + formatItem(guild, gameItem)
-                                    ;
-                                })
-                            }
-
-                            // soma os tokens novos
-                            info.tokens += sumTokensExchange;
-
-                            text += `\n\nSeu novo saldo de tokens: **${info.tokens}**`;
-
-                            let beforeSavePromise;
-                            if (exchanges['games'].length) {
-                                // se teve jogo, tentar enviar via DM pra ele primeiro
-                                beforeSavePromise = new Promise(resolve => {
-                                    const p = member.createDM()
-                                        .then(dm => {
-                                            function formatLinkGame(item, code) {
-                                                if (item.link.match(/steam/)) {
-                                                    return `O jogo é um gift da Steam. Faça amizade com esta pessoa (${item.link}) e informe este código para ela: \`[${code}]\``;
-                                                }
-                                                return `${item.link} (caso tenha problemas em resgatar, avise algum dos admins informando esse código: \`[${code}]\``;
+                        let beforeSavePromise;
+                        if (exchanges['games'].length) {
+                            // se teve jogo, tentar enviar via DM pra ele primeiro
+                            beforeSavePromise = new Promise(resolve => {
+                                const p = member.createDM()
+                                    .then(dm => {
+                                        function formatLinkGame(item, code) {
+                                            if (item.link.match(/steam/)) {
+                                                return `O jogo é um gift da Steam. Faça amizade com esta pessoa (${item.link}) e informe este código para ela: \`[${code}]\``;
                                             }
+                                            return `${item.link} (caso tenha problemas em resgatar, avise algum dos admins informando esse código: \`[${code}]\``;
+                                        }
 
-                                            let giftText = ':gift: Jogos resgatados do gacha Café com Pão!';
-                                            let logText = `**Resgate de jogos**\n${member} está resgatando os seguintes jogos:`;
-                                            exchanges['games'].forEach(gameItem => {
-                                                const code = parseInt((Math.random() * 8000) + 1000);
-                                                giftText += `\n\n  `
-                                                    + formatItem(guild, gameItem)
-                                                    + "\n"
-                                                    + formatLinkGame(gameItem, code)
-                                                ;
-
-                                                logText += `\n  `
-                                                    + formatItem(guild, gameItem)
-                                                    + ` - Criado por <@${gameItem.author}> - Código de segurança \`[${code}]\``
-                                                ;
-                                            });
-
-                                            giftText += `\n\nSiga as instruções de cada jogo pra resgatar. Dúvidas, falar com algum dos admins para te ajudar.`;
-
-                                            return dm.send(giftText).then(() => {
-                                                try {
-                                                    guild.channels.get(GACHA_LOG_CHANNEL).send(logText).catch(console.log);
-                                                } catch (e) { console.log(e) }
-                                            });
-                                        })
-                                    ;
-
-                                    p.then(() => {
-                                        // deu tudo certo, continua no save info
-                                        resolve();
-                                    }).catch(() => {
-                                        // deu algum erro, provavelmente de privacidade que o usuario não aceita DM
-                                        // do bot. então deixar avisado, mas tirar os jogos do info como ganhos e avisar
-                                        text += `\n\n:exclamation: **Atenção**: o(s) jogo(s) não foi(ram) resgatados. Digite \`+gacha testdm\` e veja se o bot consegue enviar DM para você. Caso não, verifique suas configurações de privacidade.`;
-                                        // volta os items pro inventario do usuario
+                                        let giftText = ':gift: Jogos resgatados do gacha Café com Pão!';
+                                        let logText = `**Resgate de jogos**\n${member} está resgatando os seguintes jogos:`;
                                         exchanges['games'].forEach(gameItem => {
-                                            info.roles[gameItem.id] = 1;
-                                        });
-                                        resolve();
-                                    })
-                                });
-                            } else {
-                                beforeSavePromise = Promise.resolve();
-                            }
+                                            const code = parseInt((Math.random() * 8000) + 1000);
+                                            giftText += `\n\n  `
+                                                + formatItem(guild, gameItem)
+                                                + "\n"
+                                                + formatLinkGame(gameItem, code)
+                                            ;
 
-                            beforeSavePromise.then(() => {
-                                // salva e mostra os tokens ganhos
-                                this.db.save('info/' + member.id, info)
-                                    .then(newInfo => {
-                                        message.reply(text);
-                                    })
-                                    .catch(error => {
-                                        console.error(error);
-                                        message.reply(`:x: ${error}`);
+                                            logText += `\n  `
+                                                + formatItem(guild, gameItem)
+                                                + ` - Criado por <@${gameItem.author}> - Código de segurança \`[${code}]\``
+                                            ;
+                                        });
+
+                                        giftText += `\n\nSiga as instruções de cada jogo pra resgatar. Dúvidas, falar com algum dos admins para te ajudar.`;
+
+                                        return dm.send(giftText).then(() => {
+                                            try {
+                                                guild.channels.get(GACHA_LOG_CHANNEL).send(logText).catch(console.log);
+                                            } catch (e) { console.log(e) }
+                                        });
                                     })
                                 ;
+
+                                p.then(() => {
+                                    // deu tudo certo, continua no save info
+                                    resolve();
+                                }).catch(() => {
+                                    // deu algum erro, provavelmente de privacidade que o usuario não aceita DM
+                                    // do bot. então deixar avisado, mas tirar os jogos do info como ganhos e avisar
+                                    text += `\n\n:exclamation: **Atenção**: o(s) jogo(s) não foi(ram) resgatados. Digite \`+gacha testdm\` e veja se o bot consegue enviar DM para você. Caso não, verifique suas configurações de privacidade.`;
+                                    // volta os items pro inventario do usuario
+                                    exchanges['games'].forEach(gameItem => {
+                                        info.roles[gameItem.id] = 1;
+                                    });
+                                    resolve();
+                                })
                             });
+                        } else {
+                            beforeSavePromise = Promise.resolve();
+                        }
 
-                        })
-                        .catch(error => {
-                            console.error(error);
-                            message.reply(`:x: ${error}`);
-                        })
-                    ;
+                        return beforeSavePromise.then(() => {
+                            // salva e mostra os tokens ganhos
+                            return this.db.save('info/' + member.id, info)
+                                .then(() => {
+                                    return message.reply(text);
+                                })
+                            ;
+                        });
 
-                })
-                .catch(error => {
-                    console.error(error);
-                    message.reply(`:x: ${error}`);
-                })
-            ;
-
-        } catch (error) {
-            console.error(error);
-            message.reply(`:x: ${error.message}`);
-        }
-
+                    })
+                ;
+            })
+        ;
     }
 
     /**
@@ -1319,80 +1273,69 @@ class Gacha {
      * @param message
      * @param args
      */
-    gachaDailyCommand(message, args) {
-        try {
-            const guild = getCafeComPaoGuild(message);
-            const member = getCafeComPaoMember(guild, message);
+    gachaDailyCommand(guild, message, args) {
+        const member = getCafeComPaoMember(guild, message);
 
-            const now = new Date();
+        const now = new Date();
 
-            const modifyFn = info => {
-                console.log('INFO', info);
-                if (info.daily.lastTs) {
-                    const remainingSecs = parseInt((now.getTime() - info.daily.lastTs) / 1000);
-                    if (remainingSecs < GACHA_DAILY_DAY) {
-                        const remainingText = formatTime(GACHA_DAILY_DAY - remainingSecs);
-                        message.reply(`:x: Você já resgatou seu bônus. Aguarde **${remainingText}** para o próximo.`);
-                        return;
-                    }
-
-                    // verifica se ainda tá dentro de menos de 2 dias.
-                    // se passou de 2 dias, reseta o bonus
-                    if (remainingSecs >= (GACHA_DAILY_DAY * 2)) {
-                        info.daily.streak = 0;
-                    }
+        const modifyFn = info => {
+            //console.log('INFO', info);
+            if (info.daily.lastTs) {
+                const remainingSecs = parseInt((now.getTime() - info.daily.lastTs) / 1000);
+                if (remainingSecs < GACHA_DAILY_DAY) {
+                    const remainingText = formatTime(GACHA_DAILY_DAY - remainingSecs);
+                    message.reply(`:x: Você já resgatou seu bônus. Aguarde **${remainingText}** para o próximo.`);
+                    return;
                 }
 
-                if (!info.daily.streak || info.daily.streak >= GACHA_DAILY_BONUS_STREAK) {
+                // verifica se ainda tá dentro de menos de 2 dias.
+                // se passou de 2 dias, reseta o bonus
+                if (remainingSecs >= (GACHA_DAILY_DAY * 2)) {
                     info.daily.streak = 0;
                 }
+            }
 
-                // guarda a ultima vez q fez daily
-                info.daily.lastTs = now.getTime();
-                info.daily.streak++;
+            if (!info.daily.streak || info.daily.streak >= GACHA_DAILY_BONUS_STREAK) {
+                info.daily.streak = 0;
+            }
 
-                console.log('DAILY TOKEN', member.id, info.tokens, GACHA_DAILY_TOKENS);
-                info.tokens += GACHA_DAILY_TOKENS;
+            // guarda a ultima vez q fez daily
+            info.daily.lastTs = now.getTime();
+            info.daily.streak++;
 
-                // bonus!
-                if (info.daily.streak >= GACHA_DAILY_BONUS_STREAK) {
-                    console.log('DAILY BONUS TOKEN', member.id, info.tokens, GACHA_DAILY_BONUS_STREAK_TOKENS);
-                    info.tokens += GACHA_DAILY_BONUS_STREAK_TOKENS;
-                }
+            console.log('DAILY TOKEN', member.id, info.tokens, GACHA_DAILY_TOKENS);
+            info.tokens += GACHA_DAILY_TOKENS;
 
-                console.log('INFO END', info);
-                return info;
-            };
+            // bonus!
+            if (info.daily.streak >= GACHA_DAILY_BONUS_STREAK) {
+                console.log('DAILY BONUS TOKEN', member.id, info.tokens, GACHA_DAILY_BONUS_STREAK_TOKENS);
+                info.tokens += GACHA_DAILY_BONUS_STREAK_TOKENS;
+            }
 
-            modifyInfo(member.id, modifyFn)
-                .then((info) => {
-                    if (info) {
-                        let bonusText = '';
-                        let firstRowText = '', secondRowText = '';
-                        for (let i = 1; i <= GACHA_DAILY_BONUS_STREAK; i++) {
-                            firstRowText += (i === GACHA_DAILY_BONUS_STREAK) ? `🎉` : `<:r0:461676744185741322>`;
-                            secondRowText += (i <= info.daily.streak) ? `🆗` : `⬛`;
-                        }
-                        bonusText += ``
-                            + firstRowText
-                            + "\n"
-                            + secondRowText
-                            + (info.daily.streak === GACHA_DAILY_BONUS_STREAK ? ` **BÔNUS!**` : '')
-                            + "\n"
-                        ;
-                        return message.reply(`:white_check_mark: Você coletou seu bônus!\n${bonusText}\nVolte em ${formatTime(GACHA_DAILY_DAY)} para mais um bônus.\nNovo saldo: **${info.tokens}**`);
+            console.log('INFO END', info);
+            return info;
+        };
+
+        return modifyInfo(member.id, modifyFn)
+            .then((info) => {
+                if (info) {
+                    let bonusText = '';
+                    let firstRowText = '', secondRowText = '';
+                    for (let i = 1; i <= GACHA_DAILY_BONUS_STREAK; i++) {
+                        firstRowText += (i === GACHA_DAILY_BONUS_STREAK) ? `🎉` : `<:r0:461676744185741322>`;
+                        secondRowText += (i <= info.daily.streak) ? `🆗` : `⬛`;
                     }
-                })
-                .catch(error => {
-                    console.error(error);
-                    message.reply(`:x: ${error}`);
-                })
-            ;
-
-        } catch (error) {
-            console.error(error);
-            message.reply(`:x: ${error.message}`);
-        }
+                    bonusText += ``
+                        + firstRowText
+                        + "\n"
+                        + secondRowText
+                        + (info.daily.streak === GACHA_DAILY_BONUS_STREAK ? ` **BÔNUS!**` : '')
+                        + "\n"
+                    ;
+                    return message.reply(`:white_check_mark: Você coletou seu bônus!\n${bonusText}\nVolte em ${formatTime(GACHA_DAILY_DAY)} para mais um bônus.\nNovo saldo: **${info.tokens}**`);
+                }
+            })
+        ;
     }
 
     /**
@@ -1401,29 +1344,22 @@ class Gacha {
      * @param message
      * @param args
      */
-    gachaTestDMCommand(message, args) {
-        try {
-            const isDebug = args.includes('--debug') && hasPermission(message);
-            const guild = getCafeComPaoGuild(message);
-            const member = getCafeComPaoMember(guild, message);
+    gachaTestDMCommand(guild, message, args) {
+        const isDebug = args.includes('--debug') && hasPermission(message);
+        const member = getCafeComPaoMember(guild, message);
 
-            member.createDM()
-                .then(dm => {
-                    return dm.send(':white_check_mark: Teste de DM com sucesso. Está mensagem se apagará automaticamente em alguns segundos.')
-                        .then(m => {
-                            message.client.setTimeout(() => { m.delete() }, 10000);
-                        });
-                })
-                .catch(err => {
-                    //console.error(err);
-                    message.reply(`:x: Não foi possível criar uma DM com você. Verifique as suas configurações de privacidade para permitir que o bot mande mensagens diretas para você.`);
-                })
-            ;
-
-        } catch (error) {
-            console.error(error);
-            message.reply(`:x: ${error.message}`);
-        }
+        return member.createDM()
+            .then(dm => {
+                return dm.send(':white_check_mark: Teste de DM com sucesso. Está mensagem se apagará automaticamente em alguns segundos.')
+                    .then(m => {
+                        return m.delete(10000);
+                    });
+            })
+            .catch(err => {
+                //console.error(err);
+                message.reply(`:x: Não foi possível criar uma DM com você. Verifique as suas configurações de privacidade para permitir que o bot mande mensagens diretas para você.`);
+            })
+        ;
     }
 
     /**
@@ -1432,70 +1368,64 @@ class Gacha {
      * @param message
      * @param args
      */
-    gachaRefreshNicknamesCommand(message, args) {
-        try {
-            const isDebug = args.includes('--debug') && hasPermission(message);
-            const guild = getCafeComPaoGuild(message);
-            const member = getCafeComPaoMember(guild, message);
+    gachaRefreshNicknamesCommand(guild, message, args) {
+        const isDebug = args.includes('--debug') && hasPermission(message);
+        const member = getCafeComPaoMember(guild, message);
 
-            guild.members.forEach(guildMember => {
-                getInfo(this, guildMember)
-                    .then(info => {
-                        let oldNickname = guildMember.nickname || guildMember.user.username;
-                        let newNickname = oldNickname;
-                        const equip = info.equip[GACHA_TYPES.ICON];
+        // ATENCAO: não tem return aqui pois é feito a cada membro num forEach
+        guild.members.forEach(guildMember => {
+            getInfo(this, guildMember)
+                .then(info => {
+                    let oldNickname = guildMember.nickname || guildMember.user.username;
+                    let newNickname = oldNickname;
+                    const equip = info.equip[GACHA_TYPES.ICON];
 
-                        this.db.findAll('roles', item => item.type === GACHA_TYPES.ICON)
-                            .then(items => {
-                                let itemToEquip = null;
-                                items.forEach(item => {
-                                    // tira qualquer icone que o usuario tiver
-                                    newNickname = newNickname.replace(new RegExp(item.emoji, 'g'), '');
+                    this.db.findAll('roles', item => item.type === GACHA_TYPES.ICON)
+                        .then(items => {
+                            let itemToEquip = null;
+                            items.forEach(item => {
+                                // tira qualquer icone que o usuario tiver
+                                newNickname = newNickname.replace(new RegExp(item.emoji, 'g'), '');
 
-                                    if (item.id === equip) {
-                                        itemToEquip = item;
-                                    }
-                                });
-
-                                newNickname = newNickname.trim();
-
-                                // se o nick ficar vazio, usar o username
-                                if (!newNickname) {
-                                    newNickname = guildMember.user.username;
+                                if (item.id === equip) {
+                                    itemToEquip = item;
                                 }
+                            });
 
-                                // depois coloca emoji, se tiver equipado
-                                if (itemToEquip) {
-                                    newNickname = itemToEquip.emoji + ' ' + newNickname;
-                                }
+                            newNickname = newNickname.trim();
 
-                                if (newNickname !== oldNickname) {
-                                    console.log('REFRESH NICK ALTER', newNickname);
+                            // se o nick ficar vazio, usar o username
+                            if (!newNickname) {
+                                newNickname = guildMember.user.username;
+                            }
 
-                                    // marca que tá sendo alterado o nick, para não disparar o evento de mudança de nick
-                                    console.log('->', guildMember.user.username, oldNickname, newNickname);
-                                    GACHA_CHANGING_NICK[guildMember.id] = true;
-                                    guildMember.setNickname(newNickname, 'Automático anti-exploit do +gacha')
-                                        .then(() => {
-                                            delete GACHA_CHANGING_NICK[guildMember.id];
-                                        })
-                                        .catch((error) => {
-                                            delete GACHA_CHANGING_NICK[guildMember.id];
-                                            console.error(error);
-                                        })
-                                    ;
-                                }
+                            // depois coloca emoji, se tiver equipado
+                            if (itemToEquip) {
+                                newNickname = itemToEquip.emoji + ' ' + newNickname;
+                            }
 
-                            }, console.error)
-                        ;
-                    }, console.error)
-                ;
-            })
+                            if (newNickname !== oldNickname) {
+                                console.log('REFRESH NICK ALTER', newNickname);
 
-        } catch (error) {
-            console.error(error);
-            message.reply(`:x: ${error.message}`);
-        }
+                                // marca que tá sendo alterado o nick, para não disparar o evento de mudança de nick
+                                console.log('->', guildMember.user.username, oldNickname, newNickname);
+                                GACHA_CHANGING_NICK[guildMember.id] = true;
+                                guildMember.setNickname(newNickname, 'Automático anti-exploit do +gacha')
+                                    .then(() => {
+                                        delete GACHA_CHANGING_NICK[guildMember.id];
+                                    })
+                                    .catch((error) => {
+                                        delete GACHA_CHANGING_NICK[guildMember.id];
+                                        console.error(error);
+                                    })
+                                ;
+                            }
+
+                        }, console.error)
+                    ;
+                }, console.error)
+            ;
+        });
     }
 
     /**
@@ -1512,99 +1442,72 @@ class Gacha {
      * @param date
      */
     gachaTimer(client, seconds, minutes, hours, day, month, dayWeek, year, date) {
-        try {
-            const guild = client.guilds.get('213797930937745409');
+        const guild = client.guilds.get('213797930937745409');
 
-            // a cada X minutos, só que no minuto segunte
-            if ((minutes - 1) % GACHA_TOKEN_DROP_FREQUENCY === 0) {
-                return updateExtraTokensReacts(this, client);
-            }
+        // a cada X minutos, só que no minuto segunte
+        if ((minutes - 1) % GACHA_TOKEN_DROP_FREQUENCY === 0) {
+            return updateExtraTokensReacts(this, client);
+        }
 
-            // a cada X minutos
-            if (minutes % GACHA_TOKEN_DROP_FREQUENCY === 0) {
+        // a cada X minutos
+        if (minutes % GACHA_TOKEN_DROP_FREQUENCY === 0) {
+            return guild.fetchMembers()
+                .then(() => {
+                    let tokenSums = {};
 
-                guild.fetchMembers()
-                    .then(() => {
-                        let tokenSums = {};
+                    guild.members.forEach(member => {
+                        if (member.user.bot) return;
+                        /*for (let c = 0; c < GACHA_VALID_CHANNELS.length; c++) {
+                            const channel = guild.channels.get(GACHA_VALID_CHANNELS[c]);
+                        }*/
+                        const lastMessage = member.lastMessage;
 
-                        guild.members.forEach(member => {
-                            if (member.user.bot) return;
-                            /*for (let c = 0; c < GACHA_VALID_CHANNELS.length; c++) {
-                                const channel = guild.channels.get(GACHA_VALID_CHANNELS[c]);
-                            }*/
-                            const lastMessage = member.lastMessage;
+                        console.log('MEMBER', member.id, date.getTime(), (lastMessage || {}).createdTimestamp);
 
-                            console.log('MEMBER', member.id, date.getTime(), (lastMessage || {}).createdTimestamp);
+                        if (lastMessage) {
+                            const diff = date.getTime() - lastMessage.createdTimestamp;
+                            const min = GACHA_TOKEN_DROP_MAX_TIMESTAMP, max = 0;
 
-                            if (lastMessage) {
-                                const diff = date.getTime() - lastMessage.createdTimestamp;
-                                const min = GACHA_TOKEN_DROP_MAX_TIMESTAMP, max = 0;
+                            // numero pelo qual, quando multiplicado, quanto mais perto do minimo, mais "zero" ele fica,
+                            // e quanto mais perto do maximo, mais "um" ele fica
+                            const penaltyRatio = Math.min(1, Math.max(0, (diff - min) / (max - min)));
 
-                                // numero pelo qual, quando multiplicado, quanto mais perto do minimo, mais "zero" ele fica,
-                                // e quanto mais perto do maximo, mais "um" ele fica
-                                const penaltyRatio = Math.min(1, Math.max(0, (diff - min) / (max - min)));
+                            let tokensToEarn = ((Math.random() * GACHA_TOKEN_DROP_AMOUNT) + GACHA_TOKEN_DROP_AMOUNT_MIN) * GACHA_TOKEN_DROP_AMOUNT_MULTIPLIER;
+                            tokensToEarn *= penaltyRatio;
 
-                                let tokensToEarn = ((Math.random() * GACHA_TOKEN_DROP_AMOUNT) + GACHA_TOKEN_DROP_AMOUNT_MIN) * GACHA_TOKEN_DROP_AMOUNT_MULTIPLIER;
-                                tokensToEarn *= penaltyRatio;
+                            // coloca nos tokens pra ganhar
+                            tokenSums[member.id] = parseInt(tokensToEarn);
 
-                                // coloca nos tokens pra ganhar
-                                tokenSums[member.id] = parseInt(tokensToEarn);
+                            // salva
+                            const modifyFn = info => {
+                                console.log('DROP TOKEN', member.id, info.tokens, tokenSums[member.id]);
+                                info.tokens += tokenSums[member.id];
+                                return info;
+                            };
 
-                                // salva
-                                const modifyFn = info => {
-                                    console.log('DROP TOKEN', member.id, info.tokens, tokenSums[member.id]);
-                                    info.tokens += tokenSums[member.id];
-                                    return info;
-                                };
-
-                                modifyInfo(member.id, modifyFn)
-                                    .then((info) => {
-                                        // salvo com sucesso
-                                    })
-                                    .catch(error => {
-                                        console.error(error);
-                                    })
-                                ;
-                                // getInfo(this, member)
-                                //     .then(info => {
-                                //         info.tokens += tokenSums[member.id];
-                                //
-                                //         return this.db.save('info/' + member.id, info);
-                                //     })
-                                //     .catch(console.error)
-                                // ;
-                            }
-                        });
-
-                        //console.log('TOKEN SUMS', tokenSums);
+                            modifyInfo(member.id, modifyFn)
+                                .then((info) => {
+                                    // salvo com sucesso
+                                })
+                                .catch(error => {
+                                    console.error(error);
+                                })
+                            ;
+                            // getInfo(this, member)
+                            //     .then(info => {
+                            //         info.tokens += tokenSums[member.id];
+                            //
+                            //         return this.db.save('info/' + member.id, info);
+                            //     })
+                            //     .catch(console.error)
+                            // ;
+                        }
                     });
 
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    }
+                    //console.log('TOKEN SUMS', tokenSums);
+                });
 
-    onReactionAdd(messageReaction, user) {
-        // let reactCount = messageReaction.count;
-        // messageReaction.fetchUsers()
-        //     .then(users => {
-        //         if (users && !users.some(u => adminsIds.includes(u.id))) {
-        //             // ignora quem não for admin
-        //             return;
-        //         }
-        //
-        //         if (reactCount > 0 && messageReaction.emoji.name === '🔞') {
-        //             // marcar essa mensagem como nsfw
-        //             return messageReaction.message.delete();
-        //         }
-        //     })
-        //     .then(msg => {
-        //         if (msg) {
-        //             return createNsfwAlert(msg, true);
-        //         }
-        //     })
-        //     .catch(console.error);
+        }
     }
 
     /**
@@ -1621,11 +1524,11 @@ class Gacha {
         let oldNickname = oldMember.nickname || oldMember.user.username;
         let newNickname = newMember.nickname || newMember.user.username;
         if (oldNickname !== newNickname) {
-            getInfo(this, newMember)
+            return getInfo(this, newMember)
                 .then(info => {
                     const equip = info.equip[GACHA_TYPES.ICON];
 
-                    this.db.findAll('roles', item => item.type === GACHA_TYPES.ICON)
+                    return this.db.findAll('roles', item => item.type === GACHA_TYPES.ICON)
                         .then(items => {
                             let itemToEquip = null;
                             items.forEach(item => {
@@ -1654,70 +1557,34 @@ class Gacha {
 
                                 // marca que tá sendo alterado o nick, para não disparar o evento de mudança de nick
                                 GACHA_CHANGING_NICK[newMember.id] = true;
-                                newMember.setNickname(newNickname, 'Automático anti-exploit do +gacha')
+                                return newMember.setNickname(newNickname, 'Automático anti-exploit do +gacha')
                                     .then(() => {
                                         delete GACHA_CHANGING_NICK[newMember.id];
                                     })
                                     .catch((error) => {
                                         delete GACHA_CHANGING_NICK[newMember.id];
-                                        console.error(error);
+                                        throw error;
                                     })
                                 ;
                             }
 
-                        }, console.error)
+                        })
                     ;
-                }, console.error)
+                })
             ;
         }
     }
 
-    onReady(client) {
-        // this.db.getLiveCollection('drawings', (event, draw) => {
-        //     try {
-        //         if (event === 'changed') {
-        //             const guild = getCafeComPaoGuild(client);
-        //             const channel = guild.channels.get(draw.channel || GACHA_EXTRA_TOKENS_CHANNEL);
-        //
-        //             channel.fetchMessage(messageId)
-        //                 .then(foundMsg => {
-        //                     const draw = {
-        //                         message: foundMsg.id,
-        //                         channel: channel.id,
-        //                         reacts: {}
-        //                     };
-        //                     this.db.save('drawings', draw)
-        //                         .then(draw => {
-        //                             message.reply(`:white_check_mark: Mensagem marcada como desenho com sucesso.`);
-        //                         })
-        //                         .catch(error => {
-        //                             console.error(error);
-        //                             message.reply(`:x: ${error}`);
-        //                         })
-        //                     ;
-        //                 })
-        //                 .catch(error => {
-        //                     message.reply(`:x: ${error}`);
-        //                 })
-        //             ;
-        //         }
-        //     } catch (e) {
-        //         console.error(e);
-        //     }
-        // });
-
+    onMessage(guild, message) {
+        return this.gachaCreateOnMessage(guild, message)
     }
 
-    onMessage(message) {
-        return this.gachaCreateOnMessage(message)
+    onMessageDelete(guild, message) {
+        return this.gachaCreateOnMessage(guild, message, 'delete')
     }
 
-    onMessageDelete(message) {
-        return this.gachaCreateOnMessage(message, 'delete')
-    }
-
-    onMessageUpdate(oldMessage, newMessage) {
-        return this.gachaCreateOnMessage(newMessage, 'update', oldMessage)
+    onMessageUpdate(guild, oldMessage, newMessage) {
+        return this.gachaCreateOnMessage(guild, newMessage, 'update', oldMessage)
     }
 
     /**
@@ -1726,7 +1593,7 @@ class Gacha {
      * @param mode
      * @param oldMessage
      */
-    gachaCreateOnMessage(message, mode, oldMessage) {
+    gachaCreateOnMessage(guild, message, mode, oldMessage) {
         // se não tiver um channel
         if (!message.channel || message.author.bot) return;
 
@@ -1739,7 +1606,6 @@ class Gacha {
         // se não for admin, ignora
         if (!hasPermission(message)) return;
 
-        const guild = getCafeComPaoGuild(message);
         const member = getCafeComPaoMember(guild, message);
 
         if (mode === 'delete') {
@@ -1905,9 +1771,7 @@ class Gacha {
 
     events() {
         return {
-            //'messageReactionAdd': this.onReactionAdd,
             'message': [this.onMessage, { guild: true }],
-            'ready': this.onReady,
             'messageDelete': [this.onMessageDelete, { guild: true }],
             'messageUpdate': [this.onMessageUpdate, { guild: true }],
             'guildMemberUpdate': this.onGuildMemberUpdate
@@ -2296,10 +2160,6 @@ function fetchReactsFromMessage(message, oldReacts, maxReacts, _debug) {
             })
         ;
     });
-}
-
-function updateNickname(member, _debug) {
-
 }
 
 function updateExtraTokensReacts(gacha, client, _debug) {
