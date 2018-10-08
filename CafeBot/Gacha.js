@@ -428,7 +428,7 @@ class Gacha {
                         return this.db.insert('drawings', draw)
                             .then(draw => {
                                 const memberPrizeId = foundMessage.author.id;
-                                return modifyInfo(memberPrizeId, info => {
+                                return modifyInfo(this, memberPrizeId, info => {
                                     console.log('DRAW PRIZE TOKEN', memberPrizeId, info.tokens);
                                     info.tokens += GACHA_EXTRA_TOKENS_PRIZE;
                                     return info;
@@ -473,7 +473,7 @@ class Gacha {
             return info;
         };
 
-        return modifyInfo(userId, modifyFn)
+        return modifyInfo(this, userId, modifyFn)
             .then((info) => {
                 try {
                     guild.channels.get(GACHA_LOG_CHANNEL).send(`**Punição**\nUsuário <@${userId}> foi punido em ${punishAmount} token(s).`).catch(console.log);
@@ -1316,7 +1316,7 @@ class Gacha {
             return info;
         };
 
-        return modifyInfo(member.id, modifyFn)
+        return modifyInfo(this, member.id, modifyFn)
             .then((info) => {
                 if (info) {
                     let bonusText = '';
@@ -1485,7 +1485,7 @@ class Gacha {
                                 return info;
                             };
 
-                            modifyInfo(member.id, modifyFn)
+                            modifyInfo(this, member.id, modifyFn)
                                 .then((info) => {
                                     // salvo com sucesso
                                 })
@@ -2219,7 +2219,7 @@ function updateExtraTokensReacts(gacha, client, _debug) {
                                 for (let userId in tokensToAdd) {
                                     if (tokensToAdd[userId] !== 0) {
                                         modified = true;
-                                        modifyInfo(userId, info => {
+                                        modifyInfo(this, userId, info => {
                                             console.log('DRAW MODIFY TOKEN', userId, info.tokens, tokensToAdd[userId]);
                                             info.tokens += tokensToAdd[userId];
                                             return info;
