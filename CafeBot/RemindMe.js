@@ -362,6 +362,7 @@ esse evento vai ser executado *uma vez só* às 23:30, não importando que dia, 
         return this.db.getArray('events')
             .then(events => {
                 events.forEach(event => {
+                    const eventId = event.id;
                     let patternParts = parsePattern(event.pattern);
                     let activate = true;
 
@@ -428,7 +429,7 @@ esse evento vai ser executado *uma vez só* às 23:30, não importando que dia, 
                                 return dm.send(`:alarm_clock: **Evento:** ${content}`);
                             })
                             .then(msgSent => {
-                                return this.db.save('events/' + event.id, event)
+                                return this.db.save('events/' + eventId, event)
                                     .then(() => {
                                         if (event) {
                                             return msgSent.edit(msgSent.content + `\n*próxima execução em ${formatFutureDate(date, event.nextExecution)}*`);
