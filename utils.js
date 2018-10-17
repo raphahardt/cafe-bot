@@ -1,4 +1,4 @@
-const levenshtein = require('fast-levenshtein');
+const levenshtein = require("fast-levenshtein");
 
 const utils = {
 
@@ -7,7 +7,7 @@ const utils = {
      *
      * @type {String}
      */
-    prefix: '+',
+    prefix: "+",
 
     /**
      * Embaralha um array
@@ -109,7 +109,7 @@ const utils = {
             if (clearMentionedUsersFromArgs) {
                 // tira eles da lista de argumentos
                 members.forEach(member => {
-                    args.splice(args.indexOf('<@!'+member.id+'>'), 1);
+                    args.splice(args.indexOf("<@!"+member.id+">"), 1);
                 });
             }
         }
@@ -120,7 +120,7 @@ const utils = {
             args.forEach(arg => {
                 if (arg.match(/^=?[0-9]+$/) && arg.length >= 10) {
                     // se encontrar um id numerico
-                    const text = arg.replace(/^=/, '');
+                    const text = arg.replace(/^=/, "");
 
                     foundMembers.push(message.guild.members.get(text));
                     foundMembersTexts.push(arg);
@@ -146,10 +146,10 @@ const utils = {
                             }
 
                             const lev = levenshtein.get(text, username, { useCollator: true });
-                            if (lev <= 3) {
-                                console.log('LEVEN', lev, text, username);
-                                console.log('LEVEN RATIO', (lev <= text.length / 3));
-                            }
+                            // if (lev <= 3) {
+                            //     console.log('LEVEN', lev, text, username);
+                            //     console.log('LEVEN RATIO', (lev <= text.length / 3));
+                            // }
                             if (lev <= text.length / 3 && (null === alternative || lev < shortest)) {
                                 alternative = guildMember;
                                 shortest = lev;
@@ -208,7 +208,7 @@ const utils = {
                 if (clearMentionedUsersFromArgs) {
                     // tira eles da lista de argumentos
                     members.forEach(member => {
-                        args.splice(args.indexOf('<@!'+member.id+'>'), 1);
+                        args.splice(args.indexOf("<@!"+member.id+">"), 1);
                     });
                 }
             }

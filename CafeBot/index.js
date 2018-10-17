@@ -1,15 +1,15 @@
 const Discord = require("discord.js");
-const Cafebase = require('./Cafebase');
-const utils = require('../utils');
+const Cafebase = require("./Cafebase");
+const utils = require("../utils");
 
-const PermissionError = require('./Errors/PermissionError');
+const PermissionError = require("./Errors/PermissionError");
 
 const bot = {
     // auto-explicativo
     packageJson: {},
     ready: false,
     debug: false,
-    cafeComPaoGuildId: '213797930937745409',
+    cafeComPaoGuildId: "213797930937745409",
 
     // cache de quem usou um comando pra evitar flood de comandos
     commandsLastUsed: {},
@@ -37,10 +37,10 @@ const bot = {
             const dateNow = new Date();
 
             // invocando os eventos v2
-            for (let o of modules.iterateModules('timers')) {
+            for (let o of modules.iterateModules("timers")) {
                 const [module, key, fn, opts] = o;
 
-                console.log(module.modName + ' | timer triggered ' + key);
+                console.log(`${module.modName} | timer triggered ${key}`);
 
                 // executa o evento de fato
                 try {
@@ -65,24 +65,24 @@ const bot = {
         }, 60000);
 
         // ready
-        discordClient.on('ready', () => {
+        discordClient.on("ready", () => {
             bot.ready = true;
 
             console.log(`Bot ${bot.packageJson.name} v${bot.packageJson.version} [${discordClient.users.size} membros] [${discordClient.channels.size} canais] [${discordClient.guilds.size} servers]`);
 
             // sai de todas as guilds q não seja o café com pão
             discordClient.guilds.forEach((guild) => {
-                if (guild.id !== '213797930937745409') {
+                if (guild.id !== "213797930937745409") {
                     guild.leave();
                 }
             });
 
-            const phrases = utils.shuffle(['você tomar café', 'os ghosts safados', 'seus abcs']);
-            discordClient.user.setActivity(`${phrases[0]} (${bot.packageJson.version})` + (modules._debug ? ' (testes)' : ''), { type: 'WATCHING' });
+            const phrases = utils.shuffle(["você tomar café", "os ghosts safados", "seus abcs"]);
+            discordClient.user.setActivity(`${phrases[0]} (${bot.packageJson.version})` + (modules._debug ? " (testes)" : ""), { type: "WATCHING" });
 
             if (!bot.debug) {
                 // procura o canal pra mandar as mensagens pinnadas
-                const logChannel = discordClient.channels.get('240297584420323338');
+                const logChannel = discordClient.channels.get("240297584420323338");
                 if (logChannel) {
                     const emb = new Discord.RichEmbed()
                         .setColor(0x3498db)
@@ -99,17 +99,21 @@ const bot = {
         // registra o evento de erros.
         // necessário, para não crashar o node.
         // visto em: https://nodejs.org/dist/latest/docs/api/events.html#events_error_events
-        discordClient.on('error', error => {
+        discordClient.on("error", error => {
             handleError(error, discordClient, bot.debug);
         });
 
         // ver: https://discord.js.org/#/docs/main/stable/class/Client?scrollTo=e-rateLimit
-        discordClient.on('rateLimit', info => {
-            handleError(new Error('Rate limit: ' + JSON.stringify(info)), discordClient, bot.debug);
+        // fix: não é necessário ficar olhando se o bot atingiu os rate limits do Discord,
+        // pois o proprio discord.js já lida com isso (e eles são obrigados a fazer isso para
+        // serem qualificados de serem uma das bibliotecas reconhecidas pelo proprio Discord)
+        // para entender, ver: https://github.com/discordjs/discord.js/issues/1176
+        discordClient.on("rateLimit", info => {
+            //handleError(new Error('Rate limit: ' + JSON.stringify(info)), discordClient, bot.debug);
         });
 
         // evento pros comandos
-        discordClient.on('message', message => {
+        discordClient.on("message", message => {
             if (message.author.bot) return;
 
             // ignora qualquer mensagem que não começar com o prefixo
@@ -123,11 +127,11 @@ const bot = {
             const command = args.shift().toLowerCase();
 
             // invocando os comandos v2
-            for (let o of modules.iterateModules('commands')) {
+            for (let o of modules.iterateModules("commands")) {
                 const [module, cmd, fn, opts] = o;
 
                 if (command === cmd) {
-                    console.log(module.modName + ' | invoking ' + command, args);
+                    console.log(`${module.modName} | invoking ${command}`, args);
                     // chama o comando do listener registrado
                     try {
                         let a = [message, args];
@@ -154,23 +158,23 @@ const bot = {
         });
 
         // invocando os eventos v2
-        for (let o of modules.iterateModules('events', true)) {
+        for (let o of modules.iterateModules("events", true)) {
             const [module, event, fn, opts] = o;
 
-            console.log(module.modName + ' | event registered ' + event);
+            console.log(`${module.modName} | event registered ${event}`);
 
             // registra um evento no client do discord
             // antigo código: discordClient.on(event, events[event]);
             discordClient.on(event, (...args) => {
                 // hook pra ver se o modulo tá desativado ou não
                 if (modules.isDisabled(module.modName)) {
-                    console.log(module.modName + ' | tried execute event ' + event + ' but module is disabled');
+                    console.log(`${module.modName} | tried execute event ${event} but module is disabled`);
                     return;
                 }
 
                 // só em alguns eventos, mandar o client nos argumentos, pra facilitar
                 // minha vida na hora de pegar o client do discord
-                if (event === 'ready') {
+                if (event === "ready") {
                     args = [discordClient].concat(args);
                 } else {
                     if (opts.guild) {
@@ -199,9 +203,9 @@ const bot = {
  * @param string
  */
 function parseArgs(string) {
-    if (string.indexOf('"') >= 0) {
+    if (string.indexOf("\"") >= 0) {
         // tira os espaços repetidos, primeiro de tudo
-        string = string.replace(/ +/g, ' ');
+        string = string.replace(/\s+/g, " ");
 
         let args = [];
         let insideQuote = false, argIdx = 0;
@@ -209,18 +213,18 @@ function parseArgs(string) {
             const char = string.charAt(i);
 
             switch (char) {
-                case ' ':
+                case " ":
                     if (!insideQuote) {
                         argIdx++;
                     }
                     break;
-                case '"':
+                case "\"":
                     insideQuote = !insideQuote;
                     continue;
             }
 
             if (!args[argIdx]) {
-                args[argIdx] = '';
+                args[argIdx] = "";
             }
             args[argIdx] += char;
         }
@@ -229,7 +233,7 @@ function parseArgs(string) {
     }
     // uma pequena otimização no caso de não ter nenhuma aspas, não faz sentido
     // correr a string inteira todas as vezes
-    return string.split(/ +/g);
+    return string.split(/\s+/g);
 }
 
 /**
@@ -256,7 +260,7 @@ function handleError(error, messageOrClient, _debug) {
         // handler
         if (error instanceof PermissionError) {
             // se for erro de permissão, só mostrar pro usuário
-            const msg = error.message || 'Você não tem permissão para usar este comando.';
+            const msg = error.message || "Você não tem permissão para usar este comando.";
             message.reply(`:no_entry_sign: ${msg}`);
             return;
         }
@@ -267,7 +271,7 @@ function handleError(error, messageOrClient, _debug) {
 
     if (!_debug) {
         // me avisa
-        client.fetchUser('208028185584074763', false)
+        client.fetchUser("208028185584074763", false)
             .then(me => {
                 return me.createDM();
             })
