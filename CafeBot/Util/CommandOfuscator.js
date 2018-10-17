@@ -12,12 +12,14 @@ class CommandOfuscator {
     }
 
     get modName() { return '_' + this.module.modName; }
+    get originalModule() { return this.module; }
 
     commands() {
         if (!this.module.commands) {
             return {};
         }
-        const commands = this.module.commands();
+        const module = this.module;
+        const commands = module.commands();
         let ofuscatedCommands = {};
         for (let cmd in commands) {
             if (commands.hasOwnProperty(cmd)) {

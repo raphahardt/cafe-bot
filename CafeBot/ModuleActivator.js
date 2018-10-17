@@ -1,5 +1,6 @@
 
 const Cafebase = require('./Cafebase');
+const CommandOfuscator = require('./Util/CommandOfuscator');
 
 /**
  * Fiz esse módulo pra poder ativar e desativar módulos do bot online
@@ -81,7 +82,7 @@ class ModuleActivator {
                     fn = methodsAvailable[m];
                 }
 
-                yield [module, m, fn, opts];
+                yield [module instanceof CommandOfuscator ? module.originalModule : module, m, fn, opts];
             }
         }
     }
