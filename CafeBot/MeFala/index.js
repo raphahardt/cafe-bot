@@ -11,7 +11,7 @@ class MeFala {
 
     get modName() { return 'mefala' }
 
-    mainCommand(message, args) {
+    async mainCommand(message, args) {
         if (args.length === 0) {
             return message.reply(':speaking_head: Faça alguma pergunta.');
         }
@@ -64,7 +64,7 @@ class MeFala {
             const emojiToReact = emojis.shift();
             return message.react(emojiToReact)
                 .then(() => {
-                    if (emojis.length) {
+                    if (!message.deleted && emojis.length) {
                         // continua enquanto tiver emoji pra mandar
                         return _react();
                     }

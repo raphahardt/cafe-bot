@@ -25,6 +25,10 @@ class InterativePrompt {
         return this.choices[key];
     }
 
+    hasChoice(key) {
+        return this.choices[key] !== undefined;
+    }
+
     setNext(id) {
         this.next = id;
         return this;
@@ -66,7 +70,7 @@ class InterativePrompt {
 
     start(id) {
         const that = this;
-        this.choices = {};
+        //this.choices = {};
         this.next = id;
         let oldMsg;
         return new Promise((resolve, reject) => {
@@ -86,7 +90,7 @@ class InterativePrompt {
                     }
 
                     let description = prompt.description ? this.renderDescription(prompt.description) : '';
-                    let footer = prompt.footer;
+                    let footer = this.renderDescription(prompt.footer);
 
                     if (prompt.pagination) {
                         description += `\n\n*(Página ${prompt.pageIndex + 1}/${prompt.pages.length})*\n`;

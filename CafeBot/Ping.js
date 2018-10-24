@@ -1,4 +1,5 @@
 const PermissionError = require('./Errors/PermissionError');
+const LongMessage = require('./Util/LongMessage');
 
 const utils = require('../utils');
 const adminsIds = require('../adminIds');
@@ -19,35 +20,52 @@ class Ping {
         // ;
     }
 
-    argsCommand(message, args) {
+    async argsCommand(message, args) {
+        console.log(args);
         const argsList = args.map(n => `:small_blue_diamond: ${n}`).join("\n");
-        return message.reply(`Argumentos (**${args.length}**):\n${argsList}`)
+        return message.reply(`Argumentos (**${args.length}**):\n${argsList}`);
+
+        // // deixa tudo como numero
+        // args = args.map(a => Math.min(9999, parseInt(a)));
+        //
+        // let counter = 1;
+        // let m = 'a'.repeat((args[0] || 1));
+        // m = m.match(/.{1,200}/gm).map(t => t + "" + counter++).join("");
+        // if (args[2]) m = m.match(new RegExp('.{1,' + args[2] + '}', 'gm')).join(" ");
+        // if (args[1]) m = m.match(new RegExp('.{1,' + args[1] + '}', 'gm')).join("\n");
+        //
+        // counter = 1;
+        // let m2 = 'b'.repeat((args[0] || 1) * 2);
+        // m2 = m2.match(/.{1,200}/gm).map(t => t + "" + counter++).join("");
+        // if (args[2]) m2 = m2.match(new RegExp('.{1,' + args[2] + '}', 'gm')).join(" ");
+        // if (args[1]) m2 = m2.match(new RegExp('.{1,' + args[1] + '}', 'gm')).join("\n");
+        //
+        // const longMessage = utils.longMessage(message);
+        //
+        // await longMessage.reply(m);
+        // message.client.setTimeout(async () => {
+        //     await longMessage.edit(m2);
+        //     message.client.setTimeout(async () => {
+        //         await longMessage.edit('oi');
+        //         message.client.setTimeout(async () => {
+        //             await longMessage.delete(2000);
+        //         }, 3000);
+        //     }, 6000);
+        // }, 3000);
+        //await longMessage.delete(6000);
+
     }
 
-    idsCommand(message, args) {
-        let members = [];
+    async idsCommand(message, args) {
+        let ids = await utils.messageResolver(message, args, true).resolveAll(true);
 
-        if (args.includes('admins')) {
-            let admins = [];
-            adminsIds.forEach(id => {
-                admins.push(message.guild.members.get(id));
-            });
-
-            members = members.concat(admins);
-
-            args.splice(args.indexOf('admins'), 1);
+        if (ids.length === 0) {
+            return message.reply(`:x: Nenhum elemento encontrado.`);
         }
 
-        members = members.concat(utils.resolveAllMentioned(message, args, true));
-
-        members = utils.uniqueArray(members);
-
-        if (members.length === 0) {
-            return message.reply(`:x: Nenhum membro encontrado.`);
-        }
-
-        const membersList = members.map(n => `:small_blue_diamond: ${n.user.username}: **${n.user.id}**`).join("\n");
-        return message.reply(`IDs dos membros:\n${membersList}`);
+        const text = ids.map(n => `:small_blue_diamond: ${n}: **${n.id}**`).join("\n");
+        const textNotFound = args.map(n => `:small_orange_diamond: ${n}`).join("\n");
+        return utils.longMessage(message).reply(`IDs dos membros:\n${text}` + (textNotFound ? `\nArgs não encontrados:\n${textNotFound}` : ''));
     }
 
     commands() {

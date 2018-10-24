@@ -35,6 +35,7 @@ let GACHA_PULL_COST = 100;
 const GACHA_MAX_PULLS = 10;
 let GACHA_INITIAL_TOKENS = 800;
 let GACHA_EXTRA_CHANCE_MULTIPLIER = 1;
+let GACHA_INFLATION = 0.001;
 
 let GACHA_DAILY_TOKENS = 80;
 let GACHA_DAILY_DAY = 24 * 60 * 60; // 1 dia
@@ -72,6 +73,9 @@ let GACHA_CHANGING_NICK = {};
 // cache pra saber quem ta tirando pull no momento, pra evitar race condition e exploitar tokens infinitos, por ex.
 let GACHA_ONGOING_PULL = {};
 
+// cache pra saber se o usuario tá usando a loja ou não
+let GACHA_ONGOING_SHOP = {};
+
 class Gacha {
     constructor() {
         this.db = new Cafebase('gacha');
@@ -80,6 +84,7 @@ class Gacha {
             GACHA_PULL_COST = config.pullCost || 100;
             GACHA_INITIAL_TOKENS = config.initialTokens || 800;
             GACHA_EXTRA_CHANCE_MULTIPLIER = config.extraChanceMultiplier || 1;
+            GACHA_INFLATION = config.inflation || 0.001;
 
             GACHA_DAILY_TOKENS = config.dailyTokens || 80;
             GACHA_DAILY_DAY = config.dailyOneDay || (24 * 60 * 60); // 1 dia
@@ -113,6 +118,12 @@ class Gacha {
     async gachaCommand(guild, message, args) {
         const arg = args.shift();
         const isDebug = args.includes('--debug') && hasPermission(message);
+
+        // bloqueia interações qdo tiver na loja
+        if (GACHA_ONGOING_SHOP[message.author.id]) {
+            return;
+        }
+
         switch (arg) {
             case 'create':
             case 'c':
@@ -359,147 +370,177 @@ class Gacha {
             throw new PermissionError();
         }
         const member = getCafeComPaoMember(guild, message);
-
         const channel = message.channel;
 
-        const prompt = InterativePrompt.create(channel, member, `:game_die: \`+gacha create\` **Criando um novo item** :new:`, 30000)
-            .addPrompt(
-                'prompt-type',
-                `Escolha o tipo de item a ser criado: ${typesText}`,
-                `Digite o número da opção`,
-                response => {
-                    const v = parseInt(response);
-                    return v >= 1 && v <= GACHA_ITEM_TYPES.length;
-                },
-                (choice, prompt) => {
-                    prompt.setChoice('type', parseInt(choice) - 1);
-                    prompt.setNext('prompt-rarity');
-                }
-            )
-            .addPrompt(
-                'prompt-rarity',
-                `Escolha qual vai ser a raridade desse item: ${raritiesText}`,
-                `Digite o número da opção`,
-                response => {
-                    const v = parseInt(response);
-                    return v >= 1 && v <= GACHA_RARITIES.length;
-                },
-                (choice, prompt) => {
-                    prompt.setChoice('rarity', parseInt(choice) - 1);
+        let items = await this.db.getArray('roles');
 
-                    switch (prompt.getChoice('type')) {
-                        case GACHA_TYPES.ROLE:
-                            prompt.setNext('prompt-color');
-                            break;
-                        case GACHA_TYPES.ICON:
-                            prompt.setNext('prompt-icon-default');
-                            break;
-                        case GACHA_TYPES.TROLL:
-                            prompt.setNext('prompt-icon');
-                            break;
-                        case GACHA_TYPES.GAME:
-                            prompt.setChoice('emoji', '🎮');
-                            prompt.setNext('prompt-game-link');
-                            break;
+        if (items.length === 0) {
+            return message.reply(`:x: Não existem itens cadastrados. Cadastre um usando \`+gacha create\`.`);
+        }
+
+        let pages = [];
+        let pageLength = 10;
+        let pageIndex = 0;
+        let itemIndex = 1;
+
+        items.forEach(item => {
+            pages[pageIndex] = pages[pageIndex] || '';
+            pages[pageIndex] += `\n:small_blue_diamond: `
+                + `\`[${itemIndex}]\` `
+                + formatItem(guild, item);
+
+            itemIndex++;
+
+            if (itemIndex % pageLength === 0) {
+                pageIndex++;
+            }
+        });
+
+        const prompt = InterativePrompt.create(channel, member, `:game_die: \`+gacha create\` **Criando um novo item no Gacha-Shop** :shopping_bags:`, 30000)
+            .addPromptPagination(
+                'shop-item',
+                `Escolha o item a ser colocado a venda na loja:`,
+                pages,
+                `Digite o número da opção`,
+                response => {
+                    const v = parseInt(response);
+                    return v >= 1 && v <= items.length;
+                },
+                (choice, prompt) => {
+                    const index = parseInt(choice) - 1;
+                    prompt.setChoice('itemToSell', items[index]);
+                    prompt.setNext('shop-quantity');
+                }
+            )
+            .addPrompt(
+                'shop-quantity',
+                `Escolha a quantidade disponível:`,
+                `Digite uma quantidade`,
+                response => {
+                    const v = parseInt(response);
+                    return v >= 1 && v <= 20;
+                },
+                (choice, prompt) => {
+                    prompt.setChoice('quantity', parseInt(choice));
+                    prompt.setNext('shop-cost-item');
+                }
+            )
+            .addPromptPagination(
+                'shop-cost-item',
+                (choices) => {
+                    if (choices.costItems) {
+                        return `**Custo**\n`
+                            + `Escolha mais um item de troca. `
+                            + `Caso queira custo em tokens, digite \`token\` como opção. `
+                            + `Caso não queira escolher mais um item, digite \`confirm\`.`;
                     }
+                    return `**Custo**\n`
+                        + `Agora você precisa definir quanto o item vai custar.\n\n`
+                        + `Escolha qual vai ser o item de troca. `
+                        + `Caso queira custo em tokens, digite \`token\` como opção. `
+                        + `Você vai poder escolher mais de um item de custo depois.`;
+                },
+                pages,
+                (choices) => {
+                    if (choices.costItems) {
+                        return `Digite o número da opção, \`token\` para custo em tokens, \`confirm\` se quiser finalizar a criação do item`;
+                    }
+                    return `Digite o número da opção, \`token\` para custo em tokens`;
+                },
+                response => {
+                    const v = parseInt(response);
+                    return response === 'token' || response === 'confirm' || (v >= 1 && v <= items.length);
+                },
+                (choice, prompt) => {
+                    const arr = prompt.getChoice('costItems') || [];
+                    const arrFormatted = prompt.getChoice('costItemsFormatted') || [];
+
+                    if (choice === 'confirm' && arr.length > 0) {
+                        prompt.setNext('shop-confirmation');
+                        return;
+                    }
+
+                    if (choice !== 'token') {
+                        const index = parseInt(choice) - 1;
+                        choice = items[index].id;
+
+                        arrFormatted.push(formatItem(guild, items[index]));
+                    } else {
+                        arrFormatted.push("Tokens");
+                    }
+
+                    arr.push(choice);
+                    prompt.setChoice('costItems', arr);
+                    prompt.setChoice('costItemsFormatted', arrFormatted);
+
+
+                    prompt.setNext('shop-cost-price');
                 }
             )
             .addPrompt(
-                'prompt-color',
-                `Digite uma cor, em hexadecimal, que a role vai ter.\nExemplo: **#fc00a3**`,
-                `Digite a cor`,
+                'shop-cost-price',
+                `**Custo**\nDigite o preço (quantidade necessária deste item)`,
+                `Digite uma quantidade`,
                 response => {
-                    return response.match(/^#[0-9a-fA-F]{6}$/);
+                    const v = parseInt(response);
+                    return v >= 1 && v <= 9999999;
                 },
                 (choice, prompt) => {
-                    prompt.setChoice('color', choice);
-                    prompt.setNext('prompt-name');
+                    const arr = prompt.getChoice('costPrices') || [];
+                    arr.push(parseInt(choice));
+                    prompt.setChoice('costPrices', arr);
+                    prompt.setNext('shop-cost-item');
                 }
             )
             .addPrompt(
-                'prompt-game-link',
-                `Digite o link (com \\<\\> em volta) que resgata o jogo, ou se o jogo for gift pela Steam, digite o link pro seu usuário. Se for uma key (Origin, Uplay, outros), digite a key. \nExemplo:\n **\\<<https://www.humblebundle.com/gift?key=ABCDE>\\>** (se for link do Humble Bundle)\n**\\<<https://steamcommunity.com/id/ABCDE>\\>** (se for gift no seu inventário da steam)`,
-                `Digite um link ou key`,
-                response => {
-                    return !response.startsWith(utils.prefix);
+                'shop-confirmation',
+                (choices) => {
+                    let text = "Está tudo correto?\n";
+                    text += ""
+                        + "\n**Item pra vender:** "
+                        + formatItem(guild, choices.itemToSell)
+                        + "\n**Quantidade:** "
+                        + choices.quantity
+                        + "\n**Custo:** "
+                    ;
+
+                    for (let i = 0; i < choices.costItemsFormatted.length; i++) {
+                        text += `\n`
+                            + `:small_red_triangle_down: `
+                            + choices.costPrices[i] + "x "
+                            + choices.costItemsFormatted[i]
+                        ;
+                    }
+                    return text;
                 },
-                (choice, prompt) => {
-                    prompt.setChoice('link', choice);
-                    prompt.setNext('prompt-name');
-                }
-            )
-            .addPrompt(
-                'prompt-icon-default',
-                `Digite um emoji para ser o ícone. Deve ser um emoji default, não pode ser um emoji personalizado.\nExemplo: :smiley:`,
-                `Digite o emoji`,
+                'Digite `yes` ou `y` para confirmar',
                 response => {
-                    return response.match(/^[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]$/u);
+                    return ['yes', 'y'].includes(response);
                 },
-                (choice, prompt) => {
-                    prompt.setChoice('emoji', choice);
-                    prompt.setNext('prompt-name');
-                }
-            )
-            .addPrompt(
-                'prompt-icon',
-                `Digite um emoji para ser o ícone. Pode ser um emoji default ou emoji personalizado, desde que seja DESTE server.\nExemplo: <:dance:463542150475546653>`,
-                `Digite o emoji`,
-                response => {
-                    return response.match(/^<:[^:]+:\d+>$/) || response.match(/^[\u{1f300}-\u{1f5ff}\u{1f900}-\u{1f9ff}\u{1f600}-\u{1f64f}\u{1f680}-\u{1f6ff}\u{2600}-\u{26ff}\u{2700}-\u{27bf}\u{1f1e6}-\u{1f1ff}\u{1f191}-\u{1f251}\u{1f004}\u{1f0cf}\u{1f170}-\u{1f171}\u{1f17e}-\u{1f17f}\u{1f18e}\u{3030}\u{2b50}\u{2b55}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{3297}\u{3299}\u{303d}\u{00a9}\u{00ae}\u{2122}\u{23f3}\u{24c2}\u{23e9}-\u{23ef}\u{25b6}\u{23f8}-\u{23fa}]$/u);
-                },
-                (choice, prompt) => {
-                    prompt.setChoice('emoji', choice);
-                    prompt.setNext('prompt-name');
-                }
-            )
-            .addPrompt(
-                'prompt-name',
-                `Digite o nome desse item. Exemplos:
-**Marrom-cocô** (se for uma role)
-**Murro na poc** (se for um icone tipo :left_facing_fist:)
-**Um avatar da polly** (se for um item troll)`,
-                `Digite o nome`,
-                response => {
-                    return !response.startsWith(utils.prefix);
-                },
-                (choice, prompt) => {
-                    prompt.setChoice('name', choice);
+                (choice, p) => {
+                    // deu tudo certo
                 }
             )
         ;
 
         // começa o prompt
-        return prompt.start('prompt-type')
-            .then(itemSelected => {
-                switch (itemSelected.type) {
-                    case GACHA_TYPES.ROLE:
-                        return createRole(this, guild, member, itemSelected.color, itemSelected.rarity, itemSelected.name, itemSelected)
-                            .catch(err => {
-                                if (err instanceof Error) {
-                                    throw err;
-                                }
-                                message.reply(`:x: ${err}`);
-                                return null;
-                            });
-                    case GACHA_TYPES.ICON:
-                    case GACHA_TYPES.TROLL:
-                    case GACHA_TYPES.GAME:
-                        return createItem(this, guild, member, itemSelected)
-                            .catch(err => {
-                                if (err instanceof Error) {
-                                    throw err;
-                                }
-                                message.reply(`:x: ${err}`);
-                                return null;
-                            });
-                }
-            })
-            .then(item => {
-                if (item) {
-                    return message.reply(`:white_check_mark: Item ${formatItem(guild, item)} criado com sucesso.`);
-                }
-            })
-            ;
+        const choices = await prompt.start('shop-item');
+
+        let itemShop = {
+            itemToSell: choices.itemToSell.id,
+            quantity: choices.quantity,
+            costs: {}
+        };
+
+        for (let i = 0; i < choices.costItems.length; i++) {
+            itemShop.costs[choices.costItems[i]] = choices.costPrices[i];
+        }
+
+        console.log('SHOP', itemShop);
+
+        await this.db.insert('shop', itemShop);
+
+        return message.reply(`:white_check_mark: Item ${formatItem(guild, choices.itemToSell)} criado com sucesso na loja.`);
     }
 
     /**
@@ -806,7 +847,6 @@ class Gacha {
      */
     async gachaKeepCommand(guild, message, args) {
         const member = getCafeComPaoMember(guild, message);
-
         const channel = message.channel;
 
         const info = await getInfo(this, member);
@@ -891,9 +931,11 @@ class Gacha {
 
         const channel = message.channel;
 
+        const preChoice = parseInt(args.shift()) - 1;
+
         let [shopItems, items] = await Promise.all([
-            this.db.getArray('shop'),
-            this.db.findAll('roles', item => item.rarity > 0)
+            this.db.findAll('shop', shopItem => shopItem.quantity > 0),
+            this.db.getArray('roles')
         ]);
 
         if (shopItems.length === 0) {
@@ -904,52 +946,52 @@ class Gacha {
             return message.reply(`:x: Nenhum item de gacha registrado. Aguarde os admins criarem novos itens.`);
         }
 
+        // marca aqui q usuario está usando a loja
+        // bloqueia qq outra interação, até ele cancelar a loja
+        GACHA_ONGOING_SHOP[member.id] = true;
+
+        const _find = (id) => {
+            for (let i = 0; i < items.length; i++) {
+                if (id === items[i].id) {
+                    return items[i];
+                }
+            }
+            return null;
+        };
+
         // coloca o objeto do item dentro de cada shopItem.
         // só faço isso pra facilitar minha vida na hora de mostrar pro usuario
         // qual item ele está comprando ou trocando
-        shopItems = shopItems.map(shopItem => {
-            for (let i = 0; i < items.length; i++) {
-                shopItem._costs = [];
-                if (shopItem.itemToSell === items[i].id) {
-                    shopItem._itemToSell = items[i];
-                }
-                for (let costId in shopItem.costs) {
-                    if (!shopItem.costs.hasOwnProperty(costId)) continue;
+        let itemsFormattedCache = {};
+        shopItems.forEach(shopItem => {
+            // itens de venda
+            itemsFormattedCache[shopItem.itemToSell] = formatItem(guild, _find(shopItem.itemToSell));
+            // itens de custo
+            for (let costId in shopItem.costs) {
+                if (!shopItem.costs.hasOwnProperty(costId)) continue;
 
-                    if (costId === items[i].id) {
-                        shopItem._costs.push({
-                            item: items[i],
-                            price: shopItem.costs[costId]
-                        });
-                    } else if (costId === "TOKEN") {
-                        shopItem._costs.push({
-                            item: "TOKEN",
-                            price: shopItem.costs[costId]
-                        });
-                    }
-                }
-                if (shopItem.itemToSell === items[i].id) {
-                    shopItem._itemToSell = items[i];
+                if (costId !== "token") {
+                    itemsFormattedCache[costId] = formatItem(guild, _find(costId));
                 }
             }
-            return shopItem;
         });
 
-        //const info = await getInfo(this, member);
+        let info = await getInfo(this, member);
 
         //let items = await this.db.findAll('roles', filter);
 
         let pages = [];
-        let pageLength = 10;
+        let pageLength = 8;
         let pageIndex = 0;
         let itemIndex = 1;
 
-        items.forEach(item => {
+        shopItems.forEach(shopItem => {
             pages[pageIndex] = pages[pageIndex] || '';
             pages[pageIndex] += `\n:small_blue_diamond: `
                 + `\`[${itemIndex}]\` `
-                + formatItem(guild, item, false, false)
-                + (info.keep.includes(item.id) ? ' *[Mantido]*' : '');
+                + itemsFormattedCache[shopItem.itemToSell]
+                + " (" + shopItem.quantity + ")"
+            ;
 
             itemIndex++;
 
@@ -958,40 +1000,166 @@ class Gacha {
             }
         });
 
-        const prompt = InterativePrompt.create(channel, member, `:game_die: \`+gacha keep\` **Mantendo um item**`, 60000)
+        const promptTitle = (message.channel instanceof Discord.DMChannel
+                ? '' : `${message.author},\n`) + ":game_die: **Gacha-Shop!** :shopping_bags:";
+        const prompt = InterativePrompt.create(channel, member, promptTitle, 120000)
             .addPromptPagination(
-                'prompt-item',
-                `Escolha o item a ser mantido (ou desmantido, caso já esteja):`,
+                "s-shop",
+                "Escolha o item que deseja comprar:",
                 pages,
-                `Digite o número do item`,
+                "Digite o número do item",
                 response => {
                     const v = parseInt(response);
-                    return v >= 1 && v <= items.length;
+                    return v >= 1 && v <= shopItems.length;
                 },
                 (choice, prompt) => {
                     prompt.setChoice('item', parseInt(choice) - 1);
+                    prompt.setNext('s-selected-item');
+                }
+            )
+            .addPrompt(
+                's-selected-item',
+                (choices) => {
+                    const selectedShopItem = shopItems[choices.item];
+                    let t = "";
+                    t += ""
+                        + "**Item escolhido: **\n"
+                        + ":white_small_square: "
+                        + itemsFormattedCache[selectedShopItem.itemToSell]
+                        + "\n"
+                        + "**Disponível: **\n"
+                        + ":white_small_square: "
+                        + selectedShopItem.quantity
+                        + "\n"
+                        + "**Custo: **"
+                    ;
+                    for (let costId in selectedShopItem.costs) {
+                        if (!selectedShopItem.costs.hasOwnProperty(costId)) continue;
+                        const price = selectedShopItem.costs[costId];
+
+                        t += "\n"
+                            + ":small_red_triangle_down: "
+                        ;
+                        if (costId === 'token') {
+                            t += "**Tokens** (*"
+                                + info.tokens
+                                + "*/"
+                                + price
+                                + ") "
+                                + (info.tokens >= price ? ":white_check_mark:" : ":x:")
+                            ;
+                        } else {
+                            t += itemsFormattedCache[costId]
+                                + " (*"
+                                + parseInt(info.roles[costId] || 0)
+                                + "*/"
+                                + price
+                                + ") "
+                                + (info.roles[costId] >= price ? ":white_check_mark:" : ":x:")
+                            ;
+                        }
+                    }
+
+                    t += "\n\nDeseja comprar este item?";
+
+                    return t;
+                },
+                "Digite `yes` para comprar, `back` para voltar ao menu",
+                response => {
+                    return ['yes', 'y', 'back'].includes(response);
+                },
+                (choice, prompt) => {
+                    if (choice === 'back') {
+                        prompt.setNext('s-shop');
+                        return;
+                    }
+                    //prompt.setChoice('item', parseInt(choice) - 1);
                 }
             )
         ;
 
-        const choice = await prompt.start('prompt-item');
-        const chooseItem = items[choice.item];
-        const isKeep = !info.keep.includes(chooseItem.id);
-
-        if (chooseItem) {
-            // muda info
-            if (isKeep) {
-                // mantem
-                info.keep.push(chooseItem.id)
-            } else {
-                // desmantem
-                info.keep.splice(info.keep.indexOf(chooseItem.id), 1);
-            }
-
-            await this.db.save('info/' + member.id + '/keep', info.keep);
-
-            return message.reply(`:white_check_mark: Item ${formatItem(guild, chooseItem)} ` + (isKeep ? 'marcado para manter' : 'desmarcado para manter') + '.');
+        if (preChoice >= 0 && preChoice < shopItems.length) {
+            prompt.setChoice('item', preChoice);
         }
+        const choice = await prompt.start(prompt.hasChoice('item') ? 's-selected-item' : 's-shop');
+
+        // termina interação com a loja
+        delete GACHA_ONGOING_SHOP[member.id];
+
+        // pega de novo do banco de dados, pra confirmar os dados na hora da transação
+        const purchasedId = shopItems[choice.item].id;
+        const purchased = await this.db.getOne('shop/' + purchasedId);
+        info = await getInfo(this, member);
+
+        // validação ---------
+        if (!purchased.quantity) {
+            return message.reply(`:x: **Compra falhou.** Não existe mais esse item na loja.`);
+        }
+
+        for (let costId in purchased.costs) {
+            if (!purchased.costs.hasOwnProperty(costId)) continue;
+            const price = purchased.costs[costId];
+
+            if (costId === 'token') {
+                if (info.tokens < price) {
+                    return message.reply(`:x: **Compra falhou.** Você precisa de **${price}** tokens, você tem apenas **${info.tokens}**.`);
+                }
+            } else {
+                if (!info.roles[costId] || info.roles[costId] < price) {
+                    return message.reply(`:x: **Compra falhou.** Você precisa de **${price}**x ${itemsFormattedCache[costId]}`
+                        + (info.roles[costId] ? `, você tem apenas **${info.roles[costId] || 0}**.` : ', você não tem **nenhum**.'));
+                }
+            }
+        }
+
+        // vender ------------
+        purchased.quantity--;
+
+        for (let costId in purchased.costs) {
+            if (!purchased.costs.hasOwnProperty(costId)) continue;
+            const price = purchased.costs[costId];
+
+            if (costId === "token") {
+                info.tokens -= price;
+            } else {
+                info.roles[costId] -= price;
+                if (info.roles[costId] === 0) {
+                    // deleta o item do inventario
+                    info.roles[costId] = null;
+                } else if (info.roles[costId] < 0) {
+                    // alguma conta deu errado, não permitir vender
+                    throw new Error('**Compra falhou.** Tente novamente.');
+                }
+            }
+        }
+        // item adicionado
+        info.roles[purchased.itemToSell] = info.roles[purchased.itemToSell] || 0;
+        info.roles[purchased.itemToSell]++;
+
+        await this.db.saveAll([
+            ['info/' + member.id, info],
+            ['shop/' + purchased.id, purchased]
+        ]);
+
+        return message.reply(`:white_check_mark: **Compra com sucesso!** Você possui agora **${info.roles[purchased.itemToSell]}**x ${itemsFormattedCache[purchased.itemToSell]}.`);
+
+        // const chooseItem = items[choice.item];
+        // const isKeep = !info.keep.includes(chooseItem.id);
+        //
+        // if (chooseItem) {
+        //     // muda info
+        //     if (isKeep) {
+        //         // mantem
+        //         info.keep.push(chooseItem.id)
+        //     } else {
+        //         // desmantem
+        //         info.keep.splice(info.keep.indexOf(chooseItem.id), 1);
+        //     }
+        //
+        //     await this.db.save('info/' + member.id + '/keep', info.keep);
+        //
+        //     return message.reply(`:white_check_mark: Item ${formatItem(guild, chooseItem)} ` + (isKeep ? 'marcado para manter' : 'desmarcado para manter') + '.');
+        // }
     }
 
     /**
@@ -1715,61 +1883,80 @@ class Gacha {
 
         // a cada X minutos
         if (minutes % GACHA_TOKEN_DROP_FREQUENCY === 0) {
-            return guild.fetchMembers()
-                .then(() => {
-                    let tokenSums = {};
+            await guild.fetchMembers();
 
-                    guild.members.forEach(member => {
-                        if (member.user.bot) return;
-                        /*for (let c = 0; c < GACHA_VALID_CHANNELS.length; c++) {
-                            const channel = guild.channels.get(GACHA_VALID_CHANNELS[c]);
-                        }*/
-                        const lastMessage = member.lastMessage;
+            let inflation = 0;
+            let tokenSums = {};
 
-                        console.log('MEMBER', member.id, date.getTime(), (lastMessage || {}).createdTimestamp);
+            guild.members.forEach(member => {
+                if (member.user.bot) return;
+                /*for (let c = 0; c < GACHA_VALID_CHANNELS.length; c++) {
+                    const channel = guild.channels.get(GACHA_VALID_CHANNELS[c]);
+                }*/
+                const lastMessage = member.lastMessage;
 
-                        if (lastMessage) {
-                            const diff = date.getTime() - lastMessage.createdTimestamp;
-                            const min = GACHA_TOKEN_DROP_MAX_TIMESTAMP, max = 0;
+                console.log('MEMBER', member.id, date.getTime(), (lastMessage || {}).createdTimestamp);
 
-                            // numero pelo qual, quando multiplicado, quanto mais perto do minimo, mais "zero" ele fica,
-                            // e quanto mais perto do maximo, mais "um" ele fica
-                            const penaltyRatio = Math.min(1, Math.max(0, (diff - min) / (max - min)));
+                if (lastMessage) {
+                    const diff = date.getTime() - lastMessage.createdTimestamp;
+                    const min = GACHA_TOKEN_DROP_MAX_TIMESTAMP, max = 0;
 
-                            let tokensToEarn = ((Math.random() * GACHA_TOKEN_DROP_AMOUNT) + GACHA_TOKEN_DROP_AMOUNT_MIN) * GACHA_TOKEN_DROP_AMOUNT_MULTIPLIER;
-                            tokensToEarn *= penaltyRatio;
+                    // numero pelo qual, quando multiplicado, quanto mais perto do minimo, mais "zero" ele fica,
+                    // e quanto mais perto do maximo, mais "um" ele fica
+                    const penaltyRatio = Math.min(1, Math.max(0, (diff - min) / (max - min)));
 
-                            // coloca nos tokens pra ganhar
-                            tokenSums[member.id] = parseInt(tokensToEarn);
+                    let tokensToEarn = ((Math.random() * GACHA_TOKEN_DROP_AMOUNT) + GACHA_TOKEN_DROP_AMOUNT_MIN) * GACHA_TOKEN_DROP_AMOUNT_MULTIPLIER;
+                    tokensToEarn *= penaltyRatio;
 
-                            // salva
-                            const modifyFn = info => {
-                                console.log('DROP TOKEN', member.id, info.tokens, tokenSums[member.id]);
-                                info.tokens += tokenSums[member.id];
-                                return info;
-                            };
+                    // coloca nos tokens pra ganhar
+                    tokenSums[member.id] = parseInt(tokensToEarn);
 
-                            modifyInfo(this, member.id, modifyFn)
-                                .then((info) => {
-                                    // salvo com sucesso
-                                })
-                                .catch(error => {
-                                    console.error(error);
-                                })
-                            ;
-                            // getInfo(this, member)
-                            //     .then(info => {
-                            //         info.tokens += tokenSums[member.id];
-                            //
-                            //         return this.db.save('info/' + member.id, info);
-                            //     })
-                            //     .catch(console.error)
-                            // ;
-                        }
-                    });
+                    // soma todos os valores ganhos para inflacionar os itens do shop
+                    inflation += tokenSums[member.id];
 
-                    //console.log('TOKEN SUMS', tokenSums);
-                });
+                    // salva
+                    const modifyFn = info => {
+                        console.log('DROP TOKEN', member.id, info.tokens, tokenSums[member.id]);
+                        info.tokens += tokenSums[member.id];
+                        return info;
+                    };
+
+                    modifyInfo(this, member.id, modifyFn)
+                        .then((info) => {
+                            // salvo com sucesso
+                        })
+                        .catch(error => {
+                            console.error(error);
+                        })
+                    ;
+                    // getInfo(this, member)
+                    //     .then(info => {
+                    //         info.tokens += tokenSums[member.id];
+                    //
+                    //         return this.db.save('info/' + member.id, info);
+                    //     })
+                    //     .catch(console.error)
+                    // ;
+                }
+            });
+
+            // inflaciona os itens do shop
+            if (inflation > 0) {
+                const shopItems = await this.db.findAll('shop', shopItem => shopItem.costs["token"]);
+
+                // calcula o valor a ser inflacionado
+                // o valor é sempre a soma de todos os ganhos distribuidos no server
+                // vezes um fator de multiplicação. no caso atualmente é 0,1%
+                inflation = parseInt(inflation * GACHA_INFLATION);
+
+                if (inflation > 0) {
+                    console.log('INFLATION', inflation);
+                    shopItems.forEach(shopItem => {
+                        shopItem.costs["token"] += inflation;
+                        this.db.save('shop/' + shopItem.id, shopItem);
+                    })
+                }
+            }
 
         }
     }

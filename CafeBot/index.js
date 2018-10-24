@@ -129,7 +129,7 @@ const bot = {
             // invocando os comandos v2
             for (let o of modules.iterateModules("commands")) {
                 const [module, cmd, fn, opts] = o;
-                console.log('FN', typeof(fn));
+                //console.log('FN', typeof(fn));
 
                 if (command === cmd) {
                     console.log(`${module.modName} | invoking ${command}`, args);

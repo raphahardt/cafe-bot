@@ -9,7 +9,7 @@ module.exports = class QuantosInterpreter {
     constructor() {}
 
     static interpret(user, questionPhrase, mentions) {
-        return questionPhrase.match(/(com )?(quant[oa]s|qt[oa]s) ([^ ]+)/i);
+        return questionPhrase.match(/(com )?(quant[oa]s?|qt[oa]s?) ([^ ]+)/i);
     }
 
     static get priority() { return 0 };
@@ -24,7 +24,7 @@ module.exports = class QuantosInterpreter {
             return n;
         }
 
-        const thing = questionPhrase.match(/(?:quant[oa]s|qt[oa]s) ([^?]+)/i);
+        const thing = questionPhrase.match(/(?:quant[oa]s?|qt[oa]s?) ([^?]+)/i);
         const seed = _chars(thing[1]);
 
         let max = 30;
