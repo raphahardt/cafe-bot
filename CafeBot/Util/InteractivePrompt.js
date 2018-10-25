@@ -123,7 +123,7 @@ class InteractivePrompt {
         // cria filter responses fn
         const filter = response => {
             const v = parseInt(response);
-            return v >= 1 && v <= count;
+            return v >= 1 && v < count;
         };
 
         // cria choice fn
@@ -181,7 +181,7 @@ class InteractivePrompt {
         // cria filter responses fn
         const filter = response => {
             const v = parseInt(response);
-            return v >= 1 && v <= count;
+            return v >= 1 && v < count;
         };
 
         // cria choice fn

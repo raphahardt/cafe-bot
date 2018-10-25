@@ -946,8 +946,6 @@ class Gacha {
             ];
         });
 
-        console.log('KEEP', itemsPrompt, itemsPrompt.length)
-
         const prompt = utils.prompt(this, message, `:game_die: **Mantendo um item**`, 60000)
             .addSimplePromptPagination(
                 'prompt-item',
@@ -1329,7 +1327,16 @@ class Gacha {
                 });
         }
 
-        await equipPromise;
+        try {
+            await equipPromise;
+        } catch (err) {
+            if (err instanceof PermissionError) {
+                // ignora pois provavelmente é algum erro de mudar o nick do dono do server, q não
+                // é permitido pelos bots
+            } else {
+                throw err;
+            }
+        }
 
         // muda info
         info.equip[newEquip.type] = isEquip ? newEquip.id : null;
@@ -2718,6 +2725,10 @@ function rarityLetterToNumber(letter) {
 
 function addEmojiToNickname(member, emoji) {
     return new Promise((resolve, reject) => {
+        if (member.id === member.guild.ownerID) {
+            // não é permitido mudar o nick de donos do server, então lançar erro
+            throw new PermissionError('Não é permitido o bot alterar o nickname do dono do server.');
+        }
         let newNickname = (member.nickname || member.user.username).trim();
         newNickname = emoji + ' ' + newNickname;
 
@@ -2740,6 +2751,10 @@ function addEmojiToNickname(member, emoji) {
 
 function removeEmojiToNickname(member, emoji) {
     return new Promise((resolve, reject) => {
+        if (member.id === member.guild.ownerID) {
+            // não é permitido mudar o nick de donos do server, então lançar erro
+            throw new PermissionError('Não é permitido o bot alterar o nickname do dono do server.');
+        }
         let oldNickname = (member.nickname || member.user.username).trim();
         let newNickname = oldNickname;
         newNickname = newNickname.replace(new RegExp(emoji, 'g'), '').trim();
@@ -2856,7 +2871,7 @@ function updateExtraTokensReacts(gacha, client, _debug) {
                                 for (let userId in tokensToAdd) {
                                     if (tokensToAdd[userId] !== 0) {
                                         modified = true;
-                                        modifyInfo(this, userId, info => {
+                                        modifyInfo(gacha, userId, info => {
                                             console.log('DRAW MODIFY TOKEN', userId, info.tokens, tokensToAdd[userId]);
                                             info.tokens += tokensToAdd[userId];
                                             return info;
