@@ -125,16 +125,12 @@ class Gacha {
         }
 
         switch (arg) {
+            case 'admin':
+            case 'adm':
+                return this.gachaAdminCommand(guild, message, args);
             case 'create':
             case 'c':
-                const subarg = args.shift();
-                switch (subarg) {
-                    case 'shop':
-                        return this.gachaCreateShopCommand(guild, message, args);
-                    case 'item':
-                    default:
-                        return this.gachaCreateCommand(guild, message, args);
-                }
+                return this.gachaCreateCommand(guild, message, args);
             case 'delete':
             case 'del':
                 return this.gachaDeleteCommand(guild, message, args);
@@ -177,9 +173,69 @@ class Gacha {
             case 'refreshnicks':
                 return this.gachaRefreshNicknamesCommand(guild, message, args);
             default:
-                const adminCommands = hasPermission(message) ? ['create', 'delete', 'draw', 'punish'] : [];
-                const commands = adminCommands.concat(['info', 'list', 'equip', 'exchange', 'pull', 'keep', 'bonus', 'testdm']).map(c => `\`${c}\``).join(', ');
+                const adminCommands = hasPermission(message) ? ['admin', 'draw', 'punish'] : [];
+                const commands = adminCommands.concat(['info', 'list', 'equip', 'exchange', 'pull', 'keep', 'bonus', 'shop', 'testdm']).map(c => `\`${c}\``).join(', ');
                 return message.reply(`:x: Comando inexistente.\nComandos disponíveis: ${commands} ou \`help\` para mais detalhes.`);
+        }
+    }
+
+    async gachaAdminCommand(guild, message, args) {
+        if (!hasPermission(message)) {
+            throw new PermissionError();
+        }
+        //const arg = args.shift();
+        const isDebug = args.includes('--debug') && hasPermission(message);
+
+        const prompt = utils.prompt(this, message, `:game_die: **Menu dos admins - Gacha**`, 30000)
+            .addSimplePromptOptions(
+                'admin-menu',
+                '',
+                [
+                    ['item', 'Gerenciar itens de gacha', 'admin-crud'],
+                    ['shop', 'Gerenciar itens a venda na loja', 'admin-crud'],
+                    ['refresh-reacts', 'Atualizar os reacts do draw'],
+                    ['refresh-nicks', 'Atualizar os nicks'],
+                ],
+                'menu'
+            )
+            .addSimplePromptOptions(
+                'admin-crud',
+                '',
+                [
+                    ['create', 'Criar novo'],
+                    ['edit', 'Alterar'],
+                    ['delete', 'Deletar'],
+                ],
+                'crud'
+            )
+        ;
+
+        let startId = 'admin-menu';
+        const choices = await prompt.start(startId);
+
+        switch (choices.menu) {
+            case 'item':
+                switch (choices.crud) {
+                    case 'create':
+                        return this.gachaCreateCommand(guild, message, args);
+                    case 'edit':
+                        return;
+                    case 'delete':
+                        return this.gachaDeleteCommand(guild, message, args);
+                }
+            case 'shop':
+                switch (choices.crud) {
+                    case 'create':
+                        return;
+                    case 'edit':
+                        return;
+                    case 'delete':
+                        return;
+                }
+            case 'refresh-reacts':
+                return updateExtraTokensReacts(this, message.client, isDebug);
+            case 'refresh-nicks':
+                return this.gachaRefreshNicknamesCommand(guild, message, args);
         }
     }
 
@@ -217,7 +273,7 @@ class Gacha {
             ;
         }
 
-        const prompt = InterativePrompt.create(channel, member, `:game_die: \`+gacha create\` **Criando um novo item** :new:`, 30000)
+        const prompt = InterativePrompt.create(channel, member, `:game_die: **Criando um novo item - Gacha** :new:`, 30000)
             .addPrompt(
                 'prompt-type',
                 `Escolha o tipo de item a ser criado: ${typesText}`,
@@ -378,39 +434,53 @@ class Gacha {
             return message.reply(`:x: Não existem itens cadastrados. Cadastre um usando \`+gacha create\`.`);
         }
 
-        let pages = [];
-        let pageLength = 10;
-        let pageIndex = 0;
-        let itemIndex = 1;
-
-        items.forEach(item => {
-            pages[pageIndex] = pages[pageIndex] || '';
-            pages[pageIndex] += `\n:small_blue_diamond: `
-                + `\`[${itemIndex}]\` `
-                + formatItem(guild, item);
-
-            itemIndex++;
-
-            if (itemIndex % pageLength === 0) {
-                pageIndex++;
-            }
+        let itemsPrompt = items.map(item => {
+            return [
+                item,
+                formatItem(guild, item)
+            ];
         });
 
-        const prompt = InterativePrompt.create(channel, member, `:game_die: \`+gacha create\` **Criando um novo item no Gacha-Shop** :shopping_bags:`, 30000)
-            .addPromptPagination(
+        // let pages = [];
+        // let pageLength = 10;
+        // let pageIndex = 0;
+        // let itemIndex = 1;
+        //
+        // items.forEach(item => {
+        //     pages[pageIndex] = pages[pageIndex] || '';
+        //     pages[pageIndex] += `\n:small_blue_diamond: `
+        //         + `\`[${itemIndex}]\` `
+        //         + formatItem(guild, item);
+        //
+        //     itemIndex++;
+        //
+        //     if (itemIndex % pageLength === 0) {
+        //         pageIndex++;
+        //     }
+        // });
+
+        const prompt = InterativePrompt.create(channel, member, `:game_die: **Criando um novo item no Gacha-Shop** :shopping_bags:`, 30000)
+            // .addPromptPagination(
+            //     'shop-item',
+            //     `Escolha o item a ser colocado a venda na loja:`,
+            //     pages,
+            //     `Digite o número da opção`,
+            //     response => {
+            //         const v = parseInt(response);
+            //         return v >= 1 && v <= items.length;
+            //     },
+            //     (choice, prompt) => {
+            //         const index = parseInt(choice) - 1;
+            //         prompt.setChoice('itemToSell', items[index]);
+            //         prompt.setNext('shop-quantity');
+            //     }
+            // )
+            .addSimplePromptPagination(
                 'shop-item',
-                `Escolha o item a ser colocado a venda na loja:`,
-                pages,
-                `Digite o número da opção`,
-                response => {
-                    const v = parseInt(response);
-                    return v >= 1 && v <= items.length;
-                },
-                (choice, prompt) => {
-                    const index = parseInt(choice) - 1;
-                    prompt.setChoice('itemToSell', items[index]);
-                    prompt.setNext('shop-quantity');
-                }
+                'Escolha o item a ser colocado a venda na loja:',
+                itemsPrompt,
+                'itemToSell',
+                'shop-quantity'
             )
             .addPrompt(
                 'shop-quantity',
@@ -771,7 +841,7 @@ class Gacha {
             }
         }
 
-        return utils.sendLongMessage(message.channel, `:gift: Itens disponíveis:${foundItems}`);
+        return utils.longMessage(message).send(`:gift: Itens disponíveis:${foundItems}`);
     }
 
     /**
@@ -802,10 +872,12 @@ class Gacha {
 
         items.forEach(item => {
             foundItems += `\n:small_blue_diamond: `
-                + (GACHA_ITEM_TYPES[item.type].canEquip ? `\`[${itemIndex}]\` ` : `\`[ ]\` `)
+                + bracket(GACHA_ITEM_TYPES[item.type].canEquip ? itemIndex : '', items) + " "
                 + `${info.roles[item.id]}x `
                 + formatItem(guild, item, false, info)
-                + (info.equip[item.type] === item.id ? ' *[Equipado]*' : '');
+                + (info.equip[item.type] === item.id ? ' *[Equipado]*' : '')
+                + (info.keep.includes(item.id) ? ' *[Mantido]*' : '')
+            ;
 
             if (GACHA_ITEM_TYPES[item.type].canEquip) {
                 itemIndex++;
@@ -815,10 +887,11 @@ class Gacha {
         if (!foundItems) {
             foundItems = `\n*Você não possui nenhum item.*`;
         } else {
-            foundItems += `\n\nPara equipar um item, use \`+gacha equip (número do item)\`.`;
+            foundItems += `\n\nPara equipar um item, use \`+gacha equip\`.`;
+            foundItems += `\nPara manter um item, use \`+gacha keep\`.`;
         }
 
-        return utils.sendLongMessage(message.channel, `${member},\nSeus tokens: **${info.tokens}**\n\nSeus itens:${foundItems}`);
+        return utils.longMessage(message).reply(`Seus tokens: **${info.tokens}**\n\nSeus itens:${foundItems}`);
 
     }
 
@@ -848,6 +921,7 @@ class Gacha {
     async gachaKeepCommand(guild, message, args) {
         const member = getCafeComPaoMember(guild, message);
         const channel = message.channel;
+        const keepIndex = parseInt(args.shift() || 0) - 1;
 
         const info = await getInfo(this, member);
 
@@ -864,58 +938,47 @@ class Gacha {
             return message.reply(`:x: Você não possui nenhum item.`);
         }
 
-        let pages = [];
-        let pageLength = 10;
-        let pageIndex = 0;
-        let itemIndex = 1;
-
-        items.forEach(item => {
-            pages[pageIndex] = pages[pageIndex] || '';
-            pages[pageIndex] += `\n:small_blue_diamond: `
-                + `\`[${itemIndex}]\` `
-                + formatItem(guild, item, false, false)
-                + (info.keep.includes(item.id) ? ' *[Mantido]*' : '');
-
-            itemIndex++;
-
-            if (itemIndex % pageLength === 0) {
-                pageIndex++;
-            }
+        let itemsPrompt = items.map(item => {
+            return [
+                item,
+                formatItem(guild, item)
+                + (info.keep.includes(item.id) ? ' *[Mantido]*' : '')
+            ];
         });
 
-        const prompt = InterativePrompt.create(channel, member, `:game_die: \`+gacha keep\` **Mantendo um item**`, 60000)
-            .addPromptPagination(
+        console.log('KEEP', itemsPrompt, itemsPrompt.length)
+
+        const prompt = utils.prompt(this, message, `:game_die: **Mantendo um item**`, 60000)
+            .addSimplePromptPagination(
                 'prompt-item',
-                `Escolha o item a ser mantido (ou desmantido, caso já esteja):`,
-                pages,
-                `Digite o número do item`,
-                response => {
-                    const v = parseInt(response);
-                    return v >= 1 && v <= items.length;
-                },
-                (choice, prompt) => {
-                    prompt.setChoice('item', parseInt(choice) - 1);
-                }
+                'Escolha o item a ser mantido (ou desmantido, caso já esteja):',
+                itemsPrompt,
+                'item'
             )
         ;
 
-        const choice = await prompt.start('prompt-item');
-        const chooseItem = items[choice.item];
-        const isKeep = !info.keep.includes(chooseItem.id);
+        let choice;
+        if (keepIndex >= 0) {
+            const item = items[keepIndex] || null;
+            choice = { item: item };
+        } else {
+            choice = await prompt.start('prompt-item');
+        }
+        const isKeep = !info.keep.includes(choice.item.id);
 
-        if (chooseItem) {
+        if (choice.item) {
             // muda info
             if (isKeep) {
                 // mantem
-                info.keep.push(chooseItem.id)
+                info.keep.push(choice.item.id)
             } else {
                 // desmantem
-                info.keep.splice(info.keep.indexOf(chooseItem.id), 1);
+                info.keep.splice(info.keep.indexOf(choice.item.id), 1);
             }
 
             await this.db.save('info/' + member.id + '/keep', info.keep);
 
-            return message.reply(`:white_check_mark: Item ${formatItem(guild, chooseItem)} ` + (isKeep ? 'marcado para manter' : 'desmarcado para manter') + '.');
+            return message.reply(`:white_check_mark: Item ${formatItem(guild, choice.item)} ` + (isKeep ? 'marcado para manter' : 'desmarcado para manter') + '.');
         }
     }
 
@@ -987,8 +1050,8 @@ class Gacha {
 
         shopItems.forEach(shopItem => {
             pages[pageIndex] = pages[pageIndex] || '';
-            pages[pageIndex] += `\n:small_blue_diamond: `
-                + `\`[${itemIndex}]\` `
+            pages[pageIndex] += `\n`
+                + bracket(itemIndex, shopItems) + " "
                 + itemsFormattedCache[shopItem.itemToSell]
                 + " (" + shopItem.quantity + ")"
             ;
@@ -1171,104 +1234,211 @@ class Gacha {
      */
     async gachaEquipCommand(guild, message, args) {
         const isDebug = args.includes('--debug') && hasPermission(message);
-        const equipIndex = parseInt(args.shift());
         const member = getCafeComPaoMember(guild, message);
+        const channel = message.channel;
+        const equipIndex = parseInt(args.shift() || 0) - 1;
 
-        return getInfo(this, member)
-            .then(info => {
-                let oldEquip = {}, newEquip;
+        const info = await getInfo(this, member);
 
-                const filter = (item, id) => {
-                    // vê se .roles[id] for maior do que zero
-                    // .roles[id] é o numero de itens possuídos pelo usuario
-                    return info.roles[item.id] && GACHA_ITEM_TYPES[item.type].canEquip;
-                };
+        const filter = (item, id) => {
+            // vê se .roles[id] for maior do que zero
+            // .roles[id] é o numero de itens possuídos pelo usuario
+            return info.roles[item.id] && GACHA_ITEM_TYPES[item.type].canEquip;
+        };
 
-                return this.db.findAll('roles', filter)
-                    .then(items => {
-                        let foundItems = 0;
-                        let itemIndex = 1;
+        let items = await this.db.findAll('roles', filter);
 
-                        items.forEach(item => {
-                            // old equip
-                            if (info.equip[item.type] === item.id) {
-                                oldEquip[item.type] = item;
-                            }
+        if (items.length === 0) {
+            return message.reply(`:x: Você não possui nenhum item.`);
+        }
 
-                            // new equip
-                            if (itemIndex === equipIndex) {
-                                newEquip = item;
-                            }
+        let oldEquip = {}, newEquip;
 
-                            foundItems++;
-                            itemIndex++;
-                        });
+        let itemsPrompt = items.map(item => {
+            // old equip
+            if (info.equip[item.type] === item.id) {
+                oldEquip[item.type] = item;
+            }
 
-                        if (!foundItems) {
-                            return message.reply(`:x: Você não possui nenhum item.`);
-                        }
+            return [
+                item,
+                formatItem(guild, item)
+                + (info.equip[item.type] === item.id ? ' *[Equipado]*' : '')
+            ];
+        });
 
-                        if (!newEquip) {
-                            return message.reply(`:x: Item \`${equipIndex}\` não existe. Digite um número de 1 a ${foundItems}.`);
-                        }
+        const prompt = utils.prompt(this, message, `:game_die: **Equipando um item**`, 60000)
+            .addSimplePromptPagination(
+                'prompt-item',
+                'Escolha o item a ser equipado:',
+                itemsPrompt,
+                'item'
+            )
+        ;
 
-                        // muda a role do usuario
-                        let equipPromise;
-                        const isEquip = (!oldEquip[newEquip.type] || (newEquip.id !== oldEquip[newEquip.type].id));
+        let choice;
+        if (equipIndex >= 0) {
+            const item = items[equipIndex] || null;
+            choice = { item: item };
+        } else {
+            choice = await prompt.start('prompt-item');
+        }
 
-                        let unequipFunction = (equipItem) => {
-                            switch (equipItem.type) {
-                                case GACHA_TYPES.ROLE:
-                                    return member.removeRole(equipItem.role);
-                                case GACHA_TYPES.ICON:
-                                    return removeEmojiToNickname(member, equipItem.emoji);
-                                default:
-                                    return Promise.resolve();
-                            }
-                        };
+        newEquip = choice.item;
+        if (!newEquip) {
+            return message.reply(`:x: Item \`${equipIndex+1}\` não existe. Digite um número de 1 a ${items.length}.`);
+        }
 
-                        let equipFunction = (equipItem) => {
-                            switch (equipItem.type) {
-                                case GACHA_TYPES.ROLE:
-                                    return member.addRole(equipItem.role);
-                                case GACHA_TYPES.ICON:
-                                    return addEmojiToNickname(member, equipItem.emoji);
-                                default:
-                                    return Promise.resolve();
-                            }
-                        };
+        // muda a role do usuario
+        let equipPromise;
+        const isEquip = (!oldEquip[newEquip.type] || (newEquip.id !== oldEquip[newEquip.type].id));
 
-                        if (!isEquip) {
-                            // desequipar
-                            equipPromise = unequipFunction(newEquip);
-                        } else {
-                            // equipar e tirar a antiga, se tiver
-                            equipPromise = equipFunction(newEquip)
-                                .then(() => {
-                                    if (oldEquip[newEquip.type]) {
-                                        return unequipFunction(oldEquip[newEquip.type]);
-                                    }
-                                    return Promise.resolve();
-                                });
-                        }
-                        return equipPromise
-                            .then(() => {
-                                // muda info
-                                info.equip[newEquip.type] = isEquip ? newEquip.id : null;
+        let unequipFunction = (equipItem) => {
+            switch (equipItem.type) {
+                case GACHA_TYPES.ROLE:
+                    return member.removeRole(equipItem.role);
+                case GACHA_TYPES.ICON:
+                    return removeEmojiToNickname(member, equipItem.emoji);
+                default:
+                    return Promise.resolve();
+            }
+        };
 
-                                this.db.save('info/' + member.id + '/equip', info.equip)
-                                    .then(() => {
-                                        return message.reply(`:white_check_mark: Item ${formatItem(guild, newEquip)} ` + (isEquip ? 'equipado' : 'desequipado') + '.');
-                                    })
-                                ;
-                            })
-                            ;
+        let equipFunction = (equipItem) => {
+            switch (equipItem.type) {
+                case GACHA_TYPES.ROLE:
+                    return member.addRole(equipItem.role);
+                case GACHA_TYPES.ICON:
+                    return addEmojiToNickname(member, equipItem.emoji);
+                default:
+                    return Promise.resolve();
+            }
+        };
 
-                    })
-                    ;
+        if (!isEquip) {
+            // desequipar
+            equipPromise = unequipFunction(newEquip);
+        } else {
+            // equipar e tirar a antiga, se tiver
+            equipPromise = equipFunction(newEquip)
+                .then(() => {
+                    if (oldEquip[newEquip.type]) {
+                        return unequipFunction(oldEquip[newEquip.type]);
+                    }
+                    return Promise.resolve();
+                });
+        }
 
-            })
-            ;
+        await equipPromise;
+
+        // muda info
+        info.equip[newEquip.type] = isEquip ? newEquip.id : null;
+
+        await this.db.save('info/' + member.id + '/equip', info.equip);
+
+        return message.reply(`:white_check_mark: Item ${formatItem(guild, newEquip)} ` + (isEquip ? 'equipado' : 'desequipado') + '.');
+
+        // ///////////////////
+        //
+        // const isDebug = args.includes('--debug') && hasPermission(message);
+        // const equipIndex = parseInt(args.shift());
+        // const member = getCafeComPaoMember(guild, message);
+        //
+        // return getInfo(this, member)
+        //     .then(info => {
+        //         let oldEquip = {}, newEquip;
+        //
+        //         const filter = (item, id) => {
+        //             // vê se .roles[id] for maior do que zero
+        //             // .roles[id] é o numero de itens possuídos pelo usuario
+        //             return info.roles[item.id] && GACHA_ITEM_TYPES[item.type].canEquip;
+        //         };
+        //
+        //         return this.db.findAll('roles', filter)
+        //             .then(items => {
+        //                 let foundItems = 0;
+        //                 let itemIndex = 1;
+        //
+        //                 items.forEach(item => {
+        //                     // old equip
+        //                     if (info.equip[item.type] === item.id) {
+        //                         oldEquip[item.type] = item;
+        //                     }
+        //
+        //                     // new equip
+        //                     if (itemIndex === equipIndex) {
+        //                         newEquip = item;
+        //                     }
+        //
+        //                     foundItems++;
+        //                     itemIndex++;
+        //                 });
+        //
+        //                 if (!foundItems) {
+        //                     return message.reply(`:x: Você não possui nenhum item.`);
+        //                 }
+        //
+        //                 if (!newEquip) {
+        //                     return message.reply(`:x: Item \`${equipIndex}\` não existe. Digite um número de 1 a ${foundItems}.`);
+        //                 }
+        //
+        //                 // muda a role do usuario
+        //                 let equipPromise;
+        //                 const isEquip = (!oldEquip[newEquip.type] || (newEquip.id !== oldEquip[newEquip.type].id));
+        //
+        //                 let unequipFunction = (equipItem) => {
+        //                     switch (equipItem.type) {
+        //                         case GACHA_TYPES.ROLE:
+        //                             return member.removeRole(equipItem.role);
+        //                         case GACHA_TYPES.ICON:
+        //                             return removeEmojiToNickname(member, equipItem.emoji);
+        //                         default:
+        //                             return Promise.resolve();
+        //                     }
+        //                 };
+        //
+        //                 let equipFunction = (equipItem) => {
+        //                     switch (equipItem.type) {
+        //                         case GACHA_TYPES.ROLE:
+        //                             return member.addRole(equipItem.role);
+        //                         case GACHA_TYPES.ICON:
+        //                             return addEmojiToNickname(member, equipItem.emoji);
+        //                         default:
+        //                             return Promise.resolve();
+        //                     }
+        //                 };
+        //
+        //                 if (!isEquip) {
+        //                     // desequipar
+        //                     equipPromise = unequipFunction(newEquip);
+        //                 } else {
+        //                     // equipar e tirar a antiga, se tiver
+        //                     equipPromise = equipFunction(newEquip)
+        //                         .then(() => {
+        //                             if (oldEquip[newEquip.type]) {
+        //                                 return unequipFunction(oldEquip[newEquip.type]);
+        //                             }
+        //                             return Promise.resolve();
+        //                         });
+        //                 }
+        //                 return equipPromise
+        //                     .then(() => {
+        //                         // muda info
+        //                         info.equip[newEquip.type] = isEquip ? newEquip.id : null;
+        //
+        //                         this.db.save('info/' + member.id + '/equip', info.equip)
+        //                             .then(() => {
+        //                                 return message.reply(`:white_check_mark: Item ${formatItem(guild, newEquip)} ` + (isEquip ? 'equipado' : 'desequipado') + '.');
+        //                             })
+        //                         ;
+        //                     })
+        //                     ;
+        //
+        //             })
+        //             ;
+        //
+        //     })
+        //     ;
     }
 
     /**
@@ -1745,7 +1915,7 @@ class Gacha {
                 info.tokens += GACHA_DAILY_BONUS_STREAK_TOKENS;
             }
 
-            console.log('INFO END', info);
+            //console.log('INFO END', info);
             return info;
         };
 
@@ -2283,6 +2453,8 @@ class Gacha {
             + `Abre um menu interativo que você vai poder escolher que itens você quer sempre manter dos que `
             + `são do tipo ${GACHA_RARITIES[0].emojiLetter} no exchange.\n`
             + `\n`
+            + `\`+gacha shop\`\n`
+            + `Visite a lojinha!\n`
             + `\n`
             + `\`+gacha testdm\`\n`
             + `Verifica se o bot consegue mandar DM direto pra você. Isso é necessário para claim de jogos do gacha. `
@@ -2291,7 +2463,7 @@ class Gacha {
             + `tem esse direito, porém não poderá dar claim em jogos.\n`
         ;
 
-        return utils.sendLongMessage(message.channel, text);
+        return utils.longMessage(message).reply(text);
     }
 }
 
@@ -2329,6 +2501,19 @@ function createItem(gacha, guild, user, props) {
         }).catch(reject);
 
     });
+}
+
+function bracket(index, items) {
+    // verifica quantos digitos terá de padding
+    let digits = 1, len = items.length;
+    while (len >= 10) {
+        digits++;
+        len = len % 10;
+    }
+
+    const padded = String(" ".repeat(digits) + index).slice(-digits);
+
+    return `\`[${padded}]\``;
 }
 
 function createRole(gacha, guild, user, color, rarity, name, props) {
@@ -2593,7 +2778,7 @@ function fetchReactsFromMessage(message, oldReacts, maxReacts, _debug) {
                 message.reactions.forEach(reaction => {
                     reactionsUsers[i++].forEach(user => {
                         // o if evita contabilizar auto-reacts
-                        console.log('A', user.id !== message.author.id, user.bot);
+                        //console.log('A', user.id !== message.author.id, user.bot);
                         if (_debug || (user.id !== message.author.id && !user.bot)) {
                             reacts[user.id] = reacts[user.id] || 0;
                             reacts[user.id]++;

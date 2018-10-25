@@ -1,5 +1,6 @@
 
 const Discord = require("discord.js");
+const LongMessage = require("./LongMessage");
 
 class InterativePrompt {
     constructor(channel, user, title, timeout) {
@@ -34,6 +35,16 @@ class InterativePrompt {
         return this;
     }
 
+    /**
+     *
+     * @param id
+     * @param description
+     * @param footer
+     * @param filterResponses
+     * @param cbChoice
+     * @param maxChoices
+     * @return {InterativePrompt}
+     */
     addPrompt(id, description, footer, filterResponses, cbChoice, maxChoices) {
         this.prompts[id] = {
             id,
@@ -46,12 +57,147 @@ class InterativePrompt {
         return this;
     }
 
+    /**
+     *
+     * @param id
+     * @param description
+     * @param pages
+     * @param footer
+     * @param filterResponses
+     * @param cbChoice
+     * @param maxChoices
+     * @return {InterativePrompt}
+     */
     addPromptPagination(id, description, pages, footer, filterResponses, cbChoice, maxChoices) {
         this.addPrompt(id, description, footer, filterResponses, cbChoice, maxChoices);
         this.prompts[id].pagination = true;
         this.prompts[id].pages = pages;
         this.prompts[id].pageIndex = 0;
         return this;
+    }
+
+    /**
+     *
+     * @param id
+     * @param descriptionTitle
+     * @param options
+     * @param choiceName
+     * @param nextId
+     * @return {InterativePrompt}
+     */
+    addSimplePromptPagination(id, descriptionTitle, options, choiceName, nextId) {
+        // cria descrição
+        let pages = [];
+        let pageLength = 10;
+        let pageIndex = 0;
+        let count = 1;
+        let optionValues = [], optionNext = [];
+
+        for (let option of options) {
+            if (!option) continue; // ignora opções vazias
+
+            if (Array.isArray(option)) {
+                // se tiver valor, gravar o valor
+                optionValues.push(option[0]);
+                optionNext.push(option[2]);
+                option = option[1];
+            } else {
+                // se não tem valor, gravar o numero
+                optionValues.push(count - 1);
+                optionNext.push(nextId);
+            }
+
+            pages[pageIndex] = pages[pageIndex] || "";
+            pages[pageIndex] += "\n"
+                + bracket(count, options) + " "
+                + option;
+
+            count++;
+
+            if ((count-1) % pageLength === 0) {
+                pageIndex++;
+            }
+        }
+        const footer = 'Escolha uma opção';
+
+        // cria filter responses fn
+        const filter = response => {
+            const v = parseInt(response);
+            return v >= 1 && v <= count;
+        };
+
+        // cria choice fn
+        if (typeof choiceName !== 'function') {
+            const n = choiceName;
+            choiceName = (choice, prompt) => {
+                const index = parseInt(choice) - 1;
+                const value = optionValues[index];
+                prompt.setChoice(n, value);
+                if (optionNext[index]) {
+                    prompt.setNext(optionNext[index]);
+                }
+            }
+        }
+
+        return this.addPromptPagination(id, descriptionTitle, pages, footer, filter, choiceName, 1);
+    }
+
+    /**
+     *
+     * @param id
+     * @param descriptionTitle
+     * @param options
+     * @param choiceName
+     * @param nextId
+     * @return {InterativePrompt}
+     */
+    addSimplePromptOptions(id, descriptionTitle, options, choiceName, nextId) {
+        // cria descricao
+        let descr = '';
+        let count = 1;
+        let optionValues = [], optionNext = [];
+
+        for (let option of options) {
+            if (!option) continue; // ignora opções vazias
+
+            if (Array.isArray(option)) {
+                // se tiver valor, gravar o valor
+                optionValues.push(option[0]);
+                optionNext.push(option[2]);
+                option = option[1];
+            } else {
+                // se não tem valor, gravar o numero
+                optionValues.push(count - 1);
+                optionNext.push(nextId);
+            }
+            descr += "\n"
+                + bracket(count, options) + " "
+                + option
+            ;
+            count++;
+        }
+        const footer = 'Escolha uma opção';
+
+        // cria filter responses fn
+        const filter = response => {
+            const v = parseInt(response);
+            return v >= 1 && v <= count;
+        };
+
+        // cria choice fn
+        if (typeof choiceName !== 'function') {
+            const n = choiceName;
+            choiceName = (choice, prompt) => {
+                const index = parseInt(choice) - 1;
+                const value = optionValues[index];
+                prompt.setChoice(n, value);
+                if (optionNext[index]) {
+                    prompt.setNext(optionNext[index]);
+                }
+            }
+        }
+
+        return this.addPrompt(id, descr.trim(), footer, filter, choiceName, 1);
     }
 
     renderDescription(description) {
@@ -73,6 +219,7 @@ class InterativePrompt {
         //this.choices = {};
         this.next = id;
         let oldMsg;
+        let longMsg = new LongMessage(this.channel, this.user);
         return new Promise((resolve, reject) => {
             let prom = Promise.resolve();
 
@@ -99,8 +246,21 @@ class InterativePrompt {
                         footer += `, \`next\` para a próxima página, \`prev\` para a anterior,`;
                     }
 
-                    const text = (this.title ? this.title + "\n\n" : "") + (description ? description + "\n\n" : "");
-                    return this.channel.send(`${text}${footer} ou \`cancel\` para cancelar.`);
+                    // adiciona um padding no lado esquerdo
+                    description = description.replace(/^/mg, "│ ");
+
+                    const text = ""
+                        +     "┌────────────────────── ─ -\n"
+                        + (this.title
+                            ? this.title.replace(/^/mg, "│ ") + "\n"
+                            + "├────────────────────── ─ -\n"
+                            : "")
+                        + (description
+                            ? description + "\n"
+                            + "└────────────────────── ─ -\n"
+                            : "")
+                    ;
+                    return longMsg.send(`${text}${footer} ou \`cancel\` para cancelar.`);
                 }).then(msg => {
                     if (msg) {
                         oldMsg = msg;
@@ -225,6 +385,19 @@ class InterativePrompt {
             });
         });
     }
+}
+
+function bracket(index, items) {
+    // verifica quantos digitos terá de padding
+    let digits = 1, len = items.length;
+    while (len >= 10) {
+        digits++;
+        len = len % 10;
+    }
+
+    const padded = String(" ".repeat(digits) + index).slice(-digits);
+
+    return `\`[${padded}]\``;
 }
 
 module.exports = InterativePrompt;

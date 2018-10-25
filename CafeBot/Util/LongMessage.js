@@ -5,6 +5,11 @@ const Discord = require("discord.js");
  * Ele é inteligente o suficiente pra não separar metades de frases.
  */
 class LongMessage {
+    /**
+     *
+     * @param channel
+     * @param author
+     */
     constructor(channel, author) {
         this.channel = channel;
         this.author = author;
@@ -12,6 +17,10 @@ class LongMessage {
 
         // faixa de 30 caracteres pra menos só pra garantir
         this.MAX_MESSAGE_LENGTH = 1970;
+    }
+
+    get message() {
+        return this.messages.length > 0 ? this.messages[0] : null;
     }
 
     /**

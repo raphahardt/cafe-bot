@@ -46,7 +46,7 @@ class Cafebase {
         return Promise.all(promises);
     }
 
-    transation(path, actionFn, applyLocally) {
+    transaction(path, actionFn, applyLocally) {
         if (applyLocally === undefined) applyLocally = true;
         return new Promise((resolve, reject) => {
             this.ref.child(path).transaction(actionFn, (err, commited, snapshot) => {
@@ -63,8 +63,8 @@ class Cafebase {
     }
 
     transactionOne(path, actionFn, defaultObject, applyLocally) {
-        return this.transation(path, (value) => {
-            console.log('transationOne', value);
+        return this.transaction(path, (value) => {
+            //console.log('transactionOne', value);
             if (typeof(defaultObject) === 'object') {
                 if (!value) {
                     value = {};
@@ -92,13 +92,13 @@ class Cafebase {
         }, applyLocally);
     }
 
-    transationAll(pathsAndActionsFn, applyLocally) {
+    transactionAll(pathsAndActionsFn, applyLocally) {
         if (applyLocally === undefined) applyLocally = true;
         let promises = [];
         for (let i = 0; i < pathsAndActionsFn.length; i++) {
             const path = pathsAndActionsFn[i][0];
             const actionFn = pathsAndActionsFn[i][1];
-            promises.push(this.transation(path, actionFn, applyLocally));
+            promises.push(this.transaction(path, actionFn, applyLocally));
         }
 
         return Promise.all(promises);

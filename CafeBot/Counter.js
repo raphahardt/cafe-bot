@@ -45,7 +45,7 @@ class Counter {
         if (args[2]) m = m.match(new RegExp('.{1,' + args[2] + '}', 'gm')).join(" ");
         if (args[1]) m = m.match(new RegExp('.{1,' + args[1] + '}', 'gm')).join("\n");
 
-        return utils.sendLongMessage(message.channel, m);
+        return utils.longMessage(message).send(m);
     }
 
     broomCommand(message, args) {
@@ -81,115 +81,52 @@ class Counter {
 
         return prompt.start('prompt-item')
             .then(selected => {
-                message.reply(selected.item);
+                return message.reply(selected.item);
             })
         ;
     }
 
-    dbTestCommand(message, args) {
+    async dbTestCommand(message, args) {
         const action = args.shift();
+        let list = [];
 
         switch (action) {
             case 'list':
-                this.db.getArray(args[0]).then(list => {
-                    const text = list.map(i => `> ${JSON.stringify(i)}`).join("\n");
-                    message.reply(text);
-                }).catch(err => {
-                    console.error(err);
-                    message.reply(`:x: ${err}`);
-                });
+                list = await this.db.getArray(args[0]);
                 break;
             case 'find':
-                this.db.findAll(args[0], f => f.name === args[1]).then(found => {
-                    return found;
-                }).then(list => {
-                    const text = list.map(i => `> ${JSON.stringify(i)}`).join("\n");
-                    message.reply(text);
-                }).catch(err => {
-                    console.error(err);
-                    message.reply(`:x: ${err}`);
-                });
+                list = await this.db.findAll(args[0], f => f.name === args[1]);
                 break;
             case 'findone':
-                this.db.findOne(args[0], f => f.name === args[1]).then(found => {
-                    return found;
-                }).then(found => {
-                    message.reply(JSON.stringify(found));
-                }).catch(err => {
-                    console.error(err);
-                    message.reply(`:x: ${err}`);
-                });
-                break;
+                const found = await this.db.findOne(args[0], f => f.name === args[1]);
+                return message.reply(JSON.stringify(found));
             case 'insert':
-                this.db.insert(args[0], { name: args[1] }).then(inserted => {
-                    return this.db.getArray(args[0]);
-                }).then(list => {
-                    const text = list.map(i => `> ${JSON.stringify(i)}`).join("\n");
-                    message.reply(text);
-                }).catch(err => {
-                    console.error(err);
-                    message.reply(`:x: ${err}`);
-                });
+                await this.db.insert(args[0], { name: args[1] });
+                list = await this.db.getArray(args[0]);
                 break;
             case 'clear':
-                this.db.save(args[0], null).then(saved => {
-                    return this.db.getArray(args[0]);
-                }).then(list => {
-                    const text = list.map(i => `> ${JSON.stringify(i)}`).join("\n");
-                    message.reply(text);
-                }).catch(err => {
-                    console.error(err);
-                    message.reply(`:x: ${err}`);
-                });
+                await this.db.save(args[0], null);
+                list = await this.db.getArray(args[0]);
                 break;
         }
-    }
 
-    /*async asyncTestCommand(message, args) {
-        const text = await asyncFunc(message.client, message.content);
-
-        message.reply(text);
-    }*/
-
-    nickCommand(message, args) {
-        console.log('+NICK', args[0]);
-        message.member.setNickname(args[0]);
-    }
-
-    onMemberUpdate(oldMember, newMember) {
-        let oldNick = oldMember.nickname || oldMember.user.nickname;
-        let newNick = newMember.nickname || newMember.user.nickname;
-        console.log('MUDOU NICK', oldNick, newNick);
-        if (oldNick !== newNick) {
-            newMember.setNickname(oldNick);
-        }
+        const text = list.map(i => `> ${JSON.stringify(i)}`).join("\n");
+        return utils.longMessage(message).reply(text);
     }
 
     commands() {
         return {
             'count': this.countCommand,
             'page': this.pageCommand,
-            //'nick': this.nickCommand,
             'vassoura': this.broomCommand,
             'db': this.dbTestCommand,
-            'msgtest': this.messageTestCommand/*,
-            'async': this.asyncTestCommand*/
+            'msgtest': this.messageTestCommand
         }
     }
 
     events() {
-        return {
-            //'guildMemberUpdate': this.onMemberUpdate
-        }
+        return {}
     }
 }
-
-// function asyncFunc(client, text) {
-//     return new Promise(resolve => {
-//         client.setTimeout(function () {
-//             resolve(`Teste asyncrono: ${text}`);
-//         }, 3000);
-//     });
-// }
 
 module.exports = Counter;
