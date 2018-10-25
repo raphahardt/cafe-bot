@@ -3,7 +3,7 @@ const utils = require('../utils');
 const Discord = require("discord.js");
 const Cafebase = require('./Cafebase');
 
-const InterativePrompt = require('./Util/InterativePrompt');
+const InteractivePrompt = require('./Util/InteractivePrompt');
 const randomNumber = require('./Util/RandomNumber');
 
 const PermissionError = require('./Errors/PermissionError');
@@ -101,7 +101,7 @@ class Sorteio {
 
         const isRecover = args.includes('--recover');
 
-        const prompt = new InterativePrompt(message.channel, message.author, ':tickets: **Criando um prêmio para o giveaway** :new:', 60000)
+        const prompt = new InteractivePrompt(message.channel, message.author, ':tickets: **Criando um prêmio para o giveaway** :new:', 60000)
             .addPrompt(
                 'g-title',
                 'Escolha um título para esse giveaway.',

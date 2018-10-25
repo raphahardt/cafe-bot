@@ -2,7 +2,7 @@
 const Discord = require("discord.js");
 const LongMessage = require("./LongMessage");
 
-class InterativePrompt {
+class InteractivePrompt {
     constructor(channel, user, title, timeout) {
         this.channel = channel;
         this.user = user;
@@ -14,7 +14,7 @@ class InterativePrompt {
     }
 
     static create(channel, member, title, timeout) {
-        return new InterativePrompt(channel, member, title, timeout);
+        return new InteractivePrompt(channel, member, title, timeout);
     }
 
     setChoice(key, value) {
@@ -43,7 +43,7 @@ class InterativePrompt {
      * @param filterResponses
      * @param cbChoice
      * @param maxChoices
-     * @return {InterativePrompt}
+     * @return {InteractivePrompt}
      */
     addPrompt(id, description, footer, filterResponses, cbChoice, maxChoices) {
         this.prompts[id] = {
@@ -66,7 +66,7 @@ class InterativePrompt {
      * @param filterResponses
      * @param cbChoice
      * @param maxChoices
-     * @return {InterativePrompt}
+     * @return {InteractivePrompt}
      */
     addPromptPagination(id, description, pages, footer, filterResponses, cbChoice, maxChoices) {
         this.addPrompt(id, description, footer, filterResponses, cbChoice, maxChoices);
@@ -83,7 +83,7 @@ class InterativePrompt {
      * @param options
      * @param choiceName
      * @param nextId
-     * @return {InterativePrompt}
+     * @return {InteractivePrompt}
      */
     addSimplePromptPagination(id, descriptionTitle, options, choiceName, nextId) {
         // cria descrição
@@ -149,7 +149,7 @@ class InterativePrompt {
      * @param options
      * @param choiceName
      * @param nextId
-     * @return {InterativePrompt}
+     * @return {InteractivePrompt}
      */
     addSimplePromptOptions(id, descriptionTitle, options, choiceName, nextId) {
         // cria descricao
@@ -400,4 +400,4 @@ function bracket(index, items) {
     return `\`[${padded}]\``;
 }
 
-module.exports = InterativePrompt;
+module.exports = InteractivePrompt;

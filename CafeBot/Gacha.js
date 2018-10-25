@@ -6,7 +6,7 @@ const GIFEncoder = require('gifencoder');
 
 const Cafebase = require('./Cafebase');
 
-const InterativePrompt = require('./Util/InterativePrompt');
+const InteractivePrompt = require('./Util/InteractivePrompt');
 const randomNumber = require('./Util/RandomNumber');
 
 const PermissionError = require('./Errors/PermissionError');
@@ -273,7 +273,7 @@ class Gacha {
             ;
         }
 
-        const prompt = InterativePrompt.create(channel, member, `:game_die: **Criando um novo item - Gacha** :new:`, 30000)
+        const prompt = InteractivePrompt.create(channel, member, `:game_die: **Criando um novo item - Gacha** :new:`, 30000)
             .addPrompt(
                 'prompt-type',
                 `Escolha o tipo de item a ser criado: ${typesText}`,
@@ -459,7 +459,7 @@ class Gacha {
         //     }
         // });
 
-        const prompt = InterativePrompt.create(channel, member, `:game_die: **Criando um novo item no Gacha-Shop** :shopping_bags:`, 30000)
+        const prompt = InteractivePrompt.create(channel, member, `:game_die: **Criando um novo item no Gacha-Shop** :shopping_bags:`, 30000)
             // .addPromptPagination(
             //     'shop-item',
             //     `Escolha o item a ser colocado a venda na loja:`,
@@ -646,7 +646,7 @@ class Gacha {
         }
 
         const confirmationCode = parseInt((Math.random() * 8000) + 1000);
-        const prompt = InterativePrompt.create(message.channel, member, null, 30000)
+        const prompt = InteractivePrompt.create(message.channel, member, null, 30000)
             .addPrompt(
                 'prompt-confirmation',
                 `:wastebasket: Tem certeza que quer deletar o item ${formatItem(guild, item)}?`,
@@ -1065,7 +1065,7 @@ class Gacha {
 
         const promptTitle = (message.channel instanceof Discord.DMChannel
                 ? '' : `${message.author},\n`) + ":game_die: **Gacha-Shop!** :shopping_bags:";
-        const prompt = InterativePrompt.create(channel, member, promptTitle, 120000)
+        const prompt = InteractivePrompt.create(channel, member, promptTitle, 120000)
             .addPromptPagination(
                 "s-shop",
                 "Escolha o item que deseja comprar:",

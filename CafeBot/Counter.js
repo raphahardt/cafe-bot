@@ -3,7 +3,7 @@ const utils = require('../utils');
 let insideCount = {};
 
 const Cafebase = require('./Cafebase');
-const InterativePrompt = require('./Util/InterativePrompt');
+const InteractivePrompt = require('./Util/InteractivePrompt');
 
 // cache da ultima vez q foi usado um comando, pra evitar spam de comandos
 let LAST_USED = {};
@@ -63,7 +63,7 @@ class Counter {
             "16\n17"
         ];
 
-        const prompt = InterativePrompt.create(message.channel, message.member, `:game_die: \`+gacha keep\` **Mantendo um item**`, 60000)
+        const prompt = InteractivePrompt.create(message.channel, message.member, `:game_die: \`+gacha keep\` **Mantendo um item**`, 60000)
             .addPromptPagination(
                 'prompt-item',
                 `Escolha o item a ser mantido (ou desmantido, caso já esteja):`,

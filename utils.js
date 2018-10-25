@@ -3,7 +3,7 @@ const levenshtein = require("fast-levenshtein");
 const PermissionError = require('./CafeBot/Errors/PermissionError');
 const LongMessage = require('./CafeBot/Util/LongMessage');
 const MessageIdResolvable = require('./CafeBot/Util/MessageIdResolvable');
-const InterativePrompt = require('./CafeBot/Util/InterativePrompt');
+const InteractivePrompt = require('./CafeBot/Util/InteractivePrompt');
 
 const utils = {
 
@@ -210,10 +210,10 @@ const utils = {
      * @param message
      * @param title
      * @param timeout
-     * @return {InterativePrompt}
+     * @return {InteractivePrompt}
      */
     prompt(module, message, title, timeout) {
-        return new InterativePrompt(message.channel, message.author, title, timeout);
+        return new InteractivePrompt(message.channel, message.author, title, timeout);
     },
 
     /**
