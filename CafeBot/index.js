@@ -71,11 +71,11 @@ const bot = {
             console.log(`Bot ${bot.packageJson.name} v${bot.packageJson.version} [${discordClient.users.size} membros] [${discordClient.channels.size} canais] [${discordClient.guilds.size} servers]`);
 
             // sai de todas as guilds q não seja o café com pão
-            discordClient.guilds.forEach((guild) => {
-                if (guild.id !== "213797930937745409") {
-                    guild.leave();
-                }
-            });
+            // discordClient.guilds.forEach((guild) => {
+            //     if (guild.id !== "213797930937745409" && guild.id !== "505170742464479233") {
+            //         guild.leave();
+            //     }
+            // });
 
             const phrases = utils.shuffle(["você tomar café", "os ghosts safados", "seus abcs"]);
             discordClient.user.setActivity(`${phrases[0]} (${bot.packageJson.version})` + (modules._debug ? " (testes)" : ""), { type: "WATCHING" });

@@ -1,11 +1,12 @@
 {
   "name": "cafe-bot",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "",
   "main": "app.js",
   "dependencies": {
     "@redblobgames/dual-mesh": "git+https://github.com/redblobgames/dual-mesh.git",
     "@redblobgames/mapgen2": "git+https://github.com/redblobgames/mapgen2.git",
+    "chalk": "^2.4.1",
     "discord.js": "^11.3.2",
     "fast-levenshtein": "^2.0.6",
     "firebase-admin": "^6.0.0",

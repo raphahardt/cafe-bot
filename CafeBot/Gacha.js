@@ -233,7 +233,14 @@ class Gacha {
                         return;
                 }
             case 'refresh-reacts':
-                return updateExtraTokensReacts(this, message.client, isDebug);
+                const m = await message.reply(`:arrows_counterclockwise: Atualizando.`);
+                const interval = message.client.setInterval(() => {
+                    m.edit(m.content + '.');
+                }, 2000);
+                const [done, total] = await updateExtraTokensReacts(this, message.client, isDebug);
+                clearInterval(interval);
+                await m.delete();
+                return message.reply(`:arrows_counterclockwise: **${done}** de **${total}** de desenhos atualizados os reacts.`);
             case 'refresh-nicks':
                 return this.gachaRefreshNicknamesCommand(guild, message, args);
         }
@@ -2814,108 +2821,93 @@ function fetchReactsFromMessage(message, oldReacts, maxReacts, _debug) {
     });
 }
 
-function updateExtraTokensReacts(gacha, client, _debug) {
-    gacha.db.getArray('drawings')
-        .then(draws => {
-            const guild = getCafeComPaoGuild(client);
+async function updateExtraTokensReacts(gacha, client, _debug) {
+    const draws = await gacha.db.getArray('drawings');
+    const guild = getCafeComPaoGuild(client);
 
-            draws.forEach(draw => {
-                const channel = guild.channels.get(draw.channel || GACHA_EXTRA_TOKENS_CHANNEL);
+    let countModified = 0;
+    let ps = [];
+    for (const draw of draws) {
+        ps.push((async () => {
+            const channel = guild.channels.get(draw.channel || GACHA_EXTRA_TOKENS_CHANNEL);
+            const message = await channel.fetchMessage(draw.message);
 
-                channel.fetchMessage(draw.message)
-                    .then(message => {
-                        const authorUser = message.author;
+            const authorUser = message.author;
 
-                        // pega a contagem que estava
-                        let oldReacts = draw.reacts || {};
+            // pega a contagem que estava
+            let oldReacts = draw.reacts || {};
 
-                        fetchReactsFromMessage(message, oldReacts, GACHA_EXTRA_TOKENS_MAX_REACTS, _debug)
-                            .then(o => {
-                                let newReacts = o.reacts;
-                                oldReacts = o.oldReacts;
+            const o = await fetchReactsFromMessage(message, oldReacts, GACHA_EXTRA_TOKENS_MAX_REACTS, _debug);
 
-                                console.log('DRAW OLD REACTS', oldReacts);
-                                console.log('DRAW NEW REACTS', newReacts);
+            let newReacts = o.reacts;
+            oldReacts = o.oldReacts;
 
-                                // verifica agora usuario por usuario as diferenças de react]
-                                let tokensToAdd = {};
-                                for (let userId in oldReacts) {
-                                    let diff;
-                                    if (!newReacts[userId]) {
-                                        // se não tem mais no new, é pq user tirou todas suas reacts, entao tirar os tokens
-                                        diff = -oldReacts[userId];
-                                    } else {
-                                        diff = newReacts[userId] - oldReacts[userId];
-                                    }
+            console.log('DRAW OLD REACTS', oldReacts);
+            console.log('DRAW NEW REACTS', newReacts);
 
-                                    console.log('diff', diff);
+            // verifica agora usuario por usuario as diferenças de react]
+            let tokensToAdd = {};
+            for (let userId in oldReacts) {
+                let diff;
+                if (!newReacts[userId]) {
+                    // se não tem mais no new, é pq user tirou todas suas reacts, entao tirar os tokens
+                    diff = -oldReacts[userId];
+                } else {
+                    diff = newReacts[userId] - oldReacts[userId];
+                }
 
-                                    // o if evita o auto-like
-                                    if (_debug || authorUser.id !== userId) {
-                                        // para o usuario received (que fez o desenho)
-                                        const tokensToAddReceived = GACHA_EXTRA_TOKENS_REACT_RECEIVED * diff;
-                                        tokensToAdd[authorUser.id] = tokensToAdd[authorUser.id] || 0;
-                                        tokensToAdd[authorUser.id] += tokensToAddReceived;
+                console.log('diff', diff);
 
-                                        // para o usuario give
-                                        const tokensToAddGive = GACHA_EXTRA_TOKENS_REACT_GIVE * diff;
-                                        tokensToAdd[userId] = tokensToAdd[userId] || 0;
-                                        tokensToAdd[userId] += tokensToAddGive;
-                                    }
-                                }
+                // o if evita o auto-like
+                if (_debug || authorUser.id !== userId) {
+                    // para o usuario received (que fez o desenho)
+                    const tokensToAddReceived = GACHA_EXTRA_TOKENS_REACT_RECEIVED * diff;
+                    tokensToAdd[authorUser.id] = tokensToAdd[authorUser.id] || 0;
+                    tokensToAdd[authorUser.id] += tokensToAddReceived;
 
-                                console.log("TOKENS TO MODIFY", tokensToAdd);
+                    // para o usuario give
+                    const tokensToAddGive = GACHA_EXTRA_TOKENS_REACT_GIVE * diff;
+                    tokensToAdd[userId] = tokensToAdd[userId] || 0;
+                    tokensToAdd[userId] += tokensToAddGive;
+                }
+            }
 
-                                // altera info por info
-                                let modified = false;
-                                for (let userId in tokensToAdd) {
-                                    if (tokensToAdd[userId] !== 0) {
-                                        modified = true;
-                                        modifyInfo(gacha, userId, info => {
-                                            console.log('DRAW MODIFY TOKEN', userId, info.tokens, tokensToAdd[userId]);
-                                            info.tokens += tokensToAdd[userId];
-                                            return info;
-                                        }).catch(console.error);
-                                    }
-                                }
+            console.log("TOKENS TO MODIFY", tokensToAdd);
 
-                                if (modified) {
-                                    // salva os novos reacts
-                                    draw.reacts = newReacts;
-                                    gacha.db.save('drawings/' + draw.id, draw)
-                                        .then(draw => {
-                                            console.log('DRAW SAVED', draw)
-                                            //message.reply(`:white_check_mark: Mensagem marcada como desenho com sucesso.`);
-                                        })
-                                        .catch(console.error)
-                                    ;
-                                }
-                            })
-                        ;
+            // altera info por info
+            let modified = false;
+            for (let userId in tokensToAdd) {
+                if (tokensToAdd[userId] !== 0) {
+                    modified = true;
+                    try {
+                        await modifyInfo(gacha, userId, info => {
+                            console.log('DRAW MODIFY TOKEN', userId, info.tokens, tokensToAdd[userId]);
+                            info.tokens += tokensToAdd[userId];
+                            return info;
+                        })
+                    } catch (err) {
+                        console.error(err);
+                    }
+                }
+            }
 
-                        // // conta quantas reacts cada usuario deu atualmente
-                        // let newReacts = {};
-                        // reactions.forEach(reaction => {
-                        //     console.log('REACTIONS', reaction.users.size);
-                        //     reaction.users.forEach(user => {
-                        //         newReacts[user.id] = newReacts[user.id] || 0;
-                        //         newReacts[user.id]++;
-                        //
-                        //         // adiciona no old tbm pq a iteração vai ser sobre o old,
-                        //         // assim os users que são novos vão ser considerados tbm
-                        //         oldReacts[user.id] = oldReacts[user.id] || 0;
-                        //     });
-                        // });
+            if (modified) {
+                // salva os novos reacts
+                draw.reacts = newReacts;
+                try {
+                    await gacha.db.save('drawings/' + draw.id, draw);
+                    console.log('DRAW SAVED', draw);
 
+                    countModified++;
+                } catch (err) {
+                    console.error(err);
+                }
+            }
+        })());
+    }
 
-                    })
-                    .catch(error => {
-                        console.error(error);
-                    })
-                ;
-            });
-        })
-    ;
+    await Promise.all(ps);
+    return [ countModified, draws.length ];
 }
 
 function formatFutureDate(now, future) {
