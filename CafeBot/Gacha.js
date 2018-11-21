@@ -2079,8 +2079,8 @@ class Gacha {
             const membersArray = guild.members.array();
             const lastHundredMessages = await getLastHundredMessages(guild);
 
-            console.log('SIZE', membersArray.length);
-            console.log('SIZEM', lastHundredMessages.length);
+            //console.log('SIZE', membersArray.length);
+            //console.log('SIZEM', lastHundredMessages.length);
 
             let u = 0;
 
