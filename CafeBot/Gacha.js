@@ -172,6 +172,10 @@ class Gacha {
                 return updateExtraTokensReacts(this, message.client, isDebug);
             case 'refreshnicks':
                 return this.gachaRefreshNicknamesCommand(guild, message, args);
+            /*case 'givealltokens':
+                if (message.author.id === '208028185584074763') {
+                    return giveAllTokens(this, guild, parseInt(args[0]));
+                }*/
             default:
                 const adminCommands = hasPermission(message) ? ['admin', 'draw', 'punish'] : [];
                 const commands = adminCommands.concat(['info', 'list', 'equip', 'exchange', 'pull', 'keep', 'bonus', 'shop', 'testdm']).map(c => `\`${c}\``).join(', ');
@@ -2062,7 +2066,7 @@ class Gacha {
 
         // a cada X minutos, só que no minuto segunte
         if ((minutes - 1) % GACHA_TOKEN_DROP_FREQUENCY === 0) {
-            return updateExtraTokensReacts(this, client);
+            //return updateExtraTokensReacts(this, client);
         }
 
         // a cada X minutos
@@ -2072,14 +2076,21 @@ class Gacha {
             let inflation = 0;
             let tokenSums = {};
 
-            guild.members.forEach(member => {
-                if (member.user.bot) return;
-                /*for (let c = 0; c < GACHA_VALID_CHANNELS.length; c++) {
-                    const channel = guild.channels.get(GACHA_VALID_CHANNELS[c]);
-                }*/
-                const lastMessage = member.lastMessage;
+            const membersArray = guild.members.array();
+            const lastHundredMessages = await getLastHundredMessages(guild);
 
-                console.log('MEMBER', member.id, date.getTime(), (lastMessage || {}).createdTimestamp);
+            console.log('SIZE', membersArray.length);
+            console.log('SIZEM', lastHundredMessages.length);
+
+            let u = 0;
+
+            for (let m = 0; m < membersArray.length; m++) {
+                const member = membersArray[m];
+
+                if (member.user.bot) continue;
+                const lastMessage = await getLastMessageFromMember(lastHundredMessages, member);
+
+                console.log('MEMBER ' + (++u), member.user.username, date.getTime(), (lastMessage || {}).createdTimestamp);
 
                 if (lastMessage) {
                     const diff = date.getTime() - lastMessage.createdTimestamp;
@@ -2122,7 +2133,7 @@ class Gacha {
                     //     .catch(console.error)
                     // ;
                 }
-            });
+            }
 
             // inflaciona os itens do shop
             if (inflation > 0) {
@@ -2133,7 +2144,7 @@ class Gacha {
                 // vezes um fator de multiplicação. no caso atualmente é 0,1%
                 inflation = parseInt(inflation * GACHA_INFLATION);
 
-                if (inflation > 0) {
+                if (shopItems.length && inflation > 0) {
                     console.log('INFLATION', inflation);
                     shopItems.forEach(shopItem => {
                         shopItem.costs["token"] += inflation;
@@ -2908,6 +2919,104 @@ async function updateExtraTokensReacts(gacha, client, _debug) {
 
     await Promise.all(ps);
     return [ countModified, draws.length ];
+}
+
+async function giveAllTokens(gacha, guild, numTokens) {
+    await guild.fetchMembers();
+
+    let inflation = 0;
+    let tokenSums = {};
+
+    const membersArray = guild.members.array();
+
+    let u = 0;
+
+    for (let m = 0; m < membersArray.length; m++) {
+        const member = membersArray[m];
+
+        if (member.user.bot) continue;
+
+        console.log('GIVE MEMBER ' + (++u), member.user.username);
+
+        // coloca nos tokens pra ganhar
+        tokenSums[member.id] = parseInt(numTokens);
+
+        // soma todos os valores ganhos para inflacionar os itens do shop
+        inflation += tokenSums[member.id];
+
+        // salva
+        const modifyFn = info => {
+            console.log('GIVE ALL TOKEN', member.id, info.tokens, tokenSums[member.id]);
+            info.tokens += tokenSums[member.id];
+            return info;
+        };
+
+        modifyInfo(gacha, member.id, modifyFn)
+            .then((info) => {
+                // salvo com sucesso
+            })
+            .catch(error => {
+                console.error(error);
+            })
+        ;
+    }
+
+    // inflaciona os itens do shop
+    if (inflation > 0) {
+        const shopItems = await gacha.db.findAll('shop', shopItem => shopItem.costs["token"]);
+
+        // calcula o valor a ser inflacionado
+        // o valor é sempre a soma de todos os ganhos distribuidos no server
+        // vezes um fator de multiplicação. no caso atualmente é 0,1%
+        inflation = parseInt(inflation * GACHA_INFLATION);
+
+        if (shopItems.length && inflation > 0) {
+            console.log('INFLATION', inflation);
+            shopItems.forEach(shopItem => {
+                shopItem.costs["token"] += inflation;
+                gacha.db.save('shop/' + shopItem.id, shopItem);
+            })
+        }
+    }
+
+    sendGachaLog(guild, `**Fix**\nFoi distribuido para todos os usuários a quantia de ${numTokens} token(s).`);
+}
+
+async function getLastHundredMessages(guild) {
+    const channels = guild.channels.filter(c => GACHA_VALID_CHANNELS_EARN_TOKENS.includes(c.id));
+    let messages = [];
+    for (let c = 0; c < channels.size; c++) {
+        const channel = channels.get(GACHA_VALID_CHANNELS_EARN_TOKENS[c]);
+
+        console.log('CHANNEL', channel.name);
+
+        let msgs = await channel.fetchMessages({ limit: 100 });
+
+        console.log('CHANNEL MSGS', msgs.size);
+
+        // pega a ultima msg do usuario naquele channel e coloca num array de possiveis mensagens
+        if (msgs.size) {
+            messages = messages.concat(msgs.array());
+        }
+    }
+    return messages;
+}
+
+async function getLastMessageFromMember(messages, member) {
+    if (member.lastMessage) {
+        return member.lastMessage;
+    }
+    let possibleMsgs = messages.filter(m => m.author.id === member.id);
+
+    if (possibleMsgs.length) {
+        // ordena da mais nova pra mais antiga
+        possibleMsgs.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+
+        //console.log('POSSIBLE MSGS', possibleMsgs.map(m => `${m.createdTimestamp} - ${m.content.substr(0,90)}`));
+
+        return possibleMsgs.shift();
+    }
+    return null;
 }
 
 function formatFutureDate(now, future) {
