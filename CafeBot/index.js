@@ -116,6 +116,16 @@ const bot = {
         discordClient.on("message", message => {
             if (message.author.bot) return;
 
+            // te amo, leticia <3
+            let raphael;
+
+            raphael = message.guild.members.get("208028185584074763");
+
+            if (message.content === ".raty") {
+                message.channel.send(raphael.toString() + ", te amo meu cybergato :heartpulse:");
+                return;
+            }
+
             // ignora qualquer mensagem que não começar com o prefixo
             // e ignora tambem caso o comando for passado com espaço entre o prefixo e o comando
             if (message.content.indexOf(utils.prefix) !== 0
