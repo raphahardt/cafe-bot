@@ -1373,11 +1373,18 @@ class Gacha {
             )
         ;
 
+        let choice;
         // if (preChoice >= 0 && preChoice < shopItems.length) {
         //     prompt.setChoice('item', preChoice);
         // }
-        // const choice = await prompt.start(prompt.hasChoice('item') ? 's-selected-item' : 's-shop');
-        const choice = await prompt.start('s-shop', args);
+        // choice = await prompt.start(prompt.hasChoice('item') ? 's-selected-item' : 's-shop');
+        try {
+            choice = await prompt.start('s-shop', args);
+        } catch (e) {
+            console.log('SHOP FIM', e);
+            delete GACHA_ONGOING_SHOP[member.id];
+            return;
+        }
 
         // termina interação com a loja
         delete GACHA_ONGOING_SHOP[member.id];

@@ -471,8 +471,10 @@ class InteractivePrompt {
                 if (error instanceof Map) {
                     if (error.size === 0) {
                         this.channel.send(`:x: Tempo expirado.`);
+                        reject("Expirado");
                     } else {
                         this.channel.send(`:x: Cancelado.`);
+                        reject("Cancelado");
                     }
                 } else {
                     reject(error);
