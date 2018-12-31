@@ -143,6 +143,8 @@ class Gacha {
                 return this.gachaInfoTokensCommand(guild, message, args);
             case 'keep':
                 return this.gachaKeepCommand(guild, message, args);
+            case 'give':
+                return this.gachaGiveCommand(guild, message, args);
             case 'shop':
                 return this.gachaShopCommand(guild, message, args);
             case 'list':
@@ -160,6 +162,9 @@ class Gacha {
             case 'roll':
             case 'p':
                 return this.gachaPullCommand(guild, message, args);
+            case 'pull-all':
+            case 'pa':
+                return this.gachaPullAllCommand(guild, message, args);
             case 'testdm':
                 return this.gachaTestDMCommand(guild, message, args);
             case 'draw':
@@ -178,7 +183,7 @@ class Gacha {
                 }*/
             default:
                 const adminCommands = hasPermission(message) ? ['admin', 'draw', 'punish'] : [];
-                const commands = adminCommands.concat(['info', 'list', 'equip', 'exchange', 'pull', 'keep', 'bonus', 'shop', 'testdm']).map(c => `\`${c}\``).join(', ');
+                const commands = adminCommands.concat(['info', 'list', 'equip', 'exchange', 'give', 'pull', 'keep', 'bonus', 'shop', 'testdm']).map(c => `\`${c}\``).join(', ');
                 return message.reply(`:x: Comando inexistente.\nComandos disponíveis: ${commands} ou \`help\` para mais detalhes.`);
         }
     }
@@ -200,6 +205,7 @@ class Gacha {
                     ['refresh-reacts', 'Atualizar os reacts do draw'],
                     ['refresh-nicks', 'Atualizar os nicks'],
                 ],
+                null,
                 'menu'
             )
             .addSimplePromptOptions(
@@ -207,32 +213,33 @@ class Gacha {
                 '',
                 [
                     ['create', 'Criar novo'],
-                    ['edit', 'Alterar'],
+                    //['edit', 'Alterar'],
                     ['delete', 'Deletar'],
                 ],
+                null,
                 'crud'
             )
         ;
 
         let startId = 'admin-menu';
-        const choices = await prompt.start(startId);
+        const choices = await prompt.start(startId, args);
 
         switch (choices.menu) {
             case 'item':
                 switch (choices.crud) {
                     case 'create':
                         return this.gachaCreateCommand(guild, message, args);
-                    case 'edit':
-                        return;
+                    // case 'edit':
+                    //     return;
                     case 'delete':
                         return this.gachaDeleteCommand(guild, message, args);
                 }
             case 'shop':
                 switch (choices.crud) {
                     case 'create':
-                        return;
-                    case 'edit':
-                        return;
+                        return this.gachaCreateShopCommand(guild, message, args);
+                    // case 'edit':
+                    //     return;
                     case 'delete':
                         return;
                 }
@@ -386,6 +393,18 @@ class Gacha {
                 },
                 (choice, prompt) => {
                     prompt.setChoice('name', choice);
+                    prompt.setNext('prompt-shop-exclusive');
+                }
+            )
+            .addPrompt(
+                'prompt-shop-exclusive',
+                `Será um item exclusivo de loja?`,
+                'Digite `y` ou `s` para ser exclusivo, `n` para não-exclusivo',
+                response => {
+                    return ['y', 's', 'n'].includes(response);
+                },
+                (choice, prompt) => {
+                    prompt.setChoice('shopExclusive', choice !== 'n');
                 }
             )
         ;
@@ -445,7 +464,24 @@ class Gacha {
             return message.reply(`:x: Não existem itens cadastrados. Cadastre um usando \`+gacha create\`.`);
         }
 
+        // ordenar por raridade e por nome
+        items.sort((a, b) => {
+            if (b.rarity - a.rarity === 0) {
+                return a.name.localeCompare(b.name);
+            }
+            return (b.rarity - a.rarity);
+        });
+        // só colocar itens na loja que não tem dono
+        items = items.filter(item => !item.owner);
+
         let itemsPrompt = items.map(item => {
+            return [
+                item,
+                formatItem(guild, item)
+            ];
+        });
+
+        let itemsToCostPrompt = items.filter(item => !item.shopExclusive).reverse().map(item => {
             return [
                 item,
                 formatItem(guild, item)
@@ -490,6 +526,7 @@ class Gacha {
                 'shop-item',
                 'Escolha o item a ser colocado a venda na loja:',
                 itemsPrompt,
+                null,
                 'itemToSell',
                 'shop-quantity'
             )
@@ -497,16 +534,79 @@ class Gacha {
                 'shop-quantity',
                 `Escolha a quantidade disponível:`,
                 `Digite uma quantidade`,
-                response => {
+                (response, prompt) => {
+                    const item = prompt.getChoice('itemToSell');
                     const v = parseInt(response);
+                    if (GACHA_ITEM_TYPES[item.type].limited) {
+                        return v === 1;
+                    }
                     return v >= 1 && v <= 20;
                 },
                 (choice, prompt) => {
-                    prompt.setChoice('quantity', parseInt(choice));
+                    const item = prompt.getChoice('itemToSell');
+                    choice = parseInt(choice);
+                    if (GACHA_ITEM_TYPES[item.type].limited && choice > 1) {
+                        // se o item é do tipo limitado, não deixar colocar mais do que 1
+                        choice = 1;
+                    }
+                    prompt.setChoice('quantity', choice);
                     prompt.setNext('shop-cost-item');
                 }
             )
-            .addPromptPagination(
+            ///////////////////////////////////
+            // .addPromptPagination(
+            //     'shop-cost-item',
+            //     (choices) => {
+            //         if (choices.costItems) {
+            //             return `**Custo**\n`
+            //                 + `Escolha mais um item de troca. `
+            //                 + `Caso queira custo em tokens, digite \`token\` como opção. `
+            //                 + `Caso não queira escolher mais um item, digite \`confirm\`.`;
+            //         }
+            //         return `**Custo**\n`
+            //             + `Agora você precisa definir quanto o item vai custar.\n\n`
+            //             + `Escolha qual vai ser o item de troca. `
+            //             + `Caso queira custo em tokens, digite \`token\` como opção. `
+            //             + `Você vai poder escolher mais de um item de custo depois.`;
+            //     },
+            //     pages,
+            //     (choices) => {
+            //         if (choices.costItems) {
+            //             return `Digite o número da opção, \`token\` para custo em tokens, \`confirm\` se quiser finalizar a criação do item`;
+            //         }
+            //         return `Digite o número da opção, \`token\` para custo em tokens`;
+            //     },
+            //     response => {
+            //         const v = parseInt(response);
+            //         return response === 'token' || response === 'confirm' || (v >= 1 && v <= items.length);
+            //     },
+            //     (choice, prompt) => {
+            //         const arr = prompt.getChoice('costItems') || [];
+            //         const arrFormatted = prompt.getChoice('costItemsFormatted') || [];
+            //
+            //         if (choice === 'confirm' && arr.length > 0) {
+            //             prompt.setNext('shop-confirmation');
+            //             return;
+            //         }
+            //
+            //         if (choice !== 'token') {
+            //             const index = parseInt(choice) - 1;
+            //             choice = items[index].id;
+            //
+            //             arrFormatted.push(formatItem(guild, items[index]));
+            //         } else {
+            //             arrFormatted.push("Tokens");
+            //         }
+            //
+            //         arr.push(choice);
+            //         prompt.setChoice('costItems', arr);
+            //         prompt.setChoice('costItemsFormatted', arrFormatted);
+            //
+            //
+            //         prompt.setNext('shop-cost-price');
+            //     }
+            // )
+            .addSimplePromptPagination(
                 'shop-cost-item',
                 (choices) => {
                     if (choices.costItems) {
@@ -521,16 +621,12 @@ class Gacha {
                         + `Caso queira custo em tokens, digite \`token\` como opção. `
                         + `Você vai poder escolher mais de um item de custo depois.`;
                 },
-                pages,
+                itemsToCostPrompt,
                 (choices) => {
                     if (choices.costItems) {
                         return `Digite o número da opção, \`token\` para custo em tokens, \`confirm\` se quiser finalizar a criação do item`;
                     }
                     return `Digite o número da opção, \`token\` para custo em tokens`;
-                },
-                response => {
-                    const v = parseInt(response);
-                    return response === 'token' || response === 'confirm' || (v >= 1 && v <= items.length);
                 },
                 (choice, prompt) => {
                     const arr = prompt.getChoice('costItems') || [];
@@ -543,20 +639,21 @@ class Gacha {
 
                     if (choice !== 'token') {
                         const index = parseInt(choice) - 1;
-                        choice = items[index].id;
+                        choice = itemsToCostPrompt[index][0].id;
 
-                        arrFormatted.push(formatItem(guild, items[index]));
+                        arrFormatted.push(itemsToCostPrompt[index][1]);
                     } else {
-                        arrFormatted.push("Tokens");
+                        arrFormatted.push("**Tokens**");
                     }
 
                     arr.push(choice);
                     prompt.setChoice('costItems', arr);
                     prompt.setChoice('costItemsFormatted', arrFormatted);
 
-
                     prompt.setNext('shop-cost-price');
-                }
+                },
+                null,
+                ['confirm', 'token']
             )
             .addPrompt(
                 'shop-cost-price',
@@ -605,10 +702,11 @@ class Gacha {
         ;
 
         // começa o prompt
-        const choices = await prompt.start('shop-item');
+        const choices = await prompt.start('shop-item', args);
 
         let itemShop = {
             itemToSell: choices.itemToSell.id,
+            shopExclusive: !!choices.itemToSell.shopExclusive,
             quantity: choices.quantity,
             costs: {}
         };
@@ -752,7 +850,7 @@ class Gacha {
             return message.reply(`:x: KKKKKKKK. Não. :slight_smile:`);
         }
 
-        await modifyInfo(this, userId, info => {
+        const info = await modifyInfo(this, userId, info => {
             console.log('PUNISH TOKEN', userId, info.tokens);
             info.tokens -= punishAmount;
             return info;
@@ -835,10 +933,11 @@ class Gacha {
         }
 
         items.forEach(item => {
-            if (isDebug || !item.owner) {
+            if (isDebug || (!item.owner && !item.shopExclusive)) {
                 foundItems += `\n:small_blue_diamond: `
                     + (isDebug ? `(criado: <@${item.author}>) ` : '')
                     + (isDebug && item.owner ? `(dono: <@${item.owner}>) ` : '')
+                    + (isDebug && item.shopExclusive ? `(exclusivo da loja) ` : '')
                     + formatItem(guild, item)
                 ;
             }
@@ -916,6 +1015,28 @@ class Gacha {
     async gachaInfoTokensCommand(guild, message, args) {
         const isDebug = args.includes('--debug') && hasPermission(message);
         const member = getCafeComPaoMember(guild, message);
+        const users = await utils.messageResolver(message, args, true).resolveUsers(false);
+
+        if (args.includes('--all') && hasPermission(message)) {
+            let list = '';
+            const infos = await this.db.getAll('info');
+            for (const id in infos) {
+                const userInfo = infos[id];
+                list += `\n<@${id}>: **${userInfo.tokens}**`;
+            }
+
+            return utils.longMessage(message).reply(`Tokens de: ${list}`);
+        }
+
+        if (users.length > 0 && hasPermission(message)) {
+            let list = '';
+            for (const user of users) {
+                const userInfo = await getInfo(this, user);
+                list += `\n${user.username}: **${userInfo.tokens}**`;
+            }
+
+            return utils.longMessage(message).reply(`Tokens de: ${list}`);
+        }
 
         const info = await getInfo(this, member);
 
@@ -962,6 +1083,7 @@ class Gacha {
                 'prompt-item',
                 'Escolha o item a ser mantido (ou desmantido, caso já esteja):',
                 itemsPrompt,
+                null,
                 'item'
             )
         ;
@@ -992,6 +1114,107 @@ class Gacha {
     }
 
     /**
+     *
+     * @param guild
+     * @param message
+     * @param args
+     * @returns {Promise<void>}
+     */
+    async gachaGiveCommand(guild, message, args) {
+        const member = getCafeComPaoMember(guild, message);
+        const usersToGive = await utils.messageResolver(message, args, true).resolveUsers(false);
+        let giveAmount = parseInt(args.shift());
+
+        if (usersToGive.length === 0) {
+            return message.reply(`:x: Comando incorreto. Use \`+gacha give (usuário) (quantidade tokens)\``);
+        }
+
+        if (giveAmount <= 0) {
+            return message.reply(`:x: Valor zero ou negativo não permitido.`);
+        }
+
+        const info = await getInfo(this, member);
+
+        if (giveAmount > info.tokens) {
+            giveAmount = info.tokens;
+        }
+
+        let giveSingle = giveAmount;
+        if (usersToGive.length > 1) {
+            giveSingle = parseInt(giveAmount / usersToGive.length);
+            // volto o valor multiplicado pelo giveAmount pq se a divisão
+            // der dizima periódica, o que sobrar eu não preciso fazer nenhum algoritmo
+            // pra decidir pra quem vai, pois no gacha não existe "meio token"
+            // por exemplo, se a pessoa resolve dar 100 tokens pra 3 pessoas,
+            // vai 33 tokens pra cada, e o giveAmount passa a ser 99, e não 100 como era originalmente.
+            // porque senão, pra qual user eu dou o 1 token que sobrar? muito trampo pra pouco caso :)
+            giveAmount = giveSingle * usersToGive.length;
+        }
+
+        const usersToList = usersToGive.map(u => {
+            if (giveSingle < giveAmount) {
+                return `${u.username}#${u.discriminator} (recebe ${giveSingle})`;
+            }
+            return `${u.username}#${u.discriminator}`;
+        }).map(n => `:small_blue_diamond: ${n}`).join("\n");
+
+        const confirmationCode = parseInt((Math.random() * 8000) + 1000);
+        const prompt = InteractivePrompt.create(message.channel, member, null, 30000)
+            .addPrompt(
+                'prompt-confirmation',
+                `:game_die: Você está distribuindo: **${giveAmount} token(s)**\n` +
+                    `Para: \n${usersToList}\n\n` +
+                    `Seu novo saldo após a transferência: **${info.tokens - giveAmount}**\n\n` +
+                    `Tem certeza que quer estes tokens?`,
+                `Digite \`${confirmationCode}\` para confirmar`,
+                response => {
+                    return parseInt(response) === confirmationCode;
+                },
+                (choice, prompt) => {
+                    prompt.setChoice('code', parseInt(choice));
+                }
+            );
+
+        const choice = await prompt.start('prompt-confirmation');
+        if (choice.code === confirmationCode) {
+            let realGiveAmount = 0;
+            let realUsersGiven = [];
+
+            for (const user of usersToGive) {
+                try {
+                    await modifyInfo(this, user, info => {
+                        console.log('GIVEN TOKEN', user.id, info.tokens);
+                        info.tokens += giveSingle;
+                        return info;
+                    });
+
+                    realGiveAmount += giveSingle;
+                    realUsersGiven.push(user);
+                } catch (e) {
+                    // não contabilizar na quantidade a dar
+                }
+            }
+
+            if (realGiveAmount > 0) {
+                const info = await modifyInfo(this, member, info => {
+                    console.log('GIVE TOKEN', member.id, info.tokens);
+                    info.tokens -= realGiveAmount;
+                    return info;
+                });
+
+                return message.reply(`:white_check_mark: ${realGiveAmount} token(s) distribuído(s) com sucesso. \n`
+                    + `Usuários que receberam: \n`
+                    + realUsersGiven.map(u => `:small_blue_diamond: ${u} (${giveSingle})`).join("\n")
+                    + `\nNovo saldo: **${info.tokens}**`);
+            } else {
+                throw new Error('Houve um erro ao distribuir os tokens. Nenhum token foi distribuído, tente novamente.');
+            }
+
+        }
+
+    }
+
+    /**
      * Vê os itens do shop e compra alguma coisa.
      *
      * @param guild
@@ -1003,7 +1226,7 @@ class Gacha {
 
         const channel = message.channel;
 
-        const preChoice = parseInt(args.shift()) - 1;
+        //const preChoice = parseInt(args.shift()) - 1;
 
         let [shopItems, items] = await Promise.all([
             this.db.findAll('shop', shopItem => shopItem.quantity > 0),
@@ -1150,10 +1373,11 @@ class Gacha {
             )
         ;
 
-        if (preChoice >= 0 && preChoice < shopItems.length) {
-            prompt.setChoice('item', preChoice);
-        }
-        const choice = await prompt.start(prompt.hasChoice('item') ? 's-selected-item' : 's-shop');
+        // if (preChoice >= 0 && preChoice < shopItems.length) {
+        //     prompt.setChoice('item', preChoice);
+        // }
+        // const choice = await prompt.start(prompt.hasChoice('item') ? 's-selected-item' : 's-shop');
+        const choice = await prompt.start('s-shop', args);
 
         // termina interação com a loja
         delete GACHA_ONGOING_SHOP[member.id];
@@ -1281,6 +1505,7 @@ class Gacha {
                 'prompt-item',
                 'Escolha o item a ser equipado:',
                 itemsPrompt,
+                null,
                 'item'
             )
         ;
@@ -1533,7 +1758,7 @@ class Gacha {
                             possibleItemsByRarity[r] = [];
                         }
                         items.forEach(item => {
-                            if (!item.owner) {
+                            if (!item.owner && !item.shopExclusive) {
                                 possibleItemsByRarity[item.rarity].push(item);
                             }
                         });
@@ -1605,13 +1830,15 @@ class Gacha {
                                     // indica se é um item novo pro usuario
                                     news.push(info.roles[item.id] === 0);
 
-                                    // adiciona +1
-                                    info.roles[item.id]++;
+                                    if (!isDebug) {
+                                        // adiciona +1
+                                        info.roles[item.id]++;
 
-                                    if (GACHA_ITEM_TYPES[item.type].limited) {
-                                        // se o item é um do tipo limitado, marcar o dono do item nele
-                                        item.owner = member.id;
-                                        itemsToSave.push(['roles/' + item.id, item])
+                                        if (GACHA_ITEM_TYPES[item.type].limited) {
+                                            // se o item é um do tipo limitado, marcar o dono do item nele
+                                            item.owner = member.id;
+                                            itemsToSave.push(['roles/' + item.id, item])
+                                        }
                                     }
                                 }
 
@@ -1692,6 +1919,278 @@ class Gacha {
                                                     msg.react('🎉');
                                                 }
                                                 return _open(msg, itemsWon.length);
+                                            })
+                                            ;
+                                    })
+                                    ;
+                            })
+                            ;
+
+                    })
+                    ;
+            })
+            .catch(error => {
+                // transaction do pull termina toda vez que há um termino repentino ---
+                delete GACHA_ONGOING_PULL[member.id];
+
+                // joga o erro novamente
+                throw error;
+            })
+            ;
+
+    }
+
+    /**
+     * Usa todos os seus tokens para tirar itens
+     *
+     * @param guild
+     * @param message
+     * @param args
+     * @returns {Promise<*>}
+     */
+    async gachaPullAllCommand(guild, message, args) {
+        const isDebug = args.includes('--debug') && hasPermission(message);
+        const member = getCafeComPaoMember(guild, message);
+
+        if (GACHA_ONGOING_PULL[member.id]) {
+            return message.reply(`:x: Pull em andamento. Aguarde alguns segundos antes de mandar outro.`);
+        }
+
+        let pullTimes = 0;
+        const memberInfo = await getInfo(this, member);
+
+        // conta quantas vezes ele vai tirar o gacha
+        pullTimes = Math.floor(memberInfo.tokens / GACHA_PULL_COST);
+
+        const pullCostTotal = pullTimes * GACHA_PULL_COST;
+
+        return this.db.getArray('roles')
+            .then(items => {
+                if (!items.length) {
+                    return message.reply(`:x: Nenhum item de gacha registrado. Aguarde os admins criarem novos itens.`);
+                }
+
+                // tira qualquer skip que ficou de outros comandos
+                this.db.delete('skip/' + member.id);
+
+                // transaction do pull começa aqui ---
+                GACHA_ONGOING_PULL[member.id] = true;
+
+                return getInfo(this, member)
+                    .then(info => {
+                        if (info.tokens < pullCostTotal && !isDebug) {
+                            // transaction do pull termina toda vez que há um termino repentino ---
+                            delete GACHA_ONGOING_PULL[member.id];
+                            return message.reply(`:x: Você não tem token suficiente. Seus tokens: **${info.tokens}**. Você precisa: **${pullCostTotal}**.`);
+                        }
+
+                        let itemsWon = [];
+                        let itemsWonRare = [];
+                        let itemsWonNotRareAmount = 0;
+                        let news = [];
+                        let maxRarityWon = 0;
+                        // se o numero de pulls for maior que 10, ganha
+                        // uma chance extra de tirar um item com raridade alta
+                        let minimumGachaRarityExtraChance = pullTimes >= 10 ? GACHA_EXTRA_CHANCE_MULTIPLIER * Math.floor(pullTimes / 10) : 0;
+
+                        // 1x pull do gacha
+                        let luckyNumberPromises = [];
+                        for (let t = 0; t < pullTimes; t++) {
+                            let maxShuffle = 10000;
+                            // garantia de chance, raridade alta
+                            if (minimumGachaRarityExtraChance > 0) {
+                                // pegando o maxShuffle e multiplicando pela
+                                // chance de uma raridade mais alta,
+                                // garante que o luckyNumber vai ser menor
+                                // e consequentemente, ganhando uma raridade mais alta
+                                maxShuffle *= GACHA_RARITIES[1].chance;
+
+                                minimumGachaRarityExtraChance--;
+                            }
+
+                            luckyNumberPromises.push(randomNumber(0, maxShuffle));
+                        }
+
+                        // guarda todos os itens num array com todos os itens,
+                        // mas separado por raridade
+                        let possibleItemsByRarity = {};
+                        for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
+                            possibleItemsByRarity[r] = [];
+                        }
+                        items.forEach(item => {
+                            if (!item.owner && !item.shopExclusive) {
+                                possibleItemsByRarity[item.rarity].push(item);
+                            }
+                        });
+
+                        return Promise.all(luckyNumberPromises)
+                            .then((luckyNumbers) => {
+                                // 1x pull do gacha
+                                for (let t = 0; t < pullTimes; t++) {
+                                    // pega o numero sorteado
+                                    const luckyNumber = luckyNumbers[t];
+
+                                    // encontra qual tipo de item você vai ganhar primeiro
+                                    let rarityWon;
+                                    for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
+                                        const rarityFactor = 10000 * GACHA_RARITIES[r].chance;
+
+                                        if (luckyNumber <= rarityFactor) {
+                                            rarityWon = r;
+                                            break;
+                                        }
+                                    }
+                                    maxRarityWon = Math.max(maxRarityWon, rarityWon);
+
+                                    //console.log('RARITY WON', rarityWon);
+
+                                    // agora, entre os itens, encontra qual deles vc vai ganhar, baseado
+                                    // na raridade que você tirou
+                                    let possibleItems = possibleItemsByRarity[rarityWon].slice();
+                                    // items.forEach(item => {
+                                    //     if (item.rarity === rarityWon && !item.owner) {
+                                    //         possibleItems.push(item);
+                                    //     }
+                                    // });
+
+                                    //console.log('POSSIBLE ITEMS', possibleItems);
+
+                                    // embaralha itens
+                                    possibleItems = utils.shuffle(possibleItems);
+
+                                    // ...e pego aleatoriamente um aleatoriamente
+                                    let idx = parseInt((Math.random() * (possibleItems.length * 2000)) / 2000);
+                                    idx = Math.min(possibleItems.length - 1, idx);
+                                    const itemWon = possibleItems[idx];
+
+                                    // coloca no hash de itens ganhos
+                                    itemsWon.push(itemWon);
+                                    if (rarityWon >= 2) {
+                                        // se for item A+, mostrar
+                                        itemsWonRare.push(itemWon);
+                                    } else {
+                                        // se for item não importante, só contar
+                                        itemsWonNotRareAmount++;
+                                    }
+
+                                    if (!isDebug) {
+                                        info.tokens -= GACHA_PULL_COST;
+                                    }
+                                }
+                                // --- fim do for dos pulls
+
+                                //console.log('WON', itemsWon);
+
+                                let itemsToSave = [];
+
+                                // adiciona os itens ganhos no seu inventario
+                                for (let i = 0; i < itemsWon.length; i++) {
+                                    const item = itemsWon[i];
+
+                                    // cria o item no inventario do usuario, caso não tenha
+                                    info.roles[item.id] = info.roles[item.id] || 0;
+
+                                    // indica se é um item novo pro usuario
+                                    news.push(info.roles[item.id] === 0);
+
+                                    if (!isDebug) {
+                                        // adiciona +1
+                                        info.roles[item.id]++;
+
+                                        if (GACHA_ITEM_TYPES[item.type].limited) {
+                                            // se o item é um do tipo limitado, marcar o dono do item nele
+                                            item.owner = member.id;
+                                            itemsToSave.push(['roles/' + item.id, item])
+                                        }
+                                    }
+                                }
+
+                                // salva e mostra os ganhos do gacha
+                                //console.log('TO SAVE', [['info/' + member.id, info]].concat(itemsToSave));
+                                return this.db.saveAll([['info/' + member.id, info]].concat(itemsToSave))
+                                    .then(([newInfo, ...newItems]) => {
+
+                                        // tá salvo, transaction pode terminar tranquilo a partir daqui ---
+                                        delete GACHA_ONGOING_PULL[member.id];
+
+                                        let skip = false;
+                                        // vai ficar escutando esse valor no db,
+                                        // e quanto esse valor for true, ele vai mudar
+                                        // a variavel skip = true e o open do gacha vai ser skipado
+                                        const endSkip = this.db.getLive('skip/' + member.id, val => {
+                                            if (val) {
+                                                skip = true;
+                                                this.db.delete('skip/' + member.id);
+                                            }
+                                        });
+
+                                        function _open(msg, countOpened) {
+                                            const min = itemsWonRare.length - countOpened;
+
+                                            let wonText = '';
+                                            wonText += `Você jogou **${pullTimes}** pulls\n\n`;
+                                            wonText += 'Itens ' + GACHA_RARITIES[0].emojiLetter + ' e ' + GACHA_RARITIES[1].emojiLetter + ":\n";
+                                            wonText += ` **${itemsWonNotRareAmount} item(ns)**\n\n`;
+
+                                            wonText += 'Itens ' + GACHA_RARITIES[2].emojiLetter + ' e ' + GACHA_RARITIES[3].emojiLetter + ":\n";
+
+                                            if (itemsWonRare.length > 0) {
+                                                for (let i = 0; i < itemsWonRare.length; i++) {
+                                                    const item = itemsWonRare[i];
+
+                                                    if (i >= min) {
+                                                        wonText += `\n`
+                                                            + `\`[${i + 1}]\` `
+                                                            + `:gift:`;
+                                                    } else {
+                                                        wonText += `\n`
+                                                            + `\`[${i + 1}]\` `
+                                                            + formatItem(guild, item, news[i]);
+                                                    }
+                                                }
+                                            } else {
+                                                wonText += "**Nenhum :(**";
+                                            }
+
+                                            wonText += `\n\nSeus tokens: **${info.tokens}**`;
+
+                                            return msg.edit(`${member},\n:slot_machine: Resultado do seu pull:\n${wonText}`).then(() => {
+                                                if (countOpened > 0) {
+                                                    if (skip) {
+                                                        return _open(msg, 0);
+                                                    }
+                                                    return new Promise(resolve => {
+                                                        message.client.setTimeout(() => {
+                                                            resolve(_open(msg, countOpened - 1));
+                                                        }, 2000);
+                                                    });
+                                                } else {
+                                                    // quando termina a animação de open do gacha
+                                                    // não precisa mais ter o listen lá de cima.
+                                                    // então, finaliza
+                                                    endSkip();
+                                                }
+                                            }).catch(err => {
+                                                if (countOpened === 0) {
+                                                    // se for a ultima tentativa, delegar esse erro pro controller
+                                                    throw err;
+                                                }
+                                                // se deu algum erro, tentar revelar tudo de uma vez
+                                                console.error(err);
+                                                return _open(msg, 0);
+                                            });
+                                        }
+
+                                        return message.reply(`\n:slot_machine: Resultado do seu pull:\n:game_die: Carregando resultados :game_die:`)
+                                            .then(msg => {
+                                                if (maxRarityWon >= 2) {
+                                                    // se for A pra cima, dar uma dica do que vem
+                                                    // através do react de "festa".
+                                                    // isso é como se fosse a cor das luzes
+                                                    // no gacha do bandori quando vem uma 3*+
+                                                    msg.react('🎉');
+                                                }
+                                                return _open(msg, itemsWonRare.length);
                                             })
                                             ;
                                     })
@@ -2147,8 +2646,10 @@ class Gacha {
                 if (shopItems.length && inflation > 0) {
                     console.log('INFLATION', inflation);
                     shopItems.forEach(shopItem => {
-                        shopItem.costs["token"] += inflation;
-                        this.db.save('shop/' + shopItem.id, shopItem);
+                        if (!shopItem.shopExclusive) {
+                            shopItem.costs["token"] += inflation;
+                            this.db.save('shop/' + shopItem.id, shopItem);
+                        }
                     })
                 }
             }
@@ -2431,13 +2932,13 @@ class Gacha {
         if (hasPermission(message)) {
             // comandos de admin
             text += ''
-                + `\`+gacha create\`\n`
-                + `Abre um menu interativo pra criação de um item de gacha.\n`
+                + `\`+gacha admin\`\n`
+                + `Abre um menu interativo para criação de itens entre outras coisas.\n`
                 + `\n`
-                + `\`+gacha delete (nome do item)\`\n`
-                + `Excluí um item de gacha pelo nome. O nome deve ser exatamente o mesmo, incluindo acentos e letras maiúsculas.\n`
-                + `Por exemplo, se o nome de um item é "iTeM De GáCHa", o comando deve ser \`+gacha delete iTeM De GáCHa\`\n`
-                + `\n`
+                // + `\`+gacha delete (nome do item)\`\n`
+                // + `Excluí um item de gacha pelo nome. O nome deve ser exatamente o mesmo, incluindo acentos e letras maiúsculas.\n`
+                // + `Por exemplo, se o nome de um item é "iTeM De GáCHa", o comando deve ser \`+gacha delete iTeM De GáCHa\`\n`
+                // + `\n`
                 + `\`+gacha draw (id da mensagem)\`\n`
                 + `Marca a mensagem do membro como *válido* para receber seus ${GACHA_EXTRA_TOKENS_PRIZE} tokens `
                 + `de recompensa por ter participado de um request de desenhos.\n`
@@ -2453,6 +2954,9 @@ class Gacha {
             + `\`+gacha info\` ou \`+gacha stats\`\n`
             + `Informa seus tokens e items adquiridos.\n`
             + `\n`
+            + `\`+gacha tokens\` ou \`+gacha t\`\n`
+            + `Informa seus tokens.\n`
+            + `\n`
             + `\`+gacha list\`\n`
             + `Mostra uma lista com todos os itens disponíveis do gacha.\n`
             + `\n`
@@ -2465,15 +2969,21 @@ class Gacha {
             + `Cada item tem um valor de acordo com a raridade dele.\n`
             + `Os itens considerados lixos (maioria dos ${GACHA_RARITIES[0].emojiLetter}) serão *todos* descartados no exchange.\n`
             + `\n`
+            + `\`+gacha give (usuário) (quantidade)\`\n`
+            + `Envia uma quantidade de seus tokens para um (ou mais) usuários.\n`
+            + `Se você marcar mais de uma pessoa, os tokens serão divididos igualmente entre eles.\n`
+            + `Pode ser usado via DM, em vez de marcar o usuário, colocar o ID dele. Exemplo: \`+gacha give 208028185584074763 50\` (manda 50 tokens pro usuário 208028185584074763)\n`
+            + `\n`
             + `\`+gacha bonus\`\n`
             + `Ganha um bônus de ${GACHA_DAILY_TOKENS} tokens a cada ${formatTime(GACHA_DAILY_DAY)}.\n`
             + `Se você manter um streak por ${GACHA_DAILY_BONUS_STREAK} bônus, você ganha um prêmio extra de ${GACHA_DAILY_BONUS_STREAK_TOKENS} tokens.\n`
             + `\n`
-            + `\`+gacha pull (número)\` ou \`+gacha roll (número)\`\n`
+            + `\`+gacha pull (número)\` ou \`+gacha roll (número)\` ou \`+gacha pull-all\` (para rodar tudo)\n`
             + `Rola um gacha.\n`
             + `Cada pull dá direito a um item, e cada item custa ${GACHA_PULL_COST} tokens. Você pode multiplicar `
             + `o número de pulls colocando uma quantidade na frente, aumentando também o custo proporcionalmente.\n`
             + `Se você rolar 10 itens de uma vez, você tem uma garantia de pelo menos ${GACHA_EXTRA_CHANCE_MULTIPLIER} ${GACHA_RARITIES[1].emojiLetter}+).\n`
+            + `\n`
             + `\`+gacha keep\`\n`
             + `Abre um menu interativo que você vai poder escolher que itens você quer sempre manter dos que `
             + `são do tipo ${GACHA_RARITIES[0].emojiLetter} no exchange.\n`
@@ -2510,6 +3020,7 @@ function createItem(gacha, guild, user, props) {
                     emoji: props.emoji,
                     author: user.id,
                     rarity: props.rarity,
+                    shopExclusive: props.shopExclusive,
                     name: props.name,
                     link: props.link || null,
                     limited: GACHA_ITEM_TYPES[props.type].limited,
@@ -2605,6 +3116,7 @@ function createRole(gacha, guild, user, color, rarity, name, props) {
                                     emoji: emoji.id,
                                     author: user.id,
                                     rarity: rarity,
+                                    shopExclusive: props.shopExclusive,
                                     color: color,
                                     colorDecimal: colorNumber,
                                     name: name,
@@ -2729,7 +3241,9 @@ function emojifyName(name) {
 function formatItem(guild, item, isNew) {
     const emoji = item.emoji.match(/^\d+$/) ? guild.emojis.get(item.emoji) : item.emoji;
     return `${emoji}${GACHA_RARITIES[item.rarity].emojiLetter} **${item.name}**`
-        + (isNew ? ` :sparkles:` : '');
+        + (isNew ? ` :sparkles:` : '')
+        + (item.shopExclusive ? ` :shopping_bags:` : '')
+        ;
 }
 
 function rarityLetterToNumber(letter) {

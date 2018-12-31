@@ -88,7 +88,7 @@ class MessageIdResolvable {
             for (let i = 0; i < this.args.length; i++) {
                 const arg = this.args[i];
 
-                if (arg.match(/^=?[0-9]+$/) && arg.length >= 10) {
+                if (arg.match(/^=?[0-9]+$/) && arg.length >= 16) {
                     // se encontrar um id numerico
                     const text = arg.replace(/^=/, "");
                     try {
