@@ -27,8 +27,8 @@ const GACHA_ITEM_TYPES = [
 const GACHA_RARITIES = [
     {letter: 'C', emojiLetter: ':regional_indicator_c:', chance: 1.0000, exchange: 5},
     {letter: 'B', emojiLetter: ':regional_indicator_b:', chance: 0.0300, exchange: 10},
-    {letter: 'A', emojiLetter: ':regional_indicator_a:', chance: 0.0010, exchange: 25},
-    {letter: 'S', emojiLetter: ':regional_indicator_s:', chance: 0.0002, exchange: 50},
+    {letter: 'A', emojiLetter: ':regional_indicator_a:', chance: 0.0012, exchange: 25},
+    {letter: 'S', emojiLetter: ':regional_indicator_s:', chance: 0.0003, exchange: 50},
 ];
 
 let GACHA_PULL_COST = 100;
@@ -36,6 +36,7 @@ const GACHA_MAX_PULLS = 10;
 let GACHA_INITIAL_TOKENS = 800;
 let GACHA_EXTRA_CHANCE_MULTIPLIER = 1;
 let GACHA_INFLATION = 0.001;
+let GACHA_MAX_CAP = 40000;
 
 let GACHA_DAILY_TOKENS = 80;
 let GACHA_DAILY_DAY = 24 * 60 * 60; // 1 dia
@@ -85,6 +86,7 @@ class Gacha {
             GACHA_INITIAL_TOKENS = config.initialTokens || 800;
             GACHA_EXTRA_CHANCE_MULTIPLIER = config.extraChanceMultiplier || 1;
             GACHA_INFLATION = config.inflation || 0.001;
+            GACHA_MAX_CAP = config.maxCap || 40000;
 
             GACHA_DAILY_TOKENS = config.dailyTokens || 80;
             GACHA_DAILY_DAY = config.dailyOneDay || (24 * 60 * 60); // 1 dia
@@ -932,7 +934,12 @@ class Gacha {
             items = items.filter(filter);
         }
 
-        items.forEach(item => {
+        let infos;
+        if (isDebug) {
+            infos = await this.db.getAll('info');
+        }
+
+        for (const item of items) {
             if (isDebug || (!item.owner && !item.shopExclusive)) {
                 foundItems += `\n:small_blue_diamond: `
                     + (isDebug ? `(criado: <@${item.author}>) ` : '')
@@ -940,8 +947,14 @@ class Gacha {
                     + (isDebug && item.shopExclusive ? `(exclusivo da loja) ` : '')
                     + formatItem(guild, item)
                 ;
+
+                if (isDebug) {
+                    foundItems += "\n    - "
+                        + whoisItem(infos, guild, item).join("\n    - ")
+                    ;
+                }
             }
-        });
+        }
 
         if (!foundItems) {
             if (only) {
@@ -1273,6 +1286,10 @@ class Gacha {
 
         let info = await getInfo(this, member);
 
+        // só considera que o usuario tem até o cap de tokens
+        const maxCapDiff = Math.max(0, info.tokens - GACHA_MAX_CAP);
+        info.tokens = Math.min(GACHA_MAX_CAP, info.tokens);
+
         //let items = await this.db.findAll('roles', filter);
 
         let pages = [];
@@ -1438,6 +1455,11 @@ class Gacha {
         // item adicionado
         info.roles[purchased.itemToSell] = info.roles[purchased.itemToSell] || 0;
         info.roles[purchased.itemToSell]++;
+
+        // volta com o "excesso" de tokens acima do cap, se o usuario tiver
+        if (maxCapDiff > 0) {
+            info.tokens += maxCapDiff;
+        }
 
         await this.db.saveAll([
             ['info/' + member.id, info],
@@ -2617,8 +2639,10 @@ class Gacha {
 
                     // salva
                     const modifyFn = info => {
-                        console.log('DROP TOKEN', member.id, info.tokens, tokenSums[member.id]);
-                        info.tokens += tokenSums[member.id];
+                        if (info.tokens < GACHA_MAX_CAP) {
+                            console.log('DROP TOKEN', member.id, info.tokens, tokenSums[member.id]);
+                            info.tokens += tokenSums[member.id];
+                        }
                         return info;
                     };
 
@@ -3251,6 +3275,25 @@ function formatItem(guild, item, isNew) {
         + (isNew ? ` :sparkles:` : '')
         + (item.shopExclusive ? ` :shopping_bags:` : '')
         ;
+}
+
+function whoisItem(infos, guild, item) {
+    let found = [];
+    for (const infoId in infos) {
+        if (!infos.hasOwnProperty(infoId)) continue;
+
+        const info = infos[infoId];
+        if (!info.roles) continue;
+        if (info.roles[item.id] && !found.includes(infoId)) {
+            found.push(infoId);
+        }
+    }
+    found = found.map(f => {
+        const member = guild.members.get(f) || { user: null };
+        return member.user || { username: null };
+    });
+    found.sort((a, b) => b.username - a.username);
+    return found;
 }
 
 function rarityLetterToNumber(letter) {
