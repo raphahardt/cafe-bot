@@ -1408,11 +1408,14 @@ class Gacha {
 
         // pega de novo do banco de dados, pra confirmar os dados na hora da transação
         const purchasedId = shopItems[choice.item].id;
-        const purchased = await this.db.getOne('shop/' + purchasedId);
+        const [purchased, itemBought] = await Promise.all([
+            this.db.getOne('shop/' + purchasedId),
+            this.db.getOne('roles/' + purchased.itemToSell),
+        ]);
         info = await getInfo(this, member);
 
         // validação ---------
-        if (!purchased.quantity) {
+        if (purchased.quantity <= 0) {
             return message.reply(`:x: **Compra falhou.** Não existe mais esse item na loja.`);
         }
 
@@ -1453,8 +1456,14 @@ class Gacha {
             }
         }
         // item adicionado
-        info.roles[purchased.itemToSell] = info.roles[purchased.itemToSell] || 0;
-        info.roles[purchased.itemToSell]++;
+        info.roles[itemBought.id] = info.roles[itemBought.id] || 0;
+        info.roles[itemBought.id]++;
+
+        if (GACHA_ITEM_TYPES[itemBought.type].limited) {
+            // se o item é um do tipo limitado, marcar o dono do item nele
+            itemBought.owner = member.id;
+            await this.db.save('roles/' + itemBought.id, itemBought);
+        }
 
         // volta com o "excesso" de tokens acima do cap, se o usuario tiver
         if (maxCapDiff > 0) {
@@ -1466,7 +1475,7 @@ class Gacha {
             ['shop/' + purchased.id, purchased]
         ]);
 
-        return message.reply(`:white_check_mark: **Compra com sucesso!** Você possui agora **${info.roles[purchased.itemToSell]}**x ${itemsFormattedCache[purchased.itemToSell]}.`);
+        return message.reply(`:white_check_mark: **Compra com sucesso!** Você possui agora **${info.roles[itemBought.id]}**x ${itemsFormattedCache[itemBought.id]}.`);
 
         // const chooseItem = items[choice.item];
         // const isKeep = !info.keep.includes(chooseItem.id);
