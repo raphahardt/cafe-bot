@@ -1138,6 +1138,11 @@ class Gacha {
         const usersToGive = await utils.messageResolver(message, args, true).resolveUsers(false);
         let giveAmount = parseInt(args.shift());
 
+        // tenta os proximos argumentos pra ver se acha um numero
+        while (args.length && isNaN(giveAmount)) {
+            giveAmount = parseInt(args.shift());
+        }
+
         if (usersToGive.length === 0) {
             return message.reply(`:x: Comando incorreto. Use \`+gacha give (usuário) (quantidade tokens)\``);
         }
@@ -1408,11 +1413,12 @@ class Gacha {
 
         // pega de novo do banco de dados, pra confirmar os dados na hora da transação
         const purchasedId = shopItems[choice.item].id;
-        const [purchased, itemBought] = await Promise.all([
-            this.db.getOne('shop/' + purchasedId),
+        const purchased = await this.db.getOne('shop/' + purchasedId);
+        let itemBought;
+        [info, itemBought] = await Promise.all([
+            await getInfo(this, member),
             this.db.getOne('roles/' + purchased.itemToSell),
         ]);
-        info = await getInfo(this, member);
 
         // validação ---------
         if (purchased.quantity <= 0) {
