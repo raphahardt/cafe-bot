@@ -135,7 +135,11 @@ const bot = {
 
             // pega o comando
             let argsString = message.content.slice(utils.prefix.length).trim();
+            let argsNamed = {};
+            argsString = parseNamedArgs(argsNamed, argsString);
             const args = parseArgs(argsString);
+            mergeArgsWithNamedArgs(args, argsNamed);
+
             const command = args.shift().toLowerCase();
 
             // invocando os comandos v2
@@ -247,6 +251,51 @@ function parseArgs(string) {
     // uma pequena otimização no caso de não ter nenhuma aspas, não faz sentido
     // correr a string inteira todas as vezes
     return string.split(/\s+/g);
+}
+
+function parseNamedArgs(args, string) {
+    if (string.indexOf('-') >= 0) {
+        let matches = utils.matchAll(string, /--?([a-z0-9-]+)(?:[=\s]+([^-]+))?/gim);
+        if (matches !== null) {
+            for (let i = 0; i < matches.length; i++) {
+                const m = matches[i];
+                const matchedText = m[0].trim();
+                const key = m[1];
+                let value = m[2] || null;
+
+                switch (value) {
+                    case null:
+                    case 'true':
+                        value = true;
+                        break;
+                    case 'false':
+                        value = false;
+                        break;
+                    default:
+                        if (!isNaN(value)) {
+                            // se for numerico, transformar em um
+                            value = Number(value);
+                        } else {
+                            value = value.trim();
+                        }
+                }
+                args[key] = value;
+
+                // retira esse trecho dos args
+                string = string.replace(matchedText, '');
+            }
+        }
+    }
+    return string;
+}
+
+function mergeArgsWithNamedArgs(args, argsNamed) {
+    for (let key in argsNamed) {
+        if (argsNamed.hasOwnProperty(key)) {
+            args.push('--' + key); // pra manter compatibilidade com outros comandos
+            args[key] = argsNamed[key];
+        }
+    }
 }
 
 /**
