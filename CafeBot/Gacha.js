@@ -1468,7 +1468,6 @@ class Gacha {
         if (GACHA_ITEM_TYPES[itemBought.type].limited) {
             // se o item é um do tipo limitado, marcar o dono do item nele
             itemBought.owner = member.id;
-            await this.db.save('roles/' + itemBought.id, itemBought);
         }
 
         // volta com o "excesso" de tokens acima do cap, se o usuario tiver
@@ -1478,7 +1477,8 @@ class Gacha {
 
         await this.db.saveAll([
             ['info/' + member.id, info],
-            ['shop/' + purchased.id, purchased]
+            ['shop/' + purchased.id, purchased],
+            ['roles/' + itemBought.id, itemBought]
         ]);
 
         return message.reply(`:white_check_mark: **Compra com sucesso!** Você possui agora **${info.roles[itemBought.id]}**x ${itemsFormattedCache[itemBought.id]}.`);
