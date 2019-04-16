@@ -163,6 +163,11 @@ const bot = {
                                 message.reply(`:no_entry_sign: Este comando só pode ser usado dentro do servidor.`);
                                 continue;
                             }
+                        } else if (opts.onlyDM) {
+                            if (!(message.channel instanceof Discord.DMChannel)) {
+                                message.reply(`:no_entry_sign: Este comando só pode ser usado nas DMs.`);
+                                continue;
+                            }
                         }
 
                         const r = fn.apply(module, a);
@@ -191,15 +196,15 @@ const bot = {
 
                 // só em alguns eventos, mandar o client nos argumentos, pra facilitar
                 // minha vida na hora de pegar o client do discord
-                if (event === "ready") {
+                /*if (event === "ready") {
                     args = [discordClient].concat(args);
-                } else {
+                } else {*/
                     if (opts.guild) {
                         const guild = getCafeComPaoGuildAndCheck(discordClient, opts);
                         // coloca a guild como primeiro argumento
                         args = [guild].concat(args);
                     }
-                }
+                /*}*/
 
                 // executa o evento de fato
                 try {
