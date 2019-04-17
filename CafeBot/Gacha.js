@@ -190,6 +190,23 @@ class Gacha {
         }
     }
 
+    async consumeTokens(member, amount) {
+        const info = await getInfo(this, member);
+
+        if (info.tokens < amount) {
+            throw new Error('Tokens insuficientes. Seu total: **' + info.tokens + '**');
+        }
+
+        return modifyInfo(this, member, info => {
+            if (info.tokens < amount) {
+                throw new Error('Tokens insuficientes. Seu total: **' + info.tokens + '**');
+            }
+            console.log('CONSUME TOKEN', member.id, info.tokens);
+            info.tokens -= amount;
+            return info;
+        });
+    }
+
     async gachaAdminCommand(guild, message, args) {
         if (!hasPermission(message)) {
             throw new PermissionError();

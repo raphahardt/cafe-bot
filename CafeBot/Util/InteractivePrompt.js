@@ -17,6 +17,24 @@ class InteractivePrompt {
         return new InteractivePrompt(channel, member, title, timeout);
     }
 
+    static async createConfirm(message, confirmText, timeout = 20000) {
+        const prompt = this.create(message.channel, message.author, null, timeout)
+            .addPrompt(
+                'interactive-confirmation',
+                confirmText,
+                `Digite \`sim\` para confirmar`,
+                response => {
+                    return ['sim'].includes(response.toLowerCase());
+                },
+                (choice, prompt) => {
+                    prompt.setChoice('code', choice.toLowerCase());
+                }
+            );
+
+        const choice = await prompt.start('interactive-confirmation');
+        return (choice.code === 'sim');
+    }
+
     setChoice(key, value) {
         this.choices[key] = value;
         return this;
