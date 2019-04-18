@@ -4,7 +4,7 @@ const Cafebase = require('./Cafebase');
 const InteractivePrompt = require('./Util/InteractivePrompt');
 const randomNumber = require('./Util/RandomNumber');
 
-const EMOJI_NUMBERS = [/*'0⃣', */'1⃣', '2⃣', '3⃣', '4⃣', '5⃣', '6⃣', '7⃣', '8⃣', '9⃣'];
+const EMOJI_NUMBERS = [/*'0⃣', */'1⃣', '2⃣', '3⃣', '4⃣', '5⃣', '6⃣', '7⃣', '8⃣', '9⃣', '🔟'];
 const EMOJI_LETTERS = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '🇭', '🇮', '🇯', '🇰', '🇱', '🇲', '🇳', '🇴', '🇵', '🇶', '🇷', '🇸', '🇹', '🇺', '🇻', '🇼', '🇽', '🇾', '🇿'];
 const EMOJI_CANCEL = '🚫';
 
@@ -12,9 +12,11 @@ const QUIZ_EMOJI = ':checkered_flag:';
 const QUIZ_COST = 1200;
 const QUIZ_QUESTIONS_CHANNEL = '567756445471342593';
 const QUIZ_PHASES = 3;
-const QUIZ_PHASE_QUESTION_COUNT = 2;
+const QUIZ_PHASE_QUESTION_COUNT = 8;
 const QUIZ_QUESTION_TOTAL = QUIZ_PHASES * QUIZ_PHASE_QUESTION_COUNT;
 const QUIZ_TIMEOUT = 45000;
+const QUIZ_WIN_THRESHOLD = 5;
+const QUIZ_DEBUG = true;
 
 class Quiz {
     constructor(gachaModule) {
@@ -43,14 +45,24 @@ class Quiz {
 
         if (this.isInQuiz(message)) return;
 
+        let userInfo = await this.db.getOne('participants/' + user.id, {});
+        userInfo.wins = userInfo.wins || 0;
+        userInfo.winDates = userInfo.winDates || [];
+
         let confirmText = QUIZ_EMOJI + " -- **Café com Pão Archives** --\n\n";
-        confirmText += "Custa `" + QUIZ_COST + " tokens` para participar.\n";
+        if (userInfo.wins < QUIZ_WIN_THRESHOLD) {
+            confirmText += "Custa `" + QUIZ_COST + " tokens` para participar.\n";
+        } else {
+            confirmText += "Você já passou do limite de vitórias. Agora é de graça participar.\n";
+        }
         confirmText += "Confirma?";
         const confirm = await InteractivePrompt.createConfirm(message, confirmText);
 
         if (confirm) {
             try {
-                //await this.gacha.consumeTokens(message.author, 1200);
+                if (userInfo.wins < QUIZ_WIN_THRESHOLD) {
+                    await this.gacha.consumeTokens(message.author, QUIZ_COST);
+                }
             } catch (e) {
                 return message.reply(`:x: ${e.message}`);
             }
@@ -66,7 +78,7 @@ class Quiz {
                         const currentNumber = questionNumber + phase * QUIZ_PHASE_QUESTION_COUNT;
                         let question = await this.getRandomQuestion(alreadyQuestions);
 
-                        const response = await this.makeQuestion(message, channel, question, currentNumber);
+                        const response = await this.makeQuestion(user, channel, question, currentNumber);
 
                         choices.push(response);
                     }
@@ -78,7 +90,7 @@ class Quiz {
                         // teve erradas, parar o jogo
                         this.exitQuiz(message);
 
-                        return message.reply(`${QUIZ_EMOJI} | :x: Você errou **${wrongChoices.length} pergunta(s)**, infelizmente. Tenta de novo.`);
+                        return message.reply(`${QUIZ_EMOJI} | :x: Que pena! Você infelizmente errou **${wrongChoices.length} pergunta(s)** e não passou pra próxima fase. Boa sorte na próxima!`);
                     } else {
                         // tudo certo até agora, continuar
                         const phaseNumber = phase + 2;
@@ -96,24 +108,47 @@ class Quiz {
                 const checkCorrects = choices.filter(c => !!c.correct).length;
 
                 if (checkCorrects === QUIZ_QUESTION_TOTAL) {
-                    // realmente ganhou
+                    // marca uma vitoria
+                    userInfo.wins++;
+                    userInfo.winDates.push((new Date()).getTime());
+                    await this.db.save('participants/' + user.id, userInfo);
+
+                    if (userInfo.wins > QUIZ_WIN_THRESHOLD) {
+                        message.reply(`${QUIZ_EMOJI} | :white_check_mark: Você ganhou **${userInfo.wins} vezes**.`);
+                    } else {
+                        let prizes = await this.gacha.shuffleItems(user, 10, 5, 2);
+
+                        // realmente ganhou
+                        const prizeResponse = await this.makePrize(user, channel, guild, prizes);
+                        const confirmedGive = await this.gacha.giveItems(user, [prizeResponse.item], QUIZ_DEBUG);
+
+                        if (!confirmedGive) {
+                            // se por algum motivo o item não entrar no iventario, mandar um erro pra mim pra eu
+                            // colocar manualmente depois
+                            throw new Error(`Item ${prizeResponse.item.id} - ${prizeResponse.item.name} era para ter sido dado para ${user}`);
+                        }
+
+                        message.reply(`${QUIZ_EMOJI} | :white_check_mark: Item ` + this.gacha.formatItem(guild, prizeResponse.item) + ' está no seu inventário agora' + (!prizeResponse.choosenByUser ? ` *(escolhido aleatoriamente)*` : ''));
+                    }
+
+                    //message.reply(`${QUIZ_EMOJI} | :white_check_mark: Parabéns, você ganhou! :tada:`);
                 } else {
-                    message.reply(`${QUIZ_EMOJI} | :x: Você errou **${QUIZ_QUESTION_TOTAL - checkCorrects} pergunta(s)**, infelizmente. Tenta de novo.`);
+                    message.reply(`${QUIZ_EMOJI} | :x: Por algum motivo, você entrou nessa condição, que não era pra acontecer.... Fiz esse if só pra garantir que ninguém burlasse o jogo, e você conseguiu. Parabéns. E não, você não ganhou, mas boa tentativa em achar esse exploit :3 (${QUIZ_QUESTION_TOTAL - checkCorrects})`);
                 }
 
                 this.exitQuiz(message);
             } catch (e) {
+                // cancelou ou timeout
+                this.exitQuiz(message);
+
                 console.log('CANCELOU OU TIMEOUT', e);
                 if (e === 'timeout') {
                     return message.reply(`${QUIZ_EMOJI} | :x: Tempo esgotado!`);
                 } else if (e === 'cancel') {
                     return message.reply(`${QUIZ_EMOJI} | :x: Você cancelou. Seus tokens não voltarão.`);
                 } else {
-
+                    throw e;
                 }
-
-                // cancelou ou timeout
-                this.exitQuiz(message);
             }
         }
     }
@@ -139,7 +174,7 @@ class Quiz {
 
     async sendQuestion(channel, question, number) {
         let text = '';
-        text += EMOJI_LETTERS[number] + " ";
+        text += this.getLetter(number) + " ";
         text += question.question + "\n";
         let initialText = text + '';
 
@@ -164,11 +199,12 @@ class Quiz {
         return m;
     }
 
-    async makeQuestion(message, channel, question, number) {
+    async makeQuestion(author, channel, question, number) {
         let m = await this.sendQuestion(channel, question, number);
+        let emojisForFilter = EMOJI_NUMBERS.slice(0, question.answers.length);
         let filter = (reaction, user) => {
-            let r = user.id === message.author.id;
-            r = r && (EMOJI_NUMBERS.includes(reaction.emoji.name) || reaction.emoji.name === EMOJI_CANCEL);
+            let r = user.id === author.id;
+            r = r && (emojisForFilter.includes(reaction.emoji.name) || reaction.emoji.name === EMOJI_CANCEL);
             return r;
         };
         let collector = new Discord.ReactionCollector(m, filter, { max: 1, time: QUIZ_TIMEOUT });
@@ -194,6 +230,65 @@ class Quiz {
                 }
             });
         });
+    }
+
+    async sendPrize(author, channel, guild, prizes) {
+        let text = '';
+        text += `${QUIZ_EMOJI} | :white_check_mark: Parabéns, você ganhou! :tada:\n`;
+        let initialText = text + "\nAguarde enquanto os itens são carregados...";
+
+        text += "\nEscolha um dos itens para ser o seu prêmio:\n";
+
+        for (let i = 0; i < prizes.length; i++) {
+            text += '**' + (i + 1) + ')** ' + this.gacha.formatItem(guild, prizes[i]);
+            text += "\n";
+        }
+
+        text += "\nVocê tem 1 minuto para escolher. Caso termine o tempo, será escolhido um aleatoriamente.";
+
+        const m = await channel.send(initialText);
+        for (let i = 0; i < prizes.length; i++) {
+            await m.react(EMOJI_NUMBERS[i]);
+        }
+        await m.edit(text);
+
+        return m;
+    }
+
+    async makePrize(author, channel, guild, prizes) {
+        let m = await this.sendPrize(author, channel, guild, prizes);
+        let emojisForFilter = EMOJI_NUMBERS.slice(0, prizes.length);
+        let filter = (reaction, user) => {
+            let r = user.id === author.id;
+            r = r && (emojisForFilter.includes(reaction.emoji.name));
+            return r;
+        };
+        let collector = new Discord.ReactionCollector(m, filter, { max: 1, time: 60000 });
+
+        return new Promise((resolve, reject) => {
+            collector.on('end', async (collected) => {
+                await m.delete();
+
+                if (collected.size) {
+                    // teve reaction, verificar qual é
+                    const react = collected.first();
+
+                    const indexChoice = EMOJI_NUMBERS.indexOf(react.emoji.name);
+                    resolve({ item: prizes[indexChoice], choosenByUser: true });
+                } else {
+                    // timeout, pega um aleatório
+                    const indexChoice = Math.floor(Math.random() * prizes.length);
+                    resolve({ item: prizes[indexChoice], choosenByUser: false });
+                }
+            });
+        });
+    }
+
+    getLetter(number) {
+        let cycles = Math.floor(number / EMOJI_LETTERS.length);
+        number = number % EMOJI_LETTERS.length;
+
+        return (cycles > 0 ? EMOJI_LETTERS[cycles] : '' ) + EMOJI_LETTERS[number];
     }
 
     async onReady(guild) {
@@ -371,7 +466,7 @@ class Quiz {
             'message': [this.onMessage, {guild: true}],
             'messageDelete': [this.onMessageDelete, {guild: true}],
             'messageUpdate': [this.onMessageUpdate, {guild: true}],
-            //'ready': [this.onReady, {guild: true}],
+            'ready': [this.onReady, {guild: true}],
             //'guildMemberUpdate': this.onGuildMemberUpdate
         }
     }

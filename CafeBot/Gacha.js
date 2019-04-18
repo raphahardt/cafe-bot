@@ -190,6 +190,10 @@ class Gacha {
         }
     }
 
+    formatItem(guild, item, isNew = false) {
+        return formatItem(guild, item, isNew);
+    }
+
     async consumeTokens(member, amount) {
         const info = await getInfo(this, member);
 
@@ -205,6 +209,132 @@ class Gacha {
             info.tokens -= amount;
             return info;
         });
+    }
+
+    async shuffleItems(member, pullTimes = 1, minimumGachaRarityExtraChance = 0, minimumRarityIndexFromExtraChance = 1) {
+        let items = await this.db.getArray('roles');
+        let itemsWon = [];
+        let maxRarityWon = 0;
+
+        // 1x pull do gacha
+        let luckyNumberPromises = [];
+        for (let t = 0; t < pullTimes; t++) {
+            let maxShuffle = 10000;
+            // garantia de chance, raridade alta
+            if (minimumGachaRarityExtraChance > 0) {
+                // pegando o maxShuffle e multiplicando pela
+                // chance de uma raridade mais alta,
+                // garante que o luckyNumber vai ser menor
+                // e consequentemente, ganhando uma raridade mais alta
+                maxShuffle *= GACHA_RARITIES[minimumRarityIndexFromExtraChance].chance;
+
+                minimumGachaRarityExtraChance--;
+            }
+
+            luckyNumberPromises.push(randomNumber(0, parseInt(maxShuffle)));
+        }
+
+        // guarda todos os itens num array com todos os itens,
+        // mas separado por raridade
+        let possibleItemsByRarity = {};
+        for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
+            possibleItemsByRarity[r] = [];
+        }
+        items.forEach(item => {
+            if (!item.owner && !item.shopExclusive) {
+                possibleItemsByRarity[item.rarity].push(item);
+            }
+        });
+
+        // pega os numeros da sorte
+        let luckyNumbers = await Promise.all(luckyNumberPromises);
+
+        // dá uma embaralhada nos numeros sorteados pra
+        // os itens não aparecerem muito sequenciais
+        luckyNumbers = utils.shuffle(luckyNumbers);
+
+        // 1x pull do gacha
+        for (let t = 0; t < pullTimes; t++) {
+            // pega o numero sorteado
+            const luckyNumber = luckyNumbers[t];
+
+            // encontra qual tipo de item você vai ganhar primeiro
+            let rarityWon;
+            for (let r = GACHA_RARITIES.length - 1; r >= 0; r--) {
+                const rarityFactor = 10000 * GACHA_RARITIES[r].chance;
+
+                if (luckyNumber <= rarityFactor) {
+                    rarityWon = r;
+                    break;
+                }
+            }
+            maxRarityWon = Math.max(maxRarityWon, rarityWon);
+
+            //console.log('RARITY WON', rarityWon);
+
+            // agora, entre os itens, encontra qual deles vc vai ganhar, baseado
+            // na raridade que você tirou
+            let possibleItems = possibleItemsByRarity[rarityWon].slice();
+
+            //console.log('POSSIBLE ITEMS', possibleItems);
+
+            // embaralha itens
+            possibleItems = utils.shuffle(possibleItems);
+
+            // ...e pego aleatoriamente um aleatoriamente
+            let idx = parseInt((Math.random() * (possibleItems.length * 2000)) / 2000);
+            idx = Math.min(possibleItems.length - 1, idx);
+            const itemWon = possibleItems[idx];
+
+            // coloca no hash de itens ganhos
+            itemsWon.push(itemWon);
+        }
+        // --- fim do for dos pulls
+
+        return itemsWon;
+    }
+
+    async giveItems(member, itemsWon, isDebug = false) {
+        //console.log('WON', itemsWon);
+
+        let info = await getInfo(this, member);
+
+        let itemsToSave = [];
+
+        // adiciona os itens ganhos no seu inventario
+        for (let i = 0; i < itemsWon.length; i++) {
+            const item = itemsWon[i];
+
+            // cria o item no inventario do usuario, caso não tenha
+            info.roles[item.id] = info.roles[item.id] || 0;
+
+            if (!isDebug) {
+                // adiciona +1
+                info.roles[item.id]++;
+
+                if (GACHA_ITEM_TYPES[item.type].limited) {
+                    // se o item é um do tipo limitado, marcar o dono do item nele
+                    item.owner = member.id;
+                    itemsToSave.push(['roles/' + item.id, item])
+                }
+            }
+        }
+
+        // salva e mostra os ganhos do gacha
+        // marca que tá em gacha pra não dar problema de transação
+        GACHA_ONGOING_PULL[member.id] = true;
+        try {
+            await this.db.saveAll([['info/' + member.id, info]].concat(itemsToSave));
+
+            // tá salvo, transaction pode terminar tranquilo a partir daqui ---
+            delete GACHA_ONGOING_PULL[member.id];
+
+            return true;
+        } catch (err) {
+            delete GACHA_ONGOING_PULL[member.id];
+        }
+
+        return false;
     }
 
     async gachaAdminCommand(guild, message, args) {
@@ -1809,7 +1939,7 @@ class Gacha {
                                 minimumGachaRarityExtraChance--;
                             }
 
-                            luckyNumberPromises.push(randomNumber(0, maxShuffle));
+                            luckyNumberPromises.push(randomNumber(0, parseInt(maxShuffle)));
                         }
 
                         // guarda todos os itens num array com todos os itens,
@@ -2069,7 +2199,7 @@ class Gacha {
                                 minimumGachaRarityExtraChance--;
                             }
 
-                            luckyNumberPromises.push(randomNumber(0, maxShuffle));
+                            luckyNumberPromises.push(randomNumber(0, parseInt(maxShuffle)));
                         }
 
                         // guarda todos os itens num array com todos os itens,
