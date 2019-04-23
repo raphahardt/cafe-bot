@@ -260,7 +260,7 @@ function parseArgs(string) {
 
 function parseNamedArgs(args, string) {
     if (string.indexOf('-') >= 0) {
-        let matches = utils.matchAll(string, /--?([a-z0-9-]+)(?:[=\s]+([^-]+))?/gim);
+        let matches = utils.matchAll(string, /\s--?([a-z0-9-]+)(?:[=\s]+([^-]+))?/gim);
         if (matches !== null) {
             for (let i = 0; i < matches.length; i++) {
                 const m = matches[i];
@@ -291,7 +291,7 @@ function parseNamedArgs(args, string) {
             }
         }
     }
-    return string;
+    return string.trim();
 }
 
 function mergeArgsWithNamedArgs(args, argsNamed) {

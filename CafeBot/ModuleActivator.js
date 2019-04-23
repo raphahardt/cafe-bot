@@ -75,7 +75,6 @@ class ModuleActivator {
 
                 // todo: fazer suporte pra mais de um argumento aqui (talvez retornar um array do modulo, onde o 0 é a fn e 1 é outra coisa)
                 let fn, opts = {};
-                console.log('A', methodsAvailable[m]);
                 if (Array.isArray(methodsAvailable[m])) {
                     fn = methodsAvailable[m][0];
                     opts = methodsAvailable[m][1];

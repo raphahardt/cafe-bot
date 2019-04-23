@@ -11,7 +11,7 @@ const EMOJI_LETTERS = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '
 const EMOJI_CANCEL = '🚫';
 
 const QUIZ_EMOJI = ':checkered_flag:';
-let QUIZ_COST = 1200;
+let QUIZ_COST = 3000;
 let QUIZ_QUESTIONS_CHANNEL = '567756445471342593';
 let QUIZ_PHASES = 3;
 let QUIZ_PHASE_QUESTION_COUNT = 8;

@@ -11,6 +11,8 @@ const CafeBot = require('./CafeBot')(packageCfg);
 const ModuleActivator = require('./CafeBot/ModuleActivator');
 const activator = new ModuleActivator();
 
+const gachaModule = new (require('./CafeBot/Gacha'))();
+
 // registra os eventos de cada um dos 'módulos' do bot
 CafeBot.registerDiscordEvents(client, activator, [
     activator, // o próprio activator também possui comandos, então ele é um modulo também
@@ -28,7 +30,8 @@ CafeBot.registerDiscordEvents(client, activator, [
     //new (require('./CafeBot/BattleRoyale'))(), // fim do battle royale (30/09/18 ✝)
     new (require('./CafeBot/Nsfw'))(),
     new (require('./CafeBot/RemindMe'))(),
-    new (require('./CafeBot/Gacha'))(),
+    gachaModule,
+    new (require('./CafeBot/Quiz'))(gachaModule),
 ]);
 
 // conecta o bot
