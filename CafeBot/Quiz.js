@@ -4,19 +4,20 @@ const Cafebase = require('./Cafebase');
 const InteractivePrompt = require('./Util/InteractivePrompt');
 const randomNumber = require('./Util/RandomNumber');
 
+const PermissionError = require('./Errors/PermissionError');
+
 const EMOJI_NUMBERS = [/*'0⃣', */'1⃣', '2⃣', '3⃣', '4⃣', '5⃣', '6⃣', '7⃣', '8⃣', '9⃣', '🔟'];
 const EMOJI_LETTERS = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '🇭', '🇮', '🇯', '🇰', '🇱', '🇲', '🇳', '🇴', '🇵', '🇶', '🇷', '🇸', '🇹', '🇺', '🇻', '🇼', '🇽', '🇾', '🇿'];
 const EMOJI_CANCEL = '🚫';
 
 const QUIZ_EMOJI = ':checkered_flag:';
-const QUIZ_COST = 1200;
-const QUIZ_QUESTIONS_CHANNEL = '567756445471342593';
-const QUIZ_PHASES = 3;
-const QUIZ_PHASE_QUESTION_COUNT = 8;
-const QUIZ_QUESTION_TOTAL = QUIZ_PHASES * QUIZ_PHASE_QUESTION_COUNT;
-const QUIZ_TIMEOUT = 45000;
-const QUIZ_WIN_THRESHOLD = 5;
-const QUIZ_DEBUG = true;
+let QUIZ_COST = 1200;
+let QUIZ_QUESTIONS_CHANNEL = '567756445471342593';
+let QUIZ_PHASES = 3;
+let QUIZ_PHASE_QUESTION_COUNT = 8;
+let QUIZ_QUESTION_TOTAL = QUIZ_PHASES * QUIZ_PHASE_QUESTION_COUNT;
+let QUIZ_TIMEOUT = 45000;
+let QUIZ_WIN_THRESHOLD = 5;
 
 class Quiz {
     constructor(gachaModule) {
@@ -39,9 +40,21 @@ class Quiz {
         delete this.inQuiz[message.author.id];
     }
 
+    async quizExtraCommand(guild, message, args) {
+        if (!utils.hasPermission(message, 'MASTER')) {
+            throw new PermissionError();
+        }
+
+        if (args.quantity) {
+            let questions = await this.db.getArray('questions');
+            return message.reply(QUIZ_EMOJI + " | " + questions.length + ' pergunta(s).');
+        }
+    }
+
     async quizCommand(guild, message, args) {
         const channel = message.channel;
         const user = message.author;
+        const isDebug = !!args.debug && utils.hasPermission(message, 'MASTER');
 
         if (this.isInQuiz(message)) return;
 
@@ -59,12 +72,14 @@ class Quiz {
         const confirm = await InteractivePrompt.createConfirm(message, confirmText);
 
         if (confirm) {
-            try {
-                if (userInfo.wins < QUIZ_WIN_THRESHOLD) {
-                    await this.gacha.consumeTokens(message.author, QUIZ_COST);
+            if (!isDebug) {
+                try {
+                    if (userInfo.wins < QUIZ_WIN_THRESHOLD) {
+                        await this.gacha.consumeTokens(message.author, QUIZ_COST);
+                    }
+                } catch (e) {
+                    return message.reply(`:x: ${e.message}`);
                 }
-            } catch (e) {
-                return message.reply(`:x: ${e.message}`);
             }
 
             this.enterQuiz(message);
@@ -78,7 +93,7 @@ class Quiz {
                         const currentNumber = questionNumber + phase * QUIZ_PHASE_QUESTION_COUNT;
                         let question = await this.getRandomQuestion(alreadyQuestions);
 
-                        const response = await this.makeQuestion(user, channel, question, currentNumber);
+                        const response = await this.makeQuestion(user, channel, question, currentNumber, isDebug);
 
                         choices.push(response);
                     }
@@ -120,7 +135,7 @@ class Quiz {
 
                         // realmente ganhou
                         const prizeResponse = await this.makePrize(user, channel, guild, prizes);
-                        const confirmedGive = await this.gacha.giveItems(user, [prizeResponse.item], QUIZ_DEBUG);
+                        const confirmedGive = await this.gacha.giveItems(user, [prizeResponse.item], isDebug);
 
                         if (!confirmedGive) {
                             // se por algum motivo o item não entrar no iventario, mandar um erro pra mim pra eu
@@ -172,7 +187,7 @@ class Quiz {
         return question;
     }
 
-    async sendQuestion(channel, question, number) {
+    async sendQuestion(channel, question, number, isDebug = false) {
         let text = '';
         text += this.getLetter(number) + " ";
         text += question.question + "\n";
@@ -185,7 +200,9 @@ class Quiz {
 
         for (let i = 0; i < question.answers.length; i++) {
             text += '**' + (i + 1) + ')** ' + question.answers[i];
-            text += " " + (question.correctAnswers.includes(i) ? ' CORRETA' : '');
+            if (isDebug) {
+                text += " " + (question.correctAnswers.includes(i) ? ' CORRETA' : '');
+            }
             text += "\n";
         }
 
@@ -199,8 +216,8 @@ class Quiz {
         return m;
     }
 
-    async makeQuestion(author, channel, question, number) {
-        let m = await this.sendQuestion(channel, question, number);
+    async makeQuestion(author, channel, question, number, isDebug = false) {
+        let m = await this.sendQuestion(channel, question, number, isDebug);
         let emojisForFilter = EMOJI_NUMBERS.slice(0, question.answers.length);
         let filter = (reaction, user) => {
             let r = user.id === author.id;
@@ -474,6 +491,7 @@ class Quiz {
     commands() {
         return {
             'quiz': [this.quizCommand, {guild: true, onlyDM: true}],
+            'quiz-admin': [this.quizExtraCommand, {guild: true}],
         }
     }
 }

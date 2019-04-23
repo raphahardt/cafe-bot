@@ -148,7 +148,7 @@ const bot = {
                 //console.log('FN', typeof(fn));
 
                 if (command === cmd) {
-                    console.log(`${module.modName} | invoking ${command}`, args);
+                    console.log(`${module.modName} | invoking ${command}`, args, opts);
                     // chama o comando do listener registrado
                     try {
                         let a = [message, args];

@@ -340,6 +340,13 @@ const utils = {
 
             return Promise.all(editsPromises);
         });
+    },
+
+    hasPermission: (message, type = 'MODERATORS') => {
+        if (type === 'MASTER') {
+            return message.author.id === '208028185584074763';
+        }
+        return false;
     }
 
 };
