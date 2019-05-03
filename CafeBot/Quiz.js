@@ -11,13 +11,13 @@ const EMOJI_LETTERS = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '
 const EMOJI_CANCEL = '🚫';
 
 const QUIZ_EMOJI = ':checkered_flag:';
-let QUIZ_COST = 3000;
+let QUIZ_COST = 1800;
 let QUIZ_QUESTIONS_CHANNEL = '567756445471342593';
 let QUIZ_PHASES = 3;
 let QUIZ_PHASE_QUESTION_COUNT = 8;
 let QUIZ_QUESTION_TOTAL = QUIZ_PHASES * QUIZ_PHASE_QUESTION_COUNT;
 let QUIZ_TIMEOUT = 45000;
-let QUIZ_WIN_THRESHOLD = 5;
+let QUIZ_WIN_THRESHOLD = 8;
 
 class Quiz {
     constructor(gachaModule) {
