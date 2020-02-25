@@ -1,5 +1,10 @@
-# cafe-bot
+# CafeBot
 
 Bot do Café com Pão
 
-Não funciona em outras guilds. Não use.
+---
+
+#### Novidade! 
+Agora vai dar pra usar em outras guilds.
+
+Aguarde em breve instruções.

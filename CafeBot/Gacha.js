@@ -63,7 +63,7 @@ let GACHA_LOG_CHANNEL = '495576950891610118';
 
 const GACHA_VALID_CHANNELS_EARN_TOKENS = [
     '213797930937745409', // mesa
-    '430684220306882561', // jogos
+    '430684220306882561', // othergames
     '346798009050333184', // desenhos
     '414209945576275968', // selfie
 ];
@@ -1057,7 +1057,7 @@ class Gacha {
                 case 'jogo':
                 case 'game':
                 case 'games':
-                case 'jogos':
+                case 'othergames':
                 case 'g':
                 case 'j':
                     filter = (i) => {
@@ -2548,7 +2548,7 @@ class Gacha {
                                     resolve();
                                 }).catch(() => {
                                     // deu algum erro, provavelmente de privacidade que o usuario não aceita DM
-                                    // do bot. então deixar avisado, mas tirar os jogos do info como ganhos e avisar
+                                    // do bot. então deixar avisado, mas tirar os othergames do info como ganhos e avisar
                                     text += `\n\n:exclamation: **Atenção**: o(s) jogo(s) não foi(ram) resgatados. Digite \`+gacha testdm\` e veja se o bot consegue enviar DM para você. Caso não, verifique suas configurações de privacidade.`;
                                     // volta os items pro inventario do usuario
                                     exchanges['games'].forEach(gameItem => {

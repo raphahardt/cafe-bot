@@ -76,7 +76,7 @@ class LongMessage {
      * Envia uma mensagem com mais de 2000 caracteres.
      *
      * @param longContent
-     * @return {Promise<LongMessage>}
+     * @return {Promise<Message[]>}
      */
     async send(longContent) {
         this.messages = [];
@@ -86,14 +86,14 @@ class LongMessage {
             this.messages.push(message);
         }
 
-        return this;
+        return this.messages;
     }
 
     /**
      * Envia uma mensagem com mais de 2000 caracteres, mas respondendo pra alguém.
      *
      * @param longContent
-     * @return {Promise<LongMessage>}
+     * @return {Promise<Message[]>}
      */
     async reply(longContent) {
         if (this.author && !(this.channel instanceof Discord.DMChannel)) {
@@ -107,7 +107,7 @@ class LongMessage {
      * Edita uma mensagem com mais de 2000 caracteres.
      *
      * @param longContent
-     * @return {Promise<LongMessage>}
+     * @return {Promise<Message[]>}
      */
     async edit(longContent) {
         let oldMessages = this.messages.slice();
@@ -135,14 +135,14 @@ class LongMessage {
         }
 
         this.messages = newMessages;
-        return this;
+        return this.messages;
     }
 
     /**
      * Edita uma mensagem com mais de 2000 caracteres, mas respondendo pra alguém.
      *
      * @param longContent
-     * @return {Promise<LongMessage>}
+     * @return {Promise<Message[]>}
      */
     async editReply(longContent) {
         if (this.author && !(this.channel instanceof Discord.DMChannel)) {
@@ -156,7 +156,7 @@ class LongMessage {
      * Deleta uma mensagem com mais de 2000 caracteres.
      *
      * @param timeout
-     * @return {Promise<LongMessage>}
+     * @return {Promise<Message[]>}
      */
     async delete(timeout) {
         if (this.messages.length) {
@@ -168,7 +168,7 @@ class LongMessage {
             this.messages = [];
         }
 
-        return this;
+        return this.messages;
     }
 }
 
