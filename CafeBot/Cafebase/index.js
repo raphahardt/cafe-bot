@@ -1,6 +1,6 @@
 
 const fbAdmin = require("firebase-admin");
-const fbServiceAccount = require("../../misc/cafebot-2018-firebase-adminsdk-j17ic-a11e9f3222.json");
+const fbServiceAccount = JSON.parse(process.env.CAFE_FIREBASE_CREDENTIALS);
 
 const fbApp = fbAdmin.initializeApp({
     credential: fbAdmin.credential.cert(fbServiceAccount),
