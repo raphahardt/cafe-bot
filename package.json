@@ -1,6 +1,6 @@
 {
   "name": "cafe-bot",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "",
   "main": "app.js",
   "dependencies": {
@@ -12,7 +12,7 @@
     "fast-levenshtein": "^2.0.6",
     "firebase-admin": "^6.0.0",
     "gifencoder": "^1.1.0",
-    "jimp": "^0.5.3",
+    "jimp": "^0.10.0",
     "opusscript": "0.0.6",
     "points-in-polygon": "^0.2.1",
     "poisson-disk-sampling": "^1.0.2",
@@ -22,7 +22,7 @@
   },
   "devDependencies": {},
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node app.js"
   },
   "author": "Raphael Hardt <raphael.hardt@gmail.com>",
   "license": "MIT"
