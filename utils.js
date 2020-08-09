@@ -21,7 +21,7 @@ const utils = {
      * https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
      *
      * @param {Array} array
-     * @param {number} seed Um seed para viciar o embaralhamento
+     * @param {number} [seed] Um seed para viciar o embaralhamento
      * @return {Array}
      */
     shuffle: (array, seed) => {

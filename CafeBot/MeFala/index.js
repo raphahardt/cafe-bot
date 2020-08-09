@@ -2,15 +2,30 @@
 const utils = require('../../utils');
 const Discord = require("discord.js");
 
-const letters = require('./letters');
-const interpreters = require('./Interpreters');
 const Transformer = require('./LetterTransformer');
+const path = require('path');
 
 class MeFala {
-    constructor() {}
+    constructor() {
+        let interpreters = require('require-all')(path.join(__dirname, 'Interpreters'));
+        interpreters = Object.values(interpreters);
+
+        // ordenar por ordem de prioridade
+        interpreters.sort(function (a, b) {
+            return b.priority - a.priority;
+        });
+
+        this.interpreters = interpreters || [];
+    }
 
     get modName() { return 'mefala' }
 
+    /**
+     *
+     * @param {Message} message
+     * @param args
+     * @returns {Promise<*>}
+     */
     async mainCommand(message, args) {
         if (args.length === 0) {
             return message.reply(':speaking_head: Faça alguma pergunta.');
@@ -19,8 +34,12 @@ class MeFala {
         let phrase = args.join(" ") || '';
         //console.log('PERGUNTA', phrase);
         let phrasesResult = [];
-        for (let i = 0; i < interpreters.length; i++) {
-            const interpreter = interpreters[i];
+        for (let i = 0; i < this.interpreters.length; i++) {
+            const interpreter = this.interpreters[i];
+
+            if (typeof interpreter.init === 'function') {
+                await interpreter.init();
+            }
 
             // se um interpreter achar que ele deve responder a mensagem do usuário...
             if (interpreter.interpret(message.author, phrase, message.mentions)) {
@@ -39,7 +58,7 @@ class MeFala {
         // misturo antes...
         phrasesResult = utils.shuffle(phrasesResult);
         // ...e pego aleatoriamente uma das frases aleatoriamente
-        let idx = parseInt((Math.random() * (phrasesResult.length * 2000)) / 2000);
+        let idx = Math.round((Math.random() * (phrasesResult.length * 2000)) / 2000);
         idx = Math.min(phrasesResult.length - 1, idx);
 
         // frase que foi selecionada
@@ -59,18 +78,13 @@ class MeFala {
             }
         }
 
-        // dá um reaction pra cada letra de emoji (função recursiva)
-        function _react() {
-            const emojiToReact = emojis.shift();
-            return message.react(emojiToReact)
-                .then(() => {
-                    if (!message.deleted && emojis.length) {
-                        // continua enquanto tiver emoji pra mandar
-                        return _react();
-                    }
-                    // acabou os emojis
-                    return selectedPhraseResult;
-                });
+        // dá um reaction pra cada letra de emoji
+        async function _react() {
+            while (!message.deleted && emojis.length) {
+                await message.react(emojis.shift());
+            }
+
+            return selectedPhraseResult;
         }
 
         // (inicio a recursividade aqui)

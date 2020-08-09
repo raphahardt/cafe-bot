@@ -15,7 +15,6 @@ module.exports = class AfrontaInterpreter {
     static phrases(user, questionPhrase, mentions) {
         return [
             'q afronta',
-            'pisa mais',
             'vsf',
             'vtnc',
             'mas eu te amo'

@@ -13,9 +13,6 @@ module.exports = class ComoVaiSerAlgoInterpreter {
     static get priority() { return 0 };
 
     static phrases(user, questionPhrase, mentions) {
-        if (user.username === 'Leticia' || mentions.members.exists('username', 'Leticia')) {
-            return ['sera ruim lety', 'otimo lety', 'tenta de novo'];
-        }
         return [
             'vai ser ruim',
             'pessimo',

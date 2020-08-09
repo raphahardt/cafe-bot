@@ -1,6 +1,6 @@
 {
   "name": "cafe-bot",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "",
   "main": "app.js",
   "dependencies": {
@@ -8,21 +8,26 @@
     "@redblobgames/mapgen2": "git+https://github.com/redblobgames/mapgen2.git",
     "chalk": "^2.4.1",
     "discord.js": "^11.3.2",
-    "express": "^4.16.4",
+    "express": "^4.17.1",
     "fast-levenshtein": "^2.0.6",
-    "firebase-admin": "^6.0.0",
+    "firebase-admin": "^9.0.0",
     "gifencoder": "^1.1.0",
     "jimp": "^0.10.0",
     "opusscript": "0.0.6",
     "points-in-polygon": "^0.2.1",
     "poisson-disk-sampling": "^1.0.2",
+    "pug": "^3.0.0",
+    "require-all": "^3.0.0",
     "simplex-noise": "^2.4.0",
     "weather-js": "^2.0.0",
     "ytdl-core": "^0.18.5"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "nodemon": "^2.0.4"
+  },
   "scripts": {
-    "start": "node app.js"
+    "start": "node web.js",
+    "watch": "nodemon ./web.js"
   },
   "author": "Raphael Hardt <raphael.hardt@gmail.com>",
   "license": "MIT"
