@@ -1,8 +1,14 @@
 /*! cafe-bot by Raphael Hardt */
 const Discord = require("discord.js");
+const intents = new Discord.Intents([
+    Discord.Intents.NON_PRIVILEGED, // include all non-privileged intents, would be better to specify which ones you actually need
+    'GUILD_MEMBERS', // lets you request guild members (i.e. fixes the issue)
+    'GUILD_MESSAGES',
+]);
 const client = new Discord.Client({
     // ver: https://discord.js.org/#/docs/main/stable/typedef/ClientOptions?scrollTo=disabledEvents
-    disabledEvents: ['TYPING_START']
+    disabledEvents: ['TYPING_START'],
+    ws: { intents }
 });
 
 const packageCfg = require("./package.json");

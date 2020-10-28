@@ -117,7 +117,7 @@ class AmigoSecreto {
             amigosList.forEach(amigoId => {
                 if (!amigoId) return;
                 // produta o usuario pelo id
-                message.client.fetchUser(amigoId)
+                message.client.users.fetch(amigoId)
                     .then(user => {
                         console.log('criando dm entre usuario ' + user.username);
                         return user.createDM();
@@ -150,7 +150,7 @@ class AmigoSecreto {
 }
 
 function verifyIfAdmin(member) {
-    return member.roles.some(r => ["Manage Server"].includes(r.name));
+    return member.roles.cache.some(r => ["Manage Server"].includes(r.name));
 }
 
 module.exports = AmigoSecreto;

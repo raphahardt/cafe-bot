@@ -13,8 +13,7 @@ class Ping {
         const lm = utils.longMessage(message);
         await lm.reply("Ping?");
         return lm.editReply(`**Pong!** `
-            + `Latência: ${lm.message.createdTimestamp - message.createdTimestamp}ms. `
-            + `Ping da API: ${Math.round(message.client.ping)}ms`);
+            + `Latência: ${lm.message.createdTimestamp - message.createdTimestamp}ms. `);
     }
 
     async argsCommand(message, args) {

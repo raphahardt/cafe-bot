@@ -421,7 +421,7 @@ esse evento vai ser executado *uma vez só* às 23:30, não importando que dia, 
                         // outro evento.
                         // então nesse caso, eu só lido da forma mais simples possível, que
                         // é passar o erro pro console.error()
-                        client.fetchUser(author)
+                        client.users.fetch(author)
                             .then(user => {
                                 return user.createDM();
                             })

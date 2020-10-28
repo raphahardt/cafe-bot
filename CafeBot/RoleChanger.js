@@ -18,12 +18,13 @@ class RoleChanger {
 
     get modName() { return 'rolechanger' }
 
-    roleCommand(guild, message, args) {
+    async roleCommand(guild, message, args) {
         const arg = args.shift();
 
         // pega todas as roles disponiveis
         if (!allRoles) {
-            allRoles = guild.roles
+            allRoles = await guild.roles.fetch();
+            allRoles = allRoles.cache
                 .clone()
                 .filter(role => role.name.indexOf(ROLE_PREFIX) === 0 && !specialRoles.includes(role.name));
         }
@@ -60,7 +61,8 @@ class RoleChanger {
                 return this.roleWhoCommand(guild, message, args, allRoles);
             case 'suggest':
             case 's':
-                return this.roleSuggestCommand(guild, message, args, allRoles);
+                //return this.roleSuggestCommand(guild, message, args, allRoles);
+                return message.reply(`:x: COMANDO DESABILITADO POR ENQUANTO`);
             default:
                 return message.reply(`:x: Escolha o comando a ser usado: \`add, remove, who, suggest, delete\``);
         }
@@ -108,7 +110,7 @@ Adiciona uma ou mais roles pro seu usuário, ou para outro usuário (caso você 
             members.forEach(member => {
                 let alreadyExistsRoles = [];
                 rolesToAdd.forEach(r => {
-                    if (member.roles.has(r.id)) {
+                    if (member.roles.cache.has(r.id)) {
                         alreadyExistsRoles.push(r);
                     }
                 });
@@ -197,7 +199,7 @@ Retira uma ou mais roles do seu usuário, ou de outro usuário (caso você tenha
             members.forEach(member => {
                 let nonExistsRoles = [];
                 rolesToRemove.forEach(r => {
-                    if (!member.roles.has(r.id)) {
+                    if (!member.roles.cache.has(r.id)) {
                         nonExistsRoles.push(r);
                     }
                 });
@@ -252,12 +254,12 @@ Retira uma ou mais roles do seu usuário, ou de outro usuário (caso você tenha
      * @param members
      * @param allRoles
      */
-    roleListCommand(guild, message, args, members, allRoles) {
+    async roleListCommand(guild, message, args, members, allRoles) {
         let text = '';
-        members.forEach(member => {
-            const memberRoles = member.roles.array().filter(role => role.name.indexOf('joga-') === 0).map(role => role.name.replace(/^joga-/, '')).sort().join(', ');
-            text += `${member}, **Sua lista de roles:**\n\`\`\`\n${memberRoles}\n\`\`\`\n`;
-        });
+        // members.forEach(member => {
+        //     const memberRoles = member.roles.cache.array().filter(role => role.name.indexOf('joga-') === 0).map(role => role.name.replace(/^joga-/, '')).sort().join(', ');
+        //     text += `${member}, **Sua lista de roles:**\n\`\`\`\n${memberRoles}\n\`\`\`\n`;
+        // });
 
         text += `  **Roles disponiveis:**\n\`\`\`\n${rolesList(allRoles)}\n\`\`\``;
 
@@ -300,7 +302,7 @@ ${rolesList(allRoles)}
      * @param args
      * @param allRoles
      */
-    roleWhoCommand(guild, message, args, allRoles) {
+    async roleWhoCommand(guild, message, args, allRoles) {
         if (args.length === 0) {
             return message.reply(`Modo de usar: \`+role (who | w) (role)\`
 Indica quais pessoas estão marcadas com uma role específica.
@@ -311,7 +313,7 @@ Indica quais pessoas estão marcadas com uma role específica.
         }
 
         const roleName = args[0];
-        const role = allRoles.find('name', 'joga-' + roleName);
+        const role = allRoles.find(r => r.name === 'joga-' + roleName);
         if (!role) {
             return message.reply(`:x: Role \`${roleName}\` não existente.
   **Roles disponiveis:**
@@ -321,8 +323,9 @@ ${rolesList(allRoles)}
         }
 
         let membersWithRole = [];
-        guild.members.array().forEach(mb => {
-            if (mb.roles.some(r => ['joga-' + roleName].includes(r.name))) {
+        const members = await guild.members.fetch();
+        members.array().forEach(mb => {
+            if (mb.roles.cache.some(r => ['joga-' + roleName].includes(r.name))) {
                 membersWithRole.push(mb);
             }
         });
@@ -364,6 +367,7 @@ Sugere uma nova role para ser votada. Se ela receber ${SUGGEST_VOTES_MAX} votos 
         }
 
         // TODO: colocar esse .filter no utils como .unique
+        // FIXME: .exists() não existe mais, reformar esse suggests depois
         const suggestedRoles = args.map(role => 'joga-' + role.toLowerCase()).filter(rolename => !allRoles.exists('name', rolename)).filter(rolename => /^[a-z][a-z0-9-]*$/.test(rolename));
 
         //console.log('banned', bannedSuggestions);
@@ -375,7 +379,7 @@ Sugere uma nova role para ser votada. Se ela receber ${SUGGEST_VOTES_MAX} votos 
         }
 
         if (suggestedRoles.length) {
-            const emb = new Discord.RichEmbed()
+            const emb = new Discord.MessageEmbed()
                 .setAuthor(message.member.user.username)
                 .setColor(3447003)
                 .setDescription(`Sugeriu a(s) role(s) \`\`\`${suggestedRoles.join(', ')}\`\`\`

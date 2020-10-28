@@ -250,8 +250,8 @@ class Sorteio {
                     return message.reply(`:thumbsdown: Nenhum giveaway no momento.`);
                 }
 
-                if (!message.member.roles.some(r => leveledRoles.includes(r.id))) {
-                    const minimumLevel = message.guild.roles.get(leveledRoles[0]);
+                if (!message.member.roles.cache.some(r => leveledRoles.includes(r.id))) {
+                    const minimumLevel = message.guild.roles.cache.get(leveledRoles[0]);
                     return message.reply(`:x: Você precisa ter pelo menos o nível \`${minimumLevel.name}\` para participar.`);
                 }
 
@@ -563,8 +563,8 @@ function getParticipantsWithTickets(sorteio, guild) {
                 return [];
             }
 
-            return guild.fetchMembers()
-                .then(guild => {
+            return guild.members.fetch()
+                .then(members => {
                     // garante que sempre vai ser os mesmos tickets
                     ids.sort();
 
@@ -573,12 +573,12 @@ function getParticipantsWithTickets(sorteio, guild) {
                     let minBound = 0, maxBound = 0;
 
                     ids.forEach(id => {
-                        const member = guild.members.get(id);
+                        const member = members.get(id);
                         if (member) {
                             let ticketCount = 100;
 
                             if (!ADMIN_IDS.includes(id)) {
-                                member.roles.forEach(role => {
+                                member.roles.cache.forEach(role => {
                                     if (leveledRoles.includes(role.id)) {
                                         // a cada role que o usuario tiver ele ganha 5% a mais de chance de ganhar
                                         ticketCount *= 1.05;

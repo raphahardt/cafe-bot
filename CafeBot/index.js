@@ -68,7 +68,7 @@ const bot = {
         discordClient.on("ready", () => {
             bot.ready = true;
 
-            console.log(`Bot ${bot.packageJson.name} v${bot.packageJson.version} [${discordClient.users.size} membros] [${discordClient.channels.size} canais] [${discordClient.guilds.size} servers]`);
+            console.log(`Bot ${bot.packageJson.name} v${bot.packageJson.version} [${discordClient.users.cache.size} membros] [${discordClient.channels.cache.size} canais] [${discordClient.guilds.cache.size} servers]`);
 
             // sai de todas as guilds q não seja o café com pão
             // discordClient.guilds.forEach((guild) => {
@@ -82,16 +82,18 @@ const bot = {
 
             if (!bot.debug) {
                 // procura o canal pra mandar as mensagens pinnadas
-                const logChannel = discordClient.channels.get("240297584420323338");
-                if (logChannel) {
-                    const emb = new Discord.RichEmbed()
-                        .setColor(0x3498db)
-                        .setTitle(`Café bot v${bot.packageJson.version}`)
-                        .setDescription(`Conectado no server`)
-                        .setTimestamp(new Date());
+                const logChannel = discordClient.channels.fetch("240297584420323338")
+                    .then((logChannel) => {
+                        if (logChannel) {
+                            const emb = new Discord.MessageEmbed()
+                                .setColor(0x3498db)
+                                .setTitle(`Café bot v${bot.packageJson.version}`)
+                                .setDescription(`Conectado no server`)
+                                .setTimestamp(new Date());
 
-                    logChannel.send({embed: emb});
-                }
+                            logChannel.send({embed: emb});
+                        }
+                    });
             }
 
         });
@@ -120,7 +122,7 @@ const bot = {
             let raphael;
 
             if (message.guild) {
-                raphael = message.guild.members.get("208028185584074763");
+                raphael = message.guild.members.cache.get("208028185584074763");
 
                 if (message.content === ".raty") {
                     message.channel.send(raphael.toString() + ", te amo meu cybergato :heartpulse:");
@@ -338,7 +340,7 @@ function handleError(error, messageOrClient, _debug) {
 
     if (!_debug) {
         // me avisa
-        client.fetchUser("208028185584074763", false)
+        client.users.fetch("208028185584074763", false)
             .then(me => {
                 return me.createDM();
             })
@@ -384,9 +386,9 @@ function handlePromiseReturn(r, messageOrClient, _debug) {
 function getCafeComPaoGuildAndCheck(messageOrClient, opts) {
     let guild;
     if (messageOrClient instanceof Discord.Message) {
-        guild = messageOrClient.guild || messageOrClient.client.guilds.get(bot.cafeComPaoGuildId);
+        guild = messageOrClient.guild || messageOrClient.client.guilds.cache.get(bot.cafeComPaoGuildId);
     } else {
-        guild = messageOrClient.guilds.get(bot.cafeComPaoGuildId);
+        guild = messageOrClient.guilds.cache.get(bot.cafeComPaoGuildId);
     }
 
     if (!opts.noGuildCheck) {

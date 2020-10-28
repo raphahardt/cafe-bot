@@ -57,7 +57,7 @@ class Perolas {
      * @param {Discord.MessageReaction} messageReaction O objeto reaction, que contem a mensagem e o emoji dado
      * @param {Discord.User} user O usuário que fez essa reaction (pode ser membro do server ou não)
      */
-    onReactionAdd(guild, messageReaction, user) {
+    async onReactionAdd(guild, messageReaction, user) {
         //console.log('REACTION', perolaValidEmojis.includes(messageReaction.emoji.name), messageReaction.count);
         const message = messageReaction.message;
 
@@ -68,14 +68,14 @@ class Perolas {
         if (perolaIgnoredChannelsIds.includes(message.channel.id)) return;
 
         // procura o canal pra mandar as mensagens pinnadas
-        const perolasChannel = guild.channels.get(perolaChannelId);
+        const perolasChannel = guild.channels.resolve(perolaChannelId);
         if (!perolasChannel) return;
 
         // ignora os reactions na propria mesa perola, pra nao entrar em loop infinito
         if (perolasChannel === message.channel) return;
 
         let reactCount = messageReaction.count;
-        return messageReaction.fetchUsers()
+        return messageReaction.users.fetch()
             .then(users => {
                 if (users && users.has(message.author.id)) {
                     reactCount--;
@@ -95,12 +95,12 @@ class Perolas {
      * @param {Discord.Message} message
      * @param {Array} args Parametros do comando
      */
-    pinsCommand(guild, message, args) {
+    async pinsCommand(guild, message, args) {
         if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_MESSAGES)) {
             throw new PermissionError();
         }
-        const mainChannel = guild.channels.find(c => c.name === args[0]);
-        const perolasChannel = guild.channels.get(perolaChannelId);
+        const mainChannel = guild.channels.cache.find(c => c.name === args[0]);
+        const perolasChannel = guild.channels.resolve(perolaChannelId);
         if (!mainChannel || !perolasChannel) return;
 
         // pega todas as mensagens pinnadas
@@ -144,7 +144,7 @@ function sendPerolaMessage(perolas, originalMessage, perolasChannel, reactCount,
     return perolaMessageAlreadyExists(perolas, originalMessage, perolasChannel).then(msgPosted => {
         const originalUser = originalMessage.author;
 
-        const emb = new Discord.RichEmbed()
+        const emb = new Discord.MessageEmbed()
             .setAuthor(originalUser.username, originalUser.avatarURL)
             .setColor(3447003)
             .setDescription(originalMessage.content)
@@ -187,7 +187,7 @@ function perolaMessageAlreadyExists(perolas, message, perolaChannel) {
         perolas.db.getOne('msgs/' + message.id)
             .then(infoMsg => {
                 if (infoMsg && infoMsg.perolaId) {
-                    perolaChannel.fetchMessage(infoMsg.perolaId)
+                    perolaChannel.messages.fetch(infoMsg.perolaId)
                         .then(postedMsg => {
                             resolve(postedMsg);
                         })
@@ -211,7 +211,7 @@ function perolaMessageAlreadyExists(perolas, message, perolaChannel) {
         //     let infoMsg = snapshot.val();
         //
         //     if (infoMsg && infoMsg.perolaId) {
-        //         perolaChannel.fetchMessage(infoMsg.perolaId)
+        //         perolaChannel.messages.fetch(infoMsg.perolaId)
         //             .then(postedMsg => {
         //                 resolve(postedMsg);
         //             })

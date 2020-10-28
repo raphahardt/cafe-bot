@@ -92,7 +92,7 @@ class MessageIdResolvable {
                     // se encontrar um id numerico
                     const text = arg.replace(/^=/, "");
                     try {
-                        const user = await this.message.client.fetchUser(text);
+                        const user = await this.message.client.users.fetch(text);
 
                         if (user) {
                             foundUsers.push(user);
@@ -169,7 +169,7 @@ class MessageIdResolvable {
                 if (arg.match(/^=?[0-9]+$/) && arg.length >= 10) {
                     // se encontrar um id numerico
                     const text = arg.replace(/^=/, "");
-                    const channel = this.message.guild.channels.get(text);
+                    const channel = this.message.guild.channels.cache.get(text);
 
                     if (channel) {
                         foundChannels.push(channel);
@@ -178,7 +178,7 @@ class MessageIdResolvable {
 
                 } else if (allArgsAreChannels || arg.charAt(0) === '=') {
                     let found = this.findLevenshtein(
-                        this.message.guild.channels,
+                        this.message.guild.channels.cache,
                         channel => [channel.name],
                         arg
                     );
@@ -236,7 +236,7 @@ class MessageIdResolvable {
                 if (arg.match(/^=?[0-9]+$/) && arg.length >= 10) {
                     // se encontrar um id numerico
                     const text = arg.replace(/^=/, "");
-                    const role = this.message.guild.roles.get(text);
+                    const role = await this.message.guild.roles.fetch(text);
 
                     if (role) {
                         foundRoles.push(role);
@@ -245,7 +245,7 @@ class MessageIdResolvable {
 
                 } else if (allArgsAreRoles || arg.charAt(0) === '=') {
                     let found = this.findLevenshtein(
-                        this.message.guild.roles,
+                        this.message.guild.roles.cache,
                         role => [role.name],
                         arg
                     );

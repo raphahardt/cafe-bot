@@ -214,7 +214,7 @@ class Wololo {
             const now = parseInt((new Date()).getTime() / 1000);
             let stats = '';
 
-            const emb = new Discord.RichEmbed()
+            const emb = new Discord.MessageEmbed()
                 .setColor(3447003)
                 .setTitle(`Stats de ${user.username}`)
                 .setDescription(`Reino atual: ${colors[info.color].symbol}`);
@@ -1032,7 +1032,7 @@ function logEvent(event) {
 
 function isAdmin(user) {
     return ADMIN_IDS.includes(user.id);
-    //return member.roles.some(r => ["Manage Server"].includes(r.name));
+    //return member.roles.cache.some(r => ["Manage Server"].includes(r.name));
 }
 
 module.exports = Wololo;

@@ -941,7 +941,7 @@ class Gacha {
             throw new PermissionError();
         }
         const member = getCafeComPaoMember(guild, message);
-        const channel = guild.channels.get(GACHA_EXTRA_TOKENS_CHANNEL);
+        const channel = guild.channels.resolve(GACHA_EXTRA_TOKENS_CHANNEL);
 
         const messageId = args.shift();
 
@@ -949,7 +949,7 @@ class Gacha {
             return message.reply(`:x: Digite um ID de mensagem.`);
         }
 
-        const foundMessage = await channel.fetchMessage(messageId);
+        const foundMessage = await channel.messages.fetch(messageId);
         const foundDraw = await this.db.findOne('drawings', d => d.message === foundMessage.id);
 
         if (foundDraw) {
@@ -2535,7 +2535,7 @@ class Gacha {
 
                                         return dm.send(giftText).then(() => {
                                             try {
-                                                guild.channels.get(GACHA_LOG_CHANNEL).send(logText).catch(console.log);
+                                                guild.channels.resolve(GACHA_LOG_CHANNEL).send(logText).catch(console.log);
                                             } catch (e) {
                                                 console.log(e)
                                             }
@@ -2752,7 +2752,7 @@ class Gacha {
      * @param date
      */
     async gachaTimer(client, seconds, minutes, hours, day, month, dayWeek, year, date) {
-        const guild = client.guilds.get('213797930937745409');
+        const guild = await client.guilds.fetch('213797930937745409');
 
         // a cada X minutos, só que no minuto segunte
         if ((minutes - 1) % GACHA_TOKEN_DROP_FREQUENCY === 0) {
@@ -2761,12 +2761,12 @@ class Gacha {
 
         // a cada X minutos
         if (minutes % GACHA_TOKEN_DROP_FREQUENCY === 0) {
-            await guild.fetchMembers();
+            const members = await guild.members.fetch();
 
             let inflation = 0;
             let tokenSums = {};
 
-            const membersArray = guild.members.array();
+            const membersArray = members.array();
             const lastHundredMessages = await getLastHundredMessages(guild);
 
             //console.log('SIZE', membersArray.length);
@@ -2981,7 +2981,7 @@ class Gacha {
                             .then(() => {
                                 if (item.type === GACHA_TYPES.ROLE) {
                                     item.name = right;
-                                    return guild.roles.get(item.role).edit({name: right})
+                                    return guild.roles.cache.get(item.role).edit({name: right})
                                         .then(() => {
                                             console.log('UPDATED ROLE GACHA (MSG)', message.content);
                                             return this.db.save('roles/' + item.id, item).then(() => {
@@ -3373,7 +3373,7 @@ function deleteItem(gacha, guild, user, item) {
             guild.deleteEmoji(item.emoji, reason)
                 .then(() => {
                     // deletou emoji
-                    const role = guild.roles.get(item.role);
+                    const role = guild.roles.cache.get(item.role);
                     role.delete(reason)
                         .then(() => {
                             // deletou role
@@ -3432,7 +3432,7 @@ function emojifyName(name) {
 }
 
 function formatItem(guild, item, isNew) {
-    const emoji = item.emoji.match(/^\d+$/) ? guild.emojis.get(item.emoji) : item.emoji;
+    const emoji = item.emoji.match(/^\d+$/) ? guild.emojis.cache.get(item.emoji) : item.emoji;
     return `${emoji}${GACHA_RARITIES[item.rarity].emojiLetter} **${item.name}**`
         + (isNew ? ` :sparkles:` : '')
         + (item.shopExclusive ? ` :shopping_bags:` : '')
@@ -3451,7 +3451,7 @@ function whoisItem(infos, guild, item) {
         }
     }
     found = found.map(f => {
-        const member = guild.members.get(f) || { user: null };
+        const member = guild.members.cache.get(f) || { user: null };
         return member.user || { username: null };
     });
     found.sort((a, b) => b.username - a.username);
@@ -3528,7 +3528,7 @@ function fetchReactsFromMessage(message, oldReacts, maxReacts, _debug) {
         let fetchPromises = [];
 
         message.reactions.forEach(reaction => {
-            fetchPromises.push(reaction.fetchUsers());
+            fetchPromises.push(reaction.users.fetch());
         });
 
         Promise.all(fetchPromises)
@@ -3566,8 +3566,8 @@ async function updateExtraTokensReacts(gacha, client, _debug) {
     let ps = [];
     for (const draw of draws) {
         ps.push((async () => {
-            const channel = guild.channels.get(draw.channel || GACHA_EXTRA_TOKENS_CHANNEL);
-            const message = await channel.fetchMessage(draw.message);
+            const channel = guild.channels.resolve(draw.channel || GACHA_EXTRA_TOKENS_CHANNEL);
+            const message = await channel.messages.fetch(draw.message);
 
             const authorUser = message.author;
 
@@ -3648,12 +3648,12 @@ async function updateExtraTokensReacts(gacha, client, _debug) {
 }
 
 async function giveAllTokens(gacha, guild, numTokens) {
-    await guild.fetchMembers();
+    const members = await guild.members.fetch();
 
     let inflation = 0;
     let tokenSums = {};
 
-    const membersArray = guild.members.array();
+    const membersArray = members.array();
 
     let u = 0;
 
@@ -3709,14 +3709,14 @@ async function giveAllTokens(gacha, guild, numTokens) {
 }
 
 async function getLastHundredMessages(guild) {
-    const channels = guild.channels.filter(c => GACHA_VALID_CHANNELS_EARN_TOKENS.includes(c.id));
+    const channels = guild.channels.cache.filter(c => GACHA_VALID_CHANNELS_EARN_TOKENS.includes(c.id));
     let messages = [];
     for (let c = 0; c < channels.size; c++) {
         const channel = channels.get(GACHA_VALID_CHANNELS_EARN_TOKENS[c]);
 
         console.log('CHANNEL', channel.name);
 
-        let msgs = await channel.fetchMessages({ limit: 100 });
+        let msgs = await channel.messages.fetch({ limit: 100 });
 
         console.log('CHANNEL MSGS', msgs.size);
 
@@ -3776,9 +3776,9 @@ function formatTime(seconds) {
     return parseInt(seconds) + ' segundo(s)';
 }
 
-function sendGachaLog(guild, text) {
+async function sendGachaLog(guild, text) {
     try {
-        guild.channels.get(GACHA_LOG_CHANNEL).send(text).catch(console.error);
+        guild.channels.resolve(GACHA_LOG_CHANNEL).send(text).catch(console.error);
     } catch (e) {
         console.error(e);
     }
@@ -3797,9 +3797,9 @@ function hasPermission(message) {
 function getCafeComPaoGuild(messageOrClient) {
     let guild;
     if (messageOrClient instanceof Discord.Client) {
-        guild = messageOrClient.guilds.get('213797930937745409');
+        guild = messageOrClient.guilds.cache.get('213797930937745409');
     } else {
-        guild = messageOrClient.guild || messageOrClient.client.guilds.get('213797930937745409');
+        guild = messageOrClient.guild || messageOrClient.client.guilds.cache.get('213797930937745409');
     }
     if (!guild) {
         throw new Error("Não foi possível encontrar o Café com Pão. Algo deu muito errado...");

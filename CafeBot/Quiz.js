@@ -309,13 +309,13 @@ class Quiz {
     }
 
     async onReady(guild) {
-        const channel = guild.channels.get(QUIZ_QUESTIONS_CHANNEL);
+        const channel = guild.channels.resolve(QUIZ_QUESTIONS_CHANNEL);
 
         if (!channel) {
             throw new Error("Canal de questões do quiz não encontrado, id " + QUIZ_QUESTIONS_CHANNEL);
         }
 
-        let messages = await channel.fetchMessages({limit: 100});
+        let messages = await channel.messages.fetch({limit: 100});
 
         // deletes
         let questions = await this.db.getArray('questions');

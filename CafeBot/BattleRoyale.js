@@ -340,7 +340,7 @@ class BattleRoyale {
         getPlayer(message.author).then((player) => {
             const availableWalks = getWalksAvailable(player);
 
-            const emb = new Discord.RichEmbed()
+            const emb = new Discord.MessageEmbed()
                 .setColor(3447003)
                 .setTitle(`Stats de ${message.author.username}`);
 
@@ -1438,9 +1438,9 @@ class BattleRoyale {
 }
 
 function getRoyaleChannel(message) {
-    const guild = message.guild || message.client.guilds.get('213797930937745409');
+    const guild = message.guild || message.client.guilds.cache.get('213797930937745409');
     if (guild) {
-        const ch = guild.channels.get(ROYALE_CHANNEL_ID);
+        const ch = guild.channels.resolve(ROYALE_CHANNEL_ID);
         if (!ch) {
             throw new Error("Channel do Battle Royale não encontrado. Alguém deletou.");
         }
@@ -2201,7 +2201,7 @@ function isLevelAboveLoot(message, player, loot) {
             member = message.member;
         }
         return member.id === player.id
-            && member.roles.some(r => leveledRoles[loot.levelMin-1] === r.id);
+            && member.roles.cache.some(r => leveledRoles[loot.levelMin-1] === r.id);
     }
 
     return true;

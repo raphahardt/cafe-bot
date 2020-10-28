@@ -83,7 +83,7 @@ class Nsfw {
      */
     onReactionAdd(messageReaction, user) {
         let reactCount = messageReaction.count;
-        return messageReaction.fetchUsers()
+        return messageReaction.users.fetch()
             .then(users => {
                 if (users && !users.some(u => adminsIds.includes(u.id))) {
                     // ignora quem não for admin

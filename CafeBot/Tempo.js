@@ -1,6 +1,6 @@
 const PermissionError = require('./Errors/PermissionError');
 
-const { Attachment, RichEmbed } = require('discord.js');
+const { Attachment, MessageEmbed } = require('discord.js');
 const utils = require('../utils');
 const adminsIds = require('../adminIds');
 
@@ -47,7 +47,7 @@ class Tempo {
                     + `**Vento:** ${wind}\n`
                 ;
 
-                const emb = new RichEmbed()
+                const emb = new MessageEmbed()
                     .setColor(0x44d8e5)
                     .setTitle('🦉 Tempo em ' + city)
                     .setThumbnail(result.current.imageUrl)

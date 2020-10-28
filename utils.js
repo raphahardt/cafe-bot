@@ -12,7 +12,7 @@ const utils = {
      *
      * @type {String}
      */
-    prefix: "+",
+    prefix: process.env.DISCORD_PREFIX,
 
     /**
      * Embaralha um array
@@ -127,7 +127,7 @@ const utils = {
                     // se encontrar um id numerico
                     const text = arg.replace(/^=/, "");
 
-                    foundMembers.push(message.guild.members.get(text));
+                    foundMembers.push(message.guild.members.cache.get(text));
                     foundMembersTexts.push(arg);
 
                 } else if (allArgsAreMembers || arg.charAt(0) === '=') {
