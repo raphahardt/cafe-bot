@@ -347,7 +347,17 @@ const utils = {
             return message.author.id === '208028185584074763';
         }
         return false;
-    }
+    },
+
+    /**
+     *
+     * @param {string} command
+     * @param {string} args
+     * @returns {string}
+     */
+    printCommand: (command, ...args) => {
+        return `\`${utils.prefix}${command} ${args.join(' ')}\``;
+    },
 
 };
 

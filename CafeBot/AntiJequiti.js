@@ -127,7 +127,7 @@ function isUser(messageMentions) {
 function warnUser(member, channel) {
     const w = notWarned(member);
     if (w === 50) {
-        member.removeRoles(['242281124892508170', '316568273296687104']);
+        member.roles.remove(['242281124892508170', '316568273296687104']);
         channel.send(new Buffer('Li4udm9jw6ogcGVyY2ViZXUgcXVlIGFnb3JhIHZvY8OqIGZvaSBsb25nZSBkZW1haXMgbsOpPyBBR09SQSBBQ0FCT1UsIFPDiVJJTy4=', 'base64').toString('utf8'));
         return;
     }
@@ -136,12 +136,12 @@ function warnUser(member, channel) {
         return;
     }
     if (w === 20) {
-        member.removeRoles(['242281124892508170', '316568273296687104']);
+        member.roles.add(['242281124892508170', '316568273296687104']);
         channel.send(new Buffer('VMOhLCBhZ29yYSB2b2PDqiBqw6EgYWJ1c291IGRhIG1pbmhhIHBhY2nDqm5jaWEuIFJvbGVzIHJldGlyYWRvcy4uLiBlIG7Do28gdmFpIHZvbHRhciBtYWlzLg==', 'base64').toString('utf8'));
 
         channel.client.setTimeout(function () {
             channel.send(new Buffer('QnJpbmtzIDopIE1BUyBQRUxBIE1PUiBERSBERVVTIFBBUkEgREUgRkFaRVIgSVNTTy4=', 'base64').toString('utf8'), { reply: member });
-            member.addRoles(['242281124892508170', '316568273296687104']);
+            member.roles.add(['242281124892508170', '316568273296687104']);
         }, 300000);
         return;
     }
@@ -160,11 +160,11 @@ function warnUser(member, channel) {
         // :eyes:
         const client = channel.client;
         channel.send(new Buffer('RXUgYXZpc2VpLg==', 'base64').toString('utf8'), { reply: member });
-        member.removeRoles(['242281124892508170', '316568273296687104']);
+        member.roles.remove(['242281124892508170', '316568273296687104']);
 
         channel.client.setTimeout(function () {
             channel.send(new Buffer('QXNzdXN0b3UgbsOpPyBQb2lzIGVudMOjbyBwYXJlLg==', 'base64').toString('utf8'), { reply: member });
-            member.addRoles(['242281124892508170', '316568273296687104']);
+            member.roles.add(['242281124892508170', '316568273296687104']);
         }, 35000);
     }
 }

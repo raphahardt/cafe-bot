@@ -12,7 +12,7 @@ module.exports = class QuantosInterpreter {
         return questionPhrase.match(/(com )?(quant[oa]s?|qt[oa]s?) ([^ ]+)/i);
     }
 
-    static get priority() { return 0 };
+    static get priority() { return 5 };
 
     static phrases(user, questionPhrase, mentions) {
         // função auxiliar pra transformar uma string em numeros

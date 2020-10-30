@@ -9,10 +9,10 @@ module.exports = class MegaSenaInterpreter {
     constructor() {}
 
     static interpret(user, questionPhrase, mentions) {
-        return questionPhrase.match(/mega ?sena/i);
+        return questionPhrase.match(/(mega ?sena|loteria)/i);
     }
 
-    static get priority() { return 0 };
+    static get priority() { return 100 };
 
     static phrases(user, questionPhrase, mentions) {
         const today = new Date();

@@ -5,7 +5,6 @@ const Discord = require("discord.js");
 const PermissionError = require('./Errors/PermissionError');
 
 let bannedSuggestions = [];
-let allRoles;
 
 // roles que não podem ser adicionadas por esse comando
 const specialRoles = [];
@@ -18,51 +17,50 @@ class RoleChanger {
 
     get modName() { return 'rolechanger' }
 
+    /**
+     *
+     * @param {import('discord.js').Guild} guild
+     * @param {import('discord.js').Message} message
+     * @param {String[]} args
+     * @returns {Promise<any>}
+     */
     async roleCommand(guild, message, args) {
         const arg = args.shift();
 
-        // pega todas as roles disponiveis
-        if (!allRoles) {
-            allRoles = await guild.roles.fetch();
-            allRoles = allRoles.cache
-                .clone()
-                .filter(role => role.name.indexOf(ROLE_PREFIX) === 0 && !specialRoles.includes(role.name));
-        }
-
         // pega os membros que vão ter suas roles alteradas
-        let members = utils.resolveAllMentioned(message, args, false, true);
-        if (members.length > 0) {
-            if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_ROLES)) {
-                throw new PermissionError(`Você não tem permissão de alterar as roles de outra pessoa.`);
-            }
-        } else {
-            members.push(message.member);
-        }
+        // let members = utils.resolveAllMentioned(message, args, false, true);
+        // if (members.length > 0) {
+        //     if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_ROLES)) {
+        //         throw new PermissionError(`Você não tem permissão de alterar as roles de outra pessoa.`);
+        //     }
+        // } else {
+        //     members.push(message.member);
+        // }
+        let members = [message.member];
 
         // filtra os args e só deixa sem repetição (o filter ta fazendo isso)
-        args = args.map(role => role.replace(new RegExp('^' + ROLE_PREFIX, 'i'), '')).filter((v, i, a) => a.indexOf(v) === i);
+        args = args.map(role => role.replace(new RegExp(`^${ROLE_PREFIX}`, 'i'), '')).filter((v, i, a) => a.indexOf(v) === i);
 
         switch (arg) {
             case 'add':
             case 'a':
-                return this.roleAddCommand(guild, message, args, members, allRoles);
+                return this.roleAddCommand(guild, message, args, members);
             case 'remove':
             case 'r':
-                return this.roleRemoveCommand(guild, message, args, members, allRoles);
+                return this.roleRemoveCommand(guild, message, args, members);
             case 'list':
             case 'l':
-                return this.roleListCommand(guild, message, args, members, allRoles);
+                return this.roleListCommand(guild, message, args, members);
             case 'delete':
             case 'del':
             case 'd':
-                return this.roleDeleteCommand(guild, message, args, allRoles);
+                return this.roleDeleteCommand(guild, message, args);
             case 'who':
             case 'w':
-                return this.roleWhoCommand(guild, message, args, allRoles);
+                return this.roleWhoCommand(guild, message, args);
             case 'suggest':
             case 's':
-                //return this.roleSuggestCommand(guild, message, args, allRoles);
-                return message.reply(`:x: COMANDO DESABILITADO POR ENQUANTO`);
+                return this.roleSuggestCommand(guild, message, args);
             default:
                 return message.reply(`:x: Escolha o comando a ser usado: \`add, remove, who, suggest, delete\``);
         }
@@ -70,27 +68,27 @@ class RoleChanger {
 
     /**
      *
-     * @param guild
-     * @param message
-     * @param args
-     * @param members
-     * @param allRoles
-     * @returns {Promise<Message|Message[]>|*}
+     * @param {import('discord.js').Guild} guild
+     * @param {import('discord.js').Message} message
+     * @param {String[]} args
+     * @param {import('discord.js').GuildMember[]} members
+     * @returns {Promise<any>}
      */
-    roleAddCommand(guild, message, args, members, allRoles) {
+    async roleAddCommand(guild, message, args, members) {
         if (args.length === 0) {
-            return message.reply(`Modo de usar: \`+role (add | a) [lista das roles]\`
+            return message.reply(`Modo de usar: ${utils.printCommand('role', '(add | a)', '[lista das roles]')}
 Adiciona uma ou mais roles pro seu usuário, ou para outro usuário (caso você tenha permissões).
 
   **Exemplo:**
-\`\`\`+role add overwatch
-+role a overwatch\`\`\``);
+${utils.printCommand('role', 'add', 'overwatch')}
+${utils.printCommand('role', 'a', 'overwatch')}`);
         }
 
+        const allRoles = await getAllRoles(guild);
         let rolesToAdd = [], rolesNotExist = [];
 
         args.forEach((roleName) => {
-            const role = allRoles.find('name', ROLE_PREFIX + roleName);
+            const role = allRoles.find(role => role.name === `${ROLE_PREFIX}${roleName}`);
 
             if (specialRoles.includes(role)) {
                 // FIXME: avisar o usuário que ele nao pode usar essa role?
@@ -114,7 +112,7 @@ Adiciona uma ou mais roles pro seu usuário, ou para outro usuário (caso você 
                         alreadyExistsRoles.push(r);
                     }
                 });
-                promises.push(member.addRoles(rolesToAdd.filter(r => !alreadyExistsRoles.includes(r)), 'Usou o comando +role'), alreadyExistsRoles);
+                promises.push(member.roles.add(rolesToAdd.filter(r => !alreadyExistsRoles.includes(r)), 'Usou o comando +role'), alreadyExistsRoles);
             });
             return Promise.all(promises)
                 .then((resolveValues) => {
@@ -123,20 +121,21 @@ Adiciona uma ou mais roles pro seu usuário, ou para outro usuário (caso você 
                         const member = resolveValues[i];
                         const alreadyExistsRoles = resolveValues[i+1];
 
-                        const addedList = rolesToAdd.filter(r => !alreadyExistsRoles.includes(r)).map(role => role.name.replace(/^joga-/, '')).join('`, `');
-                        const existsList = alreadyExistsRoles.map(role => role.name.replace(/^joga-/, '')).join('`, `');
+                        const addedList = rolesList(rolesToAdd.filter(r => !alreadyExistsRoles.includes(r)));
+                        const existsList = rolesList(alreadyExistsRoles);
 
                         replyMsg += `${member}, `;
                         if (addedList) {
-                            replyMsg += `:white_check_mark: Roles \`${addedList}\` adicionadas. `;
+                            replyMsg += `:white_check_mark: Roles ${addedList} adicionadas. `;
                         }
                         if (existsList) {
-                            replyMsg += `:x: Você já possui as roles \`${existsList}\`. `;
+                            replyMsg += `:x: Você já possui as roles ${existsList}. `;
                         }
                         replyMsg += "\n";
                     }
                     if (rolesNotExist.length) {
-                        replyMsg += ` :x: Roles não existentes: \`${rolesNotExist.join('`, `')}\`\n **Roles disponiveis:**\n\`\`\`\n${rolesList(allRoles)}\n\`\`\``;
+                        replyMsg += `:x: Roles não existentes: ${rolesList(rolesNotExist)}\n`;
+                        replyMsg += `Digite ${utils.printCommand('role', 'list')} para ver todas disponíveis.`;
                     }
 
                     return message.channel.send(replyMsg);
@@ -150,7 +149,8 @@ Adiciona uma ou mais roles pro seu usuário, ou para outro usuário (caso você 
 
             let replyMsg = `:x: Nenhuma role foi adicionada.`;
             if (rolesNotExist.length) {
-                replyMsg += ` :x: Roles não existentes: \`${rolesNotExist.join('`, `')}\`\n **Roles disponiveis:**\n\`\`\`\n${rolesList(allRoles)}\n\`\`\``;
+                replyMsg += `:x: Roles não existentes: ${rolesList(rolesNotExist)}\n`;
+                replyMsg += `Digite ${utils.printCommand('role', 'list')} para ver todas disponíveis.`;
             }
 
             return message.channel.send(replyTo + replyMsg);
@@ -159,27 +159,27 @@ Adiciona uma ou mais roles pro seu usuário, ou para outro usuário (caso você 
 
     /**
      *
-     * @param guild
-     * @param message
-     * @param args
-     * @param members
-     * @param allRoles
+     * @param {import('discord.js').Guild} guild
+     * @param {import('discord.js').Message} message
+     * @param {String[]} args
+     * @param {import('discord.js').GuildMember[]} members
      * @returns {Promise<Message|Message[]>|*}
      */
-    roleRemoveCommand(guild, message, args, members, allRoles) {
+    async roleRemoveCommand(guild, message, args, members) {
         if (args.length === 0) {
-            return message.reply(`Modo de usar: \`+role (remove | r) [lista das roles]\`
+            return message.reply(`Modo de usar: ${utils.printCommand('role', '(remove | r)', '[lista das roles]')}
 Retira uma ou mais roles do seu usuário, ou de outro usuário (caso você tenha permissões).
 
   **Exemplo:**
-\`\`\`+role remove csgo
-+role r csgo\`\`\``);
+${utils.printCommand('role', 'remove', 'csgo')}
+${utils.printCommand('role', 'r', 'csgo')}`);
         }
 
+        const allRoles = await getAllRoles(guild);
         let rolesToRemove = [], rolesNotExist = [];
 
         args.forEach((roleName) => {
-            const role = allRoles.find('name', ROLE_PREFIX + roleName);
+            const role = allRoles.find(role => role.name === `${ROLE_PREFIX}${roleName}`);
 
             if (specialRoles.includes(role)) {
                 // FIXME: avisar o usuário que ele nao pode usar essa role?
@@ -203,7 +203,7 @@ Retira uma ou mais roles do seu usuário, ou de outro usuário (caso você tenha
                         nonExistsRoles.push(r);
                     }
                 });
-                promises.push(member.removeRoles(rolesToRemove, 'Usou o comando +role'), nonExistsRoles);
+                promises.push(member.roles.remove(rolesToRemove, 'Usou o comando +role'), nonExistsRoles);
             });
             return Promise.all(promises)
                 .then((resolveValues) => {
@@ -212,20 +212,21 @@ Retira uma ou mais roles do seu usuário, ou de outro usuário (caso você tenha
                         const member = resolveValues[i];
                         const nonExistsRoles = resolveValues[i+1];
 
-                        const removedList = rolesToRemove.filter(r => !nonExistsRoles.includes(r)).map(role => role.name.replace(/^joga-/, '')).join('`, `');
-                        const existsList = nonExistsRoles.map(role => role.name.replace(/^joga-/, '')).join('`, `');
+                        const removedList = rolesList(rolesToRemove.filter(r => !nonExistsRoles.includes(r)));
+                        const existsList = rolesList(nonExistsRoles);
 
                         replyMsg += `${member}, `;
                         if (removedList) {
-                            replyMsg += `:white_check_mark: Roles \`${removedList}\` removidas. `;
+                            replyMsg += `:white_check_mark: Roles ${removedList} removidas. `;
                         }
                         if (existsList) {
-                            replyMsg += `:x: Você não possuia as roles \`${existsList}\`. `;
+                            replyMsg += `:x: Você não possuia as roles ${existsList}. `;
                         }
                         replyMsg += "\n";
                     }
                     if (rolesNotExist.length) {
-                        replyMsg += ` :x: Roles não existentes: \`${rolesNotExist.join('`, `')}\`\n **Roles disponiveis:**\n\`\`\`\n${rolesList(allRoles)}\n\`\`\``;
+                        replyMsg += `:x: Roles não existentes: ${rolesList(rolesNotExist)}\n`;
+                        replyMsg += `Digite ${utils.printCommand('role', 'list')} para ver todas disponíveis.`;
                     }
 
                     return message.channel.send(replyMsg);
@@ -239,7 +240,8 @@ Retira uma ou mais roles do seu usuário, ou de outro usuário (caso você tenha
 
             let replyMsg = `:x: Nenhuma role foi removida.`;
             if (rolesNotExist.length) {
-                replyMsg += ` :x: Roles não existentes: \`${rolesNotExist.join('`, `')}\`\n **Roles disponiveis:**\n\`\`\`\n${rolesList(allRoles)}\n\`\`\``;
+                replyMsg += `:x: Roles não existentes: ${rolesList(rolesNotExist)}\n`;
+                replyMsg += `Digite ${utils.printCommand('role', 'list')} para ver todas disponíveis.`;
             }
 
             return message.channel.send(replyTo + replyMsg);
@@ -248,44 +250,50 @@ Retira uma ou mais roles do seu usuário, ou de outro usuário (caso você tenha
 
     /**
      *
-     * @param guild
-     * @param message
-     * @param args
-     * @param members
-     * @param allRoles
+     * @param {import('discord.js').Guild} guild
+     * @param {import('discord.js').Message} message
+     * @param {String[]} args
+     * @param {import('discord.js').GuildMember[]} members
      */
-    async roleListCommand(guild, message, args, members, allRoles) {
+    async roleListCommand(guild, message, args, members) {
         let text = '';
-        // members.forEach(member => {
-        //     const memberRoles = member.roles.cache.array().filter(role => role.name.indexOf('joga-') === 0).map(role => role.name.replace(/^joga-/, '')).sort().join(', ');
-        //     text += `${member}, **Sua lista de roles:**\n\`\`\`\n${memberRoles}\n\`\`\`\n`;
-        // });
+        members.forEach(member => {
+            const memberRoles = rolesList(member.roles.cache.filter(role => role.name.indexOf(ROLE_PREFIX) === 0).array()) || "*(vazia)*";
+            text += `${member}, **Sua lista de roles:**\n${memberRoles}\n`;
+        });
 
-        text += `  **Roles disponiveis:**\n\`\`\`\n${rolesList(allRoles)}\n\`\`\``;
+        const allRoles = await getAllRoles(guild);
+        console.log(allRoles);
+        text += `**Roles disponiveis:**\n${rolesList(allRoles)}`;
 
-        return message.channel.send(text);
+        return utils.longMessage(message).send(text);
     }
 
     /**
      *
-     * @param guild
-     * @param message
-     * @param args
-     * @param allRoles
+     * @param {import('discord.js').Guild} guild
+     * @param {import('discord.js').Message} message
+     * @param {String[]} args
      */
-    roleDeleteCommand(guild, message, args, allRoles) {
+    async roleDeleteCommand(guild, message, args) {
         if (!message.member.hasPermission(Discord.Permissions.FLAGS.MANAGE_ROLES)) {
             throw new PermissionError(`Você não tem permissão de deletar uma role.`);
         }
 
+        if (args.length === 0) {
+            return message.reply(`Modo de usar: ${utils.printCommand('role', '(delete | d)', '(role)')}
+Deleta uma role específica, caso você tenha permissões para isso.
+
+  **Exemplo:**
+${utils.printCommand('role', 'delete', 'cah')}
+${utils.printCommand('role', 'd', 'cah')}`);
+        }
+
+        const allRoles = await getAllRoles(guild);
         const roleName = args[0];
-        const role = allRoles.find('name', 'joga-' + roleName);
+        const role = allRoles.find(role => role.name === `${ROLE_PREFIX}${roleName}`);
         if (!role) {
-            return message.reply(`:x: Role \`${roleName}\` não existente.
-  **Roles disponiveis:**
-\`\`\`
-${rolesList(allRoles)}
-\`\`\``);
+            return message.reply(`:x: Role ${rolesList(roleName)} não existente.\nDigite ${utils.printCommand('role', 'list')} para ver todas disponíveis.`);
         }
 
         return role.delete('Usou o comando +role delete')
@@ -297,38 +305,29 @@ ${rolesList(allRoles)}
 
     /**
      *
-     * @param guild
-     * @param message
-     * @param args
-     * @param allRoles
+     * @param {import('discord.js').Guild} guild
+     * @param {import('discord.js').Message} message
+     * @param {String[]} args
      */
-    async roleWhoCommand(guild, message, args, allRoles) {
+    async roleWhoCommand(guild, message, args) {
         if (args.length === 0) {
-            return message.reply(`Modo de usar: \`+role (who | w) (role)\`
-Indica quais pessoas estão marcadas com uma role específica.
+            return message.reply(`Modo de usar: ${utils.printCommand('role', '(who | w)', '(role)')}
+Mostra quais pessoas estão marcadas com uma role específica.
 
   **Exemplo:**
-\`\`\`+role who cah
-+role w cah\`\`\``);
+${utils.printCommand('role', 'who', 'among-us')}
+${utils.printCommand('role', 'w', 'among-us')}`);
         }
 
+        const allRoles = await getAllRoles(guild);
         const roleName = args[0];
-        const role = allRoles.find(r => r.name === 'joga-' + roleName);
+        const role = allRoles.find(role => role.name === `${ROLE_PREFIX}${roleName}`);
         if (!role) {
-            return message.reply(`:x: Role \`${roleName}\` não existente.
-  **Roles disponiveis:**
-\`\`\`
-${rolesList(allRoles)}
-\`\`\``);
+            return message.reply(`:x: Role ${rolesList(roleName)} não existente.\n**Roles disponiveis:**\n${rolesList(allRoles, false)}`);
         }
 
-        let membersWithRole = [];
-        const members = await guild.members.fetch();
-        members.array().forEach(mb => {
-            if (mb.roles.cache.some(r => ['joga-' + roleName].includes(r.name))) {
-                membersWithRole.push(mb);
-            }
-        });
+        await guild.members.fetch(); // prepara o cache
+        const membersWithRole = role.members.array();
 
         const membersWithRoleList = membersWithRole.map(m => {
             if (!m.nickname) {
@@ -338,10 +337,7 @@ ${rolesList(allRoles)}
         }).map(n => `:small_blue_diamond: ${n}`).join("\n");
 
         if (membersWithRoleList) {
-            return message.reply(`
-Membros que estão com a role \`${roleName}\`:
-${membersWithRoleList}
-`);
+            return message.reply(`Membros que estão com a role ${rolesList(roleName)}:\n${membersWithRoleList}`);
         } else {
             return message.reply(`:x: Ninguém possui esta role.`);
         }
@@ -349,32 +345,33 @@ ${membersWithRoleList}
 
     /**
      *
-     * @param guild
-     * @param message
-     * @param args
-     * @param allRoles
-     * @returns {Promise<Message|Message[]>|*}
+     * @param {import('discord.js').Guild} guild
+     * @param {import('discord.js').Message} message
+     * @param {String[]} args
+     * @returns {Promise<any>}
      */
-    roleSuggestCommand(guild, message, args, allRoles) {
+    async roleSuggestCommand(guild, message, args) {
         if (args.length === 0) {
-            return message.reply(`Modo de usar: \`+role (suggest | s) [lista das roles]\`
+            return message.reply(`Modo de usar: ${utils.printCommand('role', '(suggest | s)', '(role)')}
 Sugere uma nova role para ser votada. Se ela receber ${SUGGEST_VOTES_MAX} votos "sim", ela é criada.
 
   **Exemplo:**
-\`\`\`+role suggest pinball
-+role s pinball\`\`\`
+${utils.printCommand('role', 'suggest', 'pinball')}
+${utils.printCommand('role', 's', 'pinball')}
 :rotating_light: **Use o bom senso ao sugerir.** Trollagens e nomes ofensivos serão passiveis de advertência :rotating_light:`);
         }
 
+        const allRoles = await getAllRoles(guild);
+
         // TODO: colocar esse .filter no utils como .unique
-        // FIXME: .exists() não existe mais, reformar esse suggests depois
-        const suggestedRoles = args.map(role => 'joga-' + role.toLowerCase()).filter(rolename => !allRoles.exists('name', rolename)).filter(rolename => /^[a-z][a-z0-9-]*$/.test(rolename));
+        let argRole = ROLE_PREFIX + args.join('-').toLowerCase().replace(new RegExp(ROLE_PREFIX, 'i'), '');
+        const suggestedRoles = [argRole].filter(roleName => !allRoles.find(r => r.name === roleName)).filter(roleName => /^[a-z][a-z0-9-]*$/.test(roleName));
 
         //console.log('banned', bannedSuggestions);
 
         for (let i = 0; i < suggestedRoles.length; i++) {
             if (bannedSuggestions.includes(suggestedRoles[i])) {
-                return message.reply(`:x: Não é possível sugerir \`${suggestedRoles[i]}\`, esta role foi banida.`);
+                return message.reply(`:x: Não é possível sugerir ${rolesList(suggestedRoles[i])}, esta role foi banida.`);
             }
         }
 
@@ -405,11 +402,11 @@ Mínimo de **${SUGGEST_VOTES_MAX} votos**.
     /**
      * Invocado toda vez que alguém dá um reaction em alguma mensagem.
      *
-     * @param {Discord.Guild} guild
-     * @param {Discord.MessageReaction} messageReaction O objeto reaction, que contem a mensagem e o emoji dado
-     * @param {Discord.User} user O usuário que fez essa reaction (pode ser membro do server ou não)
+     * @param {import('discord.js').Guild} guild
+     * @param {import('discord.js').MessageReaction} messageReaction O objeto reaction, que contem a mensagem e o emoji dado
+     * @param {import('discord.js').User} user O usuário que fez essa reaction (pode ser membro do server ou não)
      */
-    onReactionAdd(guild, messageReaction, user) {
+    async onReactionAdd(guild, messageReaction, user) {
 
         // se a mensagem nao tiver embed, ignorar
         if (!messageReaction.message.embeds.length) return;
@@ -430,11 +427,16 @@ Mínimo de **${SUGGEST_VOTES_MAX} votos**.
                 messageReaction.message.delete();
 
                 if (action === 'approve') {
+                    const allRoles = await getAllRoles(guild);
+
                     let createdRoles = [], p = [];
                     roles.forEach(roleName => {
-                        if (!guild.roles.exists('name', roleName)) {
+                        if (!allRoles.find(r => r.name === roleName)) {
                             createdRoles.push(roleName);
-                            p.push(guild.createRole({name: roleName, mentionable: true}, `Por sugestão de ${emb.author.name} com +role suggest`));
+                            p.push(guild.roles.create({
+                                data: {name: roleName, mentionable: true},
+                                reason: `Por sugestão de ${emb.author.name} com +role suggest`
+                            }));
                         }
                     });
 
@@ -442,7 +444,7 @@ Mínimo de **${SUGGEST_VOTES_MAX} votos**.
                         .then(created => {
                             // FIXME: precisa avisar que não foi adicionada pq ja existia?
                             createdRoles = createdRoles.join(', ');
-                            return channel.send(`:white_check_mark: Role(s) \`${createdRoles}\` criada(s) por sugestão.`)
+                            return channel.send(`:white_check_mark: Role(s) ${rolesList(createdRoles)} criada(s) por sugestão.`)
                         })
                     ;
 
@@ -452,44 +454,44 @@ Mínimo de **${SUGGEST_VOTES_MAX} votos**.
                     });
 
                     const banned = roles.join(', ');
-                    return channel.send(`:x: Role(s) \`${banned}\` banidas(s). Não poderá(ão) ser mais sugerida(s).`)
+                    return channel.send(`:x: Role(s) ${rolesList(banned)} banidas(s). Não poderá(ão) ser mais sugerida(s).`)
                 }
 
             }
         }
     }
-
-    onRoleCreate(role) {
-        if (!allRoles) return;
-
-        // a role tem que ter o prefixo joga-
-        if (role.name.indexOf(ROLE_PREFIX) !== 0) {
-            return;
-        }
-
-        // a role não pode ser uma role especial
-        if (specialRoles.includes(role.name)) {
-            return;
-        }
-
-        allRoles.set(role.id, role);
-    }
-
-    onRoleDelete(role) {
-        if (!allRoles) return;
-
-        if (allRoles.get(role.id)) {
-            allRoles.delete(role.id);
-        }
-    }
-
-    onRoleUpdate(oldRole, newRole) {
-        if (!allRoles) return;
-
-        if (allRoles.get(oldRole.id)) {
-            allRoles.set(oldRole.id, newRole);
-        }
-    }
+    //
+    // onRoleCreate(role) {
+    //     if (!allRoles) return;
+    //
+    //     // a role tem que ter o prefixo joga-
+    //     if (role.name.indexOf(ROLE_PREFIX) !== 0) {
+    //         return;
+    //     }
+    //
+    //     // a role não pode ser uma role especial
+    //     if (specialRoles.includes(role.name)) {
+    //         return;
+    //     }
+    //
+    //     allRoles.set(role.id, role);
+    // }
+    //
+    // onRoleDelete(role) {
+    //     if (!allRoles) return;
+    //
+    //     if (allRoles.get(role.id)) {
+    //         allRoles.delete(role.id);
+    //     }
+    // }
+    //
+    // onRoleUpdate(oldRole, newRole) {
+    //     if (!allRoles) return;
+    //
+    //     if (allRoles.get(oldRole.id)) {
+    //         allRoles.set(oldRole.id, newRole);
+    //     }
+    // }
 
     commands() {
         return {
@@ -500,11 +502,23 @@ Mínimo de **${SUGGEST_VOTES_MAX} votos**.
     events() {
         return {
             'messageReactionAdd': [this.onReactionAdd, { guild: true }],
-            'roleCreate': this.onRoleCreate,
-            'roleDelete': this.onRoleDelete,
-            'roleUpdate': this.onRoleUpdate,
+            // 'roleCreate': this.onRoleCreate,
+            // 'roleDelete': this.onRoleDelete,
+            // 'roleUpdate': this.onRoleUpdate,
         }
     }
+}
+
+/**
+ * @param {import('discord.js').Guild} guild
+ * @return {import('discord.js').Role[]}
+ */
+async function getAllRoles(guild) {
+    const allRoles = await guild.roles.fetch();
+    return allRoles.cache
+        .clone()
+        .filter(role => role.name.indexOf(ROLE_PREFIX) === 0 && !specialRoles.includes(role.name))
+        .array();
 }
 
 function extractRoles(content) {
@@ -515,8 +529,33 @@ function extractRoles(content) {
     return joinedRoles.split(/, /g);
 }
 
-function rolesList(roles) {
-    return roles.array().map(role => role.name.replace(/^joga-/, '')).sort().join(', ');
+/**
+ *
+ * @param {import('discord.js').Role[]|import('discord.js').Role|string[]|string} roles
+ * @param {Boolean} withCodeChar
+ * @returns {string}
+ */
+function rolesList(roles, withCodeChar = true) {
+    if (!Array.isArray(roles)) {
+        roles = [roles];
+    }
+
+    if (!roles.length) {
+        return '';
+    }
+
+    return (withCodeChar ? '`' : "```\n") + roles
+        .map(role => {
+            let name;
+            if (typeof role === 'string') {
+                name = role;
+            } else {
+                name = role.name;
+            }
+            return name.replace(new RegExp(`^${ROLE_PREFIX}`, 'i'), '');
+        })
+        .sort()
+        .join(withCodeChar ? '`, `' : ', ') + (withCodeChar ? '`' : "\n```");
 }
 
 module.exports = RoleChanger;

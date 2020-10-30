@@ -1558,7 +1558,7 @@ function createPlayer(member, forcedPos) {
                     playerRef.set(info);
 
                     // adiciona a role de aviso
-                    member.addRole(ROLE_ID, 'Entrou no jogo Café Royale')
+                    member.roles.add(ROLE_ID, 'Entrou no jogo Café Royale')
                         .then(memb => {
                             resolve([false, info]);
                         }).catch(reject);
@@ -1658,7 +1658,7 @@ function exitPlayer(member) {
                 delete players[user.id];
 
                 // adiciona a role de aviso
-                member.removeRole(ROLE_ID, 'Saiu do jogo Café Royale')
+                member.roles.remove(ROLE_ID, 'Saiu do jogo Café Royale')
                     .then(memb => {
                         resolve(`:outbox_tray: Usuário ${user} saiu do jogo e deixou os loots espalhados: **${droppedLoots.join('**, **')}**`);
                     }).catch(reject);
@@ -1668,7 +1668,7 @@ function exitPlayer(member) {
                 ref.child(`player/${user.id}`).set(null);
                 delete players[user.id];
 
-                member.removeRole(ROLE_ID, 'Saiu do jogo Café Royale')
+                member.roles.remove(ROLE_ID, 'Saiu do jogo Café Royale')
                     .then(memb => {
                         resolve(`:outbox_tray: Usuário ${user} saiu do jogo!`);
                     }).catch(reject);

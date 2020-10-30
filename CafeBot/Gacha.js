@@ -1721,7 +1721,7 @@ class Gacha {
         let unequipFunction = (equipItem) => {
             switch (equipItem.type) {
                 case GACHA_TYPES.ROLE:
-                    return member.removeRole(equipItem.role);
+                    return member.roles.remove(equipItem.role);
                 case GACHA_TYPES.ICON:
                     return removeEmojiToNickname(member, equipItem.emoji);
                 default:
@@ -1732,7 +1732,7 @@ class Gacha {
         let equipFunction = (equipItem) => {
             switch (equipItem.type) {
                 case GACHA_TYPES.ROLE:
-                    return member.addRole(equipItem.role);
+                    return member.roles.add(equipItem.role);
                 case GACHA_TYPES.ICON:
                     return addEmojiToNickname(member, equipItem.emoji);
                 default:
@@ -1823,7 +1823,7 @@ class Gacha {
         //                 let unequipFunction = (equipItem) => {
         //                     switch (equipItem.type) {
         //                         case GACHA_TYPES.ROLE:
-        //                             return member.removeRole(equipItem.role);
+        //                             return member.roles.remove(equipItem.role);
         //                         case GACHA_TYPES.ICON:
         //                             return removeEmojiToNickname(member, equipItem.emoji);
         //                         default:
@@ -1834,7 +1834,7 @@ class Gacha {
         //                 let equipFunction = (equipItem) => {
         //                     switch (equipItem.type) {
         //                         case GACHA_TYPES.ROLE:
-        //                             return member.addRole(equipItem.role);
+        //                             return member.roles.add(equipItem.role);
         //                         case GACHA_TYPES.ICON:
         //                             return addEmojiToNickname(member, equipItem.emoji);
         //                         default:

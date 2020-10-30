@@ -1,6 +1,5 @@
 
 const utils = require('../../utils');
-const Discord = require("discord.js");
 
 const Transformer = require('./LetterTransformer');
 const path = require('path');
@@ -21,9 +20,10 @@ class MeFala {
     get modName() { return 'mefala' }
 
     /**
+     * Comando principal.
      *
-     * @param {Message} message
-     * @param args
+     * @param {import("discord.js").Message} message
+     * @param {String[]} args
      * @returns {Promise<*>}
      */
     async mainCommand(message, args) {
