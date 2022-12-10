@@ -8,7 +8,7 @@
     "@redblobgames/mapgen2": "git+https://github.com/redblobgames/mapgen2.git",
     "chalk": "^2.4.1",
     "discord.js": "^12.4.1",
-    "express": "^4.17.1",
+    "express": "^4.17.3",
     "fast-levenshtein": "^2.0.6",
     "firebase-admin": "^9.3.0",
     "gifencoder": "^1.1.0",
